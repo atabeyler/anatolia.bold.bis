@@ -573,6 +573,7 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+  min-width: 0;
   font-size: 0.75rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -580,6 +581,7 @@ body::before {
 }
 
 .auth-field input {
+  min-width: 0;
   background: rgba(0, 0, 0, 0.4);
   color: var(--color-text);
   border: 1px solid transparent;
