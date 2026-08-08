@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { Logo } from '../components/Logo';
 import { useAuth } from '../features/auth/AuthContext';
 import { apiErrorMessageKey } from '../services/apiClient';
 import * as authClient from '../services/authClient';
@@ -72,6 +73,7 @@ export function LoginPage() {
 
   return (
     <div className="auth-shell">
+      <Logo />
       <form className="auth-panel" onSubmit={handleSubmit}>
         <div className="auth-mode-toggle">
           <button

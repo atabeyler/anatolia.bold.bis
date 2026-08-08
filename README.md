@@ -1,5 +1,7 @@
 # Anatolia B.I.S.
 
+[![Version](https://img.shields.io/github/package-json/v/atabeyler/anatolia.bold.bis?filename=client%2Fpackage.json)](client/package.json)
+[![CI](https://github.com/atabeyler/anatolia.bold.bis/actions/workflows/ci.yml/badge.svg)](https://github.com/atabeyler/anatolia.bold.bis/actions/workflows/ci.yml)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-red)](LICENSE.txt)
 
 **Bold Askeri Teknoloji ve Savunma Sanayi A.Ş.**

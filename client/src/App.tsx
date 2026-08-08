@@ -32,7 +32,7 @@ function App() {
       {status === 'loading' ? null : status === 'signed-in' ? <DashboardPage /> : <LoginPage />}
 
       <footer className="app-footer">
-        <p>{t('footer.foundationStage')}</p>
+        <p>{t('footer.legal')}</p>
       </footer>
     </div>
   );
