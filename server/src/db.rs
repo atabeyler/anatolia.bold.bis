@@ -160,6 +160,20 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             )
             .execute(pool)
             .await?;
+            // The table may already exist from a deploy that predates a
+            // given column (this bit us for real: national_id was added
+            // after this database's `users` table already existed, so
+            // CREATE TABLE IF NOT EXISTS above was a no-op and every
+            // insert referencing the column failed at runtime). Patch in
+            // anything still missing rather than assuming a fresh table.
+            sqlx::query(
+                r#"
+                ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS national_id VARCHAR(11)
+                "#,
+            )
+            .execute(pool)
+            .await?;
         }
         DbBackend::Sqlite(pool) => {
             sqlx::query(
