@@ -8,6 +8,7 @@
   --color-accent-strong: #6f8bff;
   --color-success: #00e887;
   --color-danger: #e05a5a;
+  --color-panel-border: #cc4444;
 
   --font-heading: 'Orbitron', sans-serif;
   --font-mono: 'Share Tech Mono', 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
@@ -25,6 +26,7 @@
   --color-accent-strong: #1d4ed8;
   --color-success: #16a34a;
   --color-danger: #dc2626;
+  --color-panel-border: #dc2626;
 
   color-scheme: light;
 }
@@ -66,117 +68,15 @@ body::before {
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 1.5rem;
-  gap: 1.5rem;
 }
 
-.app-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: 1rem;
-}
+/* ── Fixed top-corner chrome (present on every screen) ────────── */
 
-.app-header h1 {
-  margin: 0;
-  font-family: var(--font-heading);
-  font-weight: 800;
-  font-size: 1.4rem;
-  letter-spacing: 0.12em;
-  color: var(--color-success);
-  text-shadow: 0 0 12px rgba(0, 232, 135, 0.5), 0 0 24px rgba(0, 232, 135, 0.25);
-}
-
-.app-header__tagline {
-  margin: 0.3rem 0 0;
-  color: var(--color-accent-strong);
-  font-size: 0.8rem;
-  letter-spacing: 0.04em;
-}
-
-.app-header__status {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0.4rem 0 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-}
-
-.app-header__status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-text-muted);
-}
-
-.app-header__status--online {
-  color: var(--color-success);
-}
-
-.app-header__status--online .app-header__status-dot {
-  background: var(--color-success);
-  box-shadow: 0 0 6px var(--color-success);
-  animation: brand-ping-dot 2s ease-in-out infinite;
-}
-
-.app-header__status--offline {
-  color: var(--color-danger);
-}
-
-.app-header__status--offline .app-header__status-dot {
-  background: var(--color-danger);
-}
-
-@keyframes brand-ping-dot {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
-}
-
-.app-header__controls {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-}
-
-.app-header__session {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.35rem;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-  letter-spacing: 0.02em;
-}
-
-.app-header__session button {
-  background: transparent;
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  padding: 0.3rem 0.6rem;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-}
-
-.app-header__session button:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent-strong);
-}
-
-.app-header__nav {
+.app-nav-fixed {
+  position: fixed;
+  top: 12px;
+  inset-inline-end: 12px;
+  z-index: 20;
   display: flex;
   gap: 0.5rem;
 }
@@ -198,6 +98,41 @@ body::before {
   box-shadow: 0 0 10px rgba(79, 110, 247, 0.25);
 }
 
+.app-header__session {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  letter-spacing: 0.02em;
+}
+
+.app-header__session button {
+  background: transparent;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  padding: 0.3rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.app-header__session button:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-strong);
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3.5rem 1.5rem 1.5rem;
+}
+
 /* ── Menu / Settings overlays: terminal panel look ────────────── */
 
 .overlay-backdrop {
@@ -216,7 +151,7 @@ body::before {
   max-width: 440px;
   max-height: 80vh;
   background: rgba(2, 4, 10, 0.98);
-  border: 1px solid var(--color-danger);
+  border: 1px solid var(--color-panel-border);
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.8);
   display: flex;
   flex-direction: column;
@@ -230,7 +165,7 @@ body::before {
   gap: 0.5rem;
   justify-content: space-between;
   padding: 0.6rem 0.9rem;
-  border-bottom: 1px solid var(--color-danger);
+  border-bottom: 1px solid var(--color-panel-border);
   background: rgba(0, 20, 10, 0.5);
 }
 
@@ -382,6 +317,28 @@ body::before {
 
 .dashboard {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.dashboard__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 1rem;
+}
+
+.dashboard__brand {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.2rem;
+  letter-spacing: 0.12em;
+  color: var(--color-success);
+  text-shadow: 0 0 12px rgba(0, 232, 135, 0.5);
 }
 
 .status-card {
@@ -417,33 +374,38 @@ body::before {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  padding-top: 1rem;
-  gap: 1.25rem;
+  justify-content: center;
+  gap: 0.75rem;
+  text-align: center;
 }
 
 .auth-telemetry {
-  align-self: flex-start;
+  position: fixed;
+  top: 12px;
+  inset-inline-start: 12px;
+  z-index: 20;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
   font-size: 0.72rem;
   letter-spacing: 0.05em;
   color: var(--color-text-muted);
+  text-align: start;
 }
 
 .brand-logo {
   position: relative;
-  width: 96px;
-  height: 96px;
+  width: 112px;
+  height: 112px;
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-bottom: 0.5rem;
 }
 
 .brand-logo__ping {
   position: absolute;
-  inset: 12px;
+  inset: 16px;
   border-radius: 50%;
   border: 1px solid rgba(79, 110, 247, 0.5);
   animation: brand-ping 3s ease-out infinite;
@@ -459,7 +421,7 @@ body::before {
 
 .brand-logo__ring {
   position: absolute;
-  inset: 6px;
+  inset: 8px;
   border-radius: 50%;
   border: 1px dashed rgba(79, 110, 247, 0.4);
   animation: brand-spin 12s linear infinite;
@@ -467,7 +429,7 @@ body::before {
 
 .brand-logo__sweep {
   position: absolute;
-  inset: 14px;
+  inset: 18px;
   border-radius: 50%;
   overflow: hidden;
   animation: brand-spin 3s linear infinite;
@@ -484,8 +446,8 @@ body::before {
 .brand-logo__badge {
   position: relative;
   z-index: 1;
-  width: 46px;
-  height: 46px;
+  width: 56px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -515,16 +477,64 @@ body::before {
   }
 }
 
+.auth-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.auth-brand__title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: clamp(1.5rem, 6vw, 2.4rem);
+  letter-spacing: 0.18em;
+  color: var(--color-success);
+  text-shadow: 0 0 16px rgba(0, 232, 135, 0.6), 0 0 32px rgba(0, 232, 135, 0.3);
+}
+
+.auth-brand__tagline {
+  margin: 0;
+  max-width: 32rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  color: var(--color-accent-strong);
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: min(28rem, 100%);
+  margin: 0.25rem 0;
+}
+
+.auth-divider span:not(.auth-divider__mark) {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(79, 110, 247, 0.5), transparent);
+}
+
+.auth-divider__mark {
+  width: 6px;
+  height: 6px;
+  transform: rotate(45deg);
+  background: rgba(79, 110, 247, 0.6);
+  flex: none !important;
+}
+
 .auth-panel {
   width: 100%;
   max-width: 420px;
   background: rgba(6, 9, 20, 0.9);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-panel-border);
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
   font-family: var(--font-mono);
+  text-align: start;
 }
 
 .auth-mode-toggle {
@@ -538,7 +548,7 @@ body::before {
   padding: 0.55rem;
   background: transparent;
   color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
+  border: 1px solid rgba(204, 68, 68, 0.35);
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 0.82rem;
@@ -547,10 +557,10 @@ body::before {
 }
 
 .auth-mode-toggle button.active {
-  color: var(--color-accent-strong);
-  border-color: var(--color-accent);
-  background: rgba(79, 110, 247, 0.1);
-  box-shadow: 0 0 10px rgba(79, 110, 247, 0.2);
+  color: var(--color-panel-border);
+  border-color: var(--color-panel-border);
+  background: rgba(204, 68, 68, 0.12);
+  box-shadow: 0 0 10px rgba(204, 68, 68, 0.2);
 }
 
 .auth-field-row {
@@ -572,7 +582,8 @@ body::before {
 .auth-field input {
   background: rgba(0, 0, 0, 0.4);
   color: var(--color-text);
-  border: 1px solid var(--color-border);
+  border: 1px solid transparent;
+  border-bottom: 1px solid rgba(204, 68, 68, 0.5);
   padding: 0.5rem 0.6rem;
   font-family: var(--font-mono);
   font-size: 0.9rem;
@@ -582,7 +593,7 @@ body::before {
 
 .auth-field input:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
   box-shadow: 0 0 8px rgba(79, 110, 247, 0.35);
 }
 
@@ -649,10 +660,25 @@ body::before {
   cursor: default;
 }
 
+/* ── Footer (present on every screen) ─────────────────────────── */
+
 .app-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   border-top: 1px solid var(--color-border);
-  padding-top: 1rem;
+  margin: 1.5rem auto 0;
+  padding: 1rem 1.5rem;
+  width: 100%;
+  max-width: 1100px;
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   letter-spacing: 0.03em;
+  text-align: center;
+}
+
+.app-footer__separator {
+  color: var(--color-border);
 }

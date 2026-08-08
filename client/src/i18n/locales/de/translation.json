@@ -13,7 +13,9 @@
     "locationUnsupported": "Standort nicht unterstützt"
   },
   "footer": {
-    "legal": "BIS 200120401018 © 2026 · Bold Askeri Teknoloji ve Savunma Sanayi A.Ş. · Alle Rechte vorbehalten."
+    "legalCode": "BIS 200120401018 © 2026",
+    "legalCompany": "Bold Askeri Teknoloji ve Savunma Sanayi A.Ş.",
+    "legalRights": "Alle Rechte vorbehalten."
   },
   "language": {
     "label": "Sprache"

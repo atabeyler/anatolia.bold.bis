@@ -86,13 +86,30 @@ export function LoginPage() {
           ? t('status.locationUnsupported')
           : t('status.locationRequesting');
 
+  const brand = brandMark(i18n.resolvedLanguage);
+
   return (
     <div className="auth-shell">
       <div className="auth-telemetry">
-        <div>SYS: {brandMark(i18n.resolvedLanguage)} v{__APP_VERSION__}</div>
+        <div>
+          SYS: {brand} v{__APP_VERSION__}
+        </div>
         <div>{locationLine}</div>
       </div>
+
       <Logo />
+
+      <div className="auth-brand">
+        <h1 className="auth-brand__title">{brand}</h1>
+        <p className="auth-brand__tagline">{t('app.tagline')}</p>
+      </div>
+
+      <div className="auth-divider" aria-hidden="true">
+        <span />
+        <span className="auth-divider__mark" />
+        <span />
+      </div>
+
       <form className="auth-panel" onSubmit={handleSubmit}>
         <div className="auth-mode-toggle">
           <button

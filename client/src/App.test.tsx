@@ -21,13 +21,13 @@ describe('App', () => {
   it('renders the application brand mark in the active language', async () => {
     await i18n.changeLanguage('en');
     renderApp();
-    expect(screen.getByText('ANATOLIA-BIS')).toBeInTheDocument();
+    expect(await screen.findByText('ANATOLIA-BIS')).toBeInTheDocument();
   });
 
   it('renders the Turkish brand mark with a dotted İ when Turkish is active', async () => {
     await i18n.changeLanguage('tr');
     renderApp();
-    expect(screen.getByText('ANATOLİA-BİS')).toBeInTheDocument();
+    expect(await screen.findByText('ANATOLİA-BİS')).toBeInTheDocument();
     await i18n.changeLanguage('en');
   });
 
