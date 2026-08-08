@@ -26,6 +26,12 @@ services:
       ALLOWED_ORIGINS: http://localhost:5173
       DATABASE_URL: postgres://anatolia:anatolia@postgres:5432/anatolia_bis
       RUST_LOG: info
+      JWT_SECRET: local-compose-access-secret
+      JWT_REFRESH_SECRET: local-compose-refresh-secret
+      ADMIN_SEED_TOKEN: local-compose-seed-token
+      ADMIN_USER_CODE: ADMIN01
+      ADMIN_PASSWORD: ChangeMe1!
+      ADMIN_EMAIL: info@boldkimya.com.tr
     depends_on:
       postgres:
         condition: service_healthy

@@ -4,6 +4,14 @@ Notable changes to Anatolia B.I.S., newest first.
 
 ## [Unreleased]
 
+- Implemented Phase 2 authentication: SQLx-backed `users` table
+  (PostgreSQL production, SQLite local fallback), JWT access/refresh
+  tokens, bcrypt password hashing, RBAC roles (SYSTEM_ADMIN,
+  SECURITY_ADMIN, OPERATOR, REVIEWER, AUDITOR), an admin-approval
+  workflow for new registrations (with email notifications via Resend,
+  silently skipped if unconfigured), a rate-limited/constant-time-compared
+  admin bootstrap endpoint, and per-key rate limiting on
+  login/registration/admin-seed. See `API.md`.
 - Implemented the Phase 1 repository foundation: a Rust/Axum backend shell
   (`GET /api/health` reporting the live commit SHA), a React/TypeScript/Vite
   frontend shell, a six-language i18n system (English, Turkish, German,

@@ -1,4 +1,4 @@
-use anatolia_bis_server::routes;
+use anatolia_bis_server::{db::AppState, routes};
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
@@ -6,7 +6,7 @@ use tower::ServiceExt;
 
 #[tokio::test]
 async fn health_returns_ok_status_and_version() {
-    let app = routes::router();
+    let app = routes::router(AppState::for_tests().await);
 
     let response = app
         .oneshot(

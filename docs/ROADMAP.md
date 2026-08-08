@@ -1,6 +1,6 @@
 # Roadmap
 
-Implemented incrementally. Nothing below Phase 1 is implemented yet.
+Implemented incrementally. Nothing below Phase 2 is implemented yet.
 
 ## Phase 1 — Repository foundation (this phase)
 
@@ -13,9 +13,11 @@ Implemented incrementally. Nothing below Phase 1 is implemented yet.
 
 ## Phase 2 — Authentication foundation
 
-- [ ] Database models and Alembic-equivalent migrations (SQLx migrations)
-- [ ] User/Role models, RBAC (SYSTEM_ADMIN, SECURITY_ADMIN, OPERATOR, REVIEWER, AUDITOR)
-- [ ] JWT auth (login/refresh/logout), password hashing, rate limiting
+- [x] User model and SQLx-managed schema (PostgreSQL production, SQLite local fallback)
+- [x] RBAC roles (SYSTEM_ADMIN, SECURITY_ADMIN, OPERATOR, REVIEWER, AUDITOR); approved registrations default to OPERATOR
+- [x] JWT auth (register/login/refresh/logout), bcrypt password hashing, per-key rate limiting
+- [x] Admin-approval workflow for new registrations, admin user administration (approve/reject/ban/unban/delete), rate-limited admin bootstrap (`seed-admin`)
+- [ ] Session/device management UI, MFA, enterprise SSO
 
 ## Phase 3 — Search workflow
 

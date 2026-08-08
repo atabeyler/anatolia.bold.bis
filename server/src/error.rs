@@ -26,12 +26,18 @@ impl ApiError {
         }
     }
 
+    pub fn with_details(mut self, details: serde_json::Value) -> Self {
+        self.details = Some(details);
+        self
+    }
+
     fn status_code(&self) -> StatusCode {
         match self.code {
             "VALIDATION_ERROR" => StatusCode::BAD_REQUEST,
             "UNAUTHORIZED" => StatusCode::UNAUTHORIZED,
             "FORBIDDEN" => StatusCode::FORBIDDEN,
             "NOT_FOUND" => StatusCode::NOT_FOUND,
+            "CONFLICT" => StatusCode::CONFLICT,
             "RATE_LIMITED" => StatusCode::TOO_MANY_REQUESTS,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }

@@ -11,15 +11,17 @@ authorized institutional use.
 
 ## Project Status
 
-**Phase 1 (repository foundation) complete.** The backend shell (Rust/Axum,
-`GET /api/health`), the frontend shell (React/TypeScript/Vite), the
-six-language i18n system, Docker images, a local docker-compose stack, and
-CI are implemented and verified (backend tests + clippy, frontend
-typecheck + tests + build all pass). No authentication, database,
-biometric provider, or search workflow exists yet — see
-`docs/ROADMAP.md` for what's planned next. This README is expanded as each
-part of the system is actually built — it never describes a feature,
-endpoint, or integration ahead of the code that implements it.
+**Phase 1 and Phase 2 (authentication foundation) complete.** Beyond the
+Phase 1 shells, the backend now has JWT authentication (register/login/
+refresh/logout), bcrypt password hashing, RBAC (SYSTEM_ADMIN,
+SECURITY_ADMIN, OPERATOR, REVIEWER, AUDITOR), an admin-approval workflow
+for new registrations, and rate limiting — see `API.md`. Verified: backend
+tests (including a full register → admin-approve → login integration
+test) + clippy, frontend typecheck + tests + build all pass. No biometric
+provider or search workflow exists yet — see `docs/ROADMAP.md` for what's
+planned next. This README is expanded as each part of the system is
+actually built — it never describes a feature, endpoint, or integration
+ahead of the code that implements it.
 
 ### Running locally
 
@@ -58,7 +60,7 @@ face alone. The intended workflow is:
 
 | Layer | Technology | Status |
 |---|---|---|
-| Backend | Rust, single Axum binary, SQLx (PostgreSQL in production, SQLite for local development) | Shell implemented (health endpoint only); SQLx not yet wired up |
+| Backend | Rust, single Axum binary, SQLx (PostgreSQL in production, SQLite for local development) | Health endpoint + authentication (JWT, RBAC, admin approval) implemented |
 | Biometric provider | Abstracted interface; mock implementation first, server-side ONNX-based implementation later | Planned |
 | Vector search / connectors | Abstracted providers — never hard-coupled to one vector database or one external data source | Planned |
 | Frontend | React, TypeScript, Vite, i18next | Shell implemented |
