@@ -189,7 +189,14 @@ pub async fn seed_admin(State(state): State<AppState>, headers: HeaderMap) -> Re
     .await
     {
         Ok(Some(_)) => Json(json!({ "messageKey": "admin.adminCreated" })).into_response(),
-        _ => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+        Ok(None) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+        // Re-running seed-admin with the same ADMIN_USER_CODE/ADMIN_EMAIL is
+        // the expected way to check "has this already been bootstrapped" —
+        // a unique-constraint violation here means yes, not a real failure.
+        Err(err) if err.to_string().to_lowercase().contains("unique") => {
+            Json(json!({ "messageKey": "admin.alreadySeeded" })).into_response()
+        }
+        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }
 }
 

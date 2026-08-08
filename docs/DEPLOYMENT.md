@@ -43,7 +43,13 @@ blueprint) rather than committed: `DATABASE_URL`, `ADMIN_USER_CODE`,
 (`generateValue: true`) — rotate them there if ever needed, not by editing
 the blueprint. After the first deploy, seed the admin account per
 `API.md`'s `POST /api/v1/admin/seed-admin`, using the auto-generated
-`ADMIN_SEED_TOKEN` from the Render dashboard.
+`ADMIN_SEED_TOKEN` from the Render dashboard. `/admin-seed.html` (a static
+page served by this same deployment, so no separate CORS setup is needed)
+gives a no-terminal-required way to do this from any browser, including
+mobile: paste the seed token, submit. It's safe to submit more than once —
+resubmitting after an admin already exists for the configured
+`ADMIN_USER_CODE` reports that back (`admin.alreadySeeded`) instead of
+erroring.
 
 ## Local: Docker Compose
 

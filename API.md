@@ -100,7 +100,12 @@ links require a `SYSTEM_ADMIN` or `SECURITY_ADMIN` bearer token.
 - `POST /api/v1/admin/seed-admin` — one-time bootstrap of the first
   `SYSTEM_ADMIN` account. Requires an `x-seed-token` header matching
   `ADMIN_SEED_TOKEN`, plus `ADMIN_USER_CODE`/`ADMIN_PASSWORD`/`ADMIN_EMAIL`
-  set in the environment. Rate-limited globally (5 / 15 min).
+  set in the environment. Rate-limited globally (5 / 15 min). Idempotent:
+  `201`-equivalent `{ "messageKey": "admin.adminCreated" }` the first time,
+  `{ "messageKey": "admin.alreadySeeded" }` (still `200`) on a repeat call
+  once that user code/email already exists. `/admin-seed.html` is a small
+  static form (same origin, no separate CORS setup) that calls this
+  endpoint from a browser instead of a terminal.
 - `GET /api/v1/admin/users` — list all users.
 - `POST /api/v1/admin/users/{id}/approve` — approves a pending
   registration, granting the default `OPERATOR` role.
