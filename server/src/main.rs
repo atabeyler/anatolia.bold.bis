@@ -72,6 +72,8 @@ async fn main() {
 
     tracing::info!(port = config.port, "anatolia-bis-server listening");
 
+    spawn_self_ping();
+
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await
@@ -83,4 +85,29 @@ async fn shutdown_signal() {
         .await
         .expect("failed to install Ctrl+C handler");
     tracing::info!("shutdown signal received");
+}
+
+// Render's free plan spins the whole web service down after ~15 minutes
+// without external traffic; the next request then pays a cold-start (new
+// container, fresh DB connection) that can take 20-60s and surfaces to
+// users as a page that looks entirely unresponsive. Self-pinging the
+// public URL (which Render always injects as RENDER_EXTERNAL_URL) counts
+// as traffic and keeps the instance warm. This cannot eliminate the very
+// first cold start after a genuinely idle period — only prevent repeated
+// ones — and is a no-op outside Render (e.g. desktop/local dev), since
+// the env var is unset there.
+fn spawn_self_ping() {
+    let Ok(external_url) = std::env::var("RENDER_EXTERNAL_URL") else {
+        return;
+    };
+    let health_url = format!("{}/api/health", external_url.trim_end_matches('/'));
+    tokio::spawn(async move {
+        let client = reqwest::Client::new();
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(150)).await;
+            if let Err(err) = client.get(&health_url).send().await {
+                tracing::warn!(error = %err, "self-ping failed");
+            }
+        }
+    });
 }

@@ -19,6 +19,14 @@ built frontend for everything else (with an SPA fallback to
   `server/build.rs`) — compare it against a pushed commit to confirm a
   deployment actually went live, rather than assuming from push time
   alone.
+- **Staying warm**: Render's free plan spins the whole service down after
+  ~15 minutes with no external traffic; the next request then pays a
+  20-60s cold start that looks like the app is simply broken. The server
+  self-pings its own `GET /api/health` every 150 seconds (using
+  `RENDER_EXTERNAL_URL`, which Render always sets) to keep it warm — this
+  prevents *repeated* cold starts, not the very first one after a
+  genuinely idle period. No-op outside Render (the env var is unset
+  locally), and irrelevant once on a paid plan.
 
 `render.yaml` at the repository root is a Render Blueprint defining one
 service, `anatolia-bis`. There is deliberately no `databases:` block:
