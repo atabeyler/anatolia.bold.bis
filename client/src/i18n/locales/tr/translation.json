@@ -27,6 +27,7 @@
     "userCodeHint": "4-20 karakter, yalnızca harf ve rakam",
     "firstName": "Ad",
     "lastName": "Soyad",
+    "nationalId": "TC Kimlik No",
     "email": "E-posta",
     "password": "Şifre",
     "passwordHint": "En az 8 karakter; büyük harf, küçük harf, rakam ve sembol içermeli",

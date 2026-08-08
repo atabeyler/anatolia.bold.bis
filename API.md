@@ -53,11 +53,12 @@ an admin approves it. Rate-limited globally (20 / 15 min).
 
 Request:
 ```json
-{ "firstName": "...", "lastName": "...", "email": "...", "password": "...", "userCode": "..." }
+{ "firstName": "...", "lastName": "...", "nationalId": "...", "email": "...", "password": "...", "userCode": "..." }
 ```
-`userCode` is 4–20 characters, uppercase letters and digits only. Password
-must be 8+ characters with at least one uppercase letter, one lowercase
-letter, one digit, and one punctuation/special character.
+`userCode` is 4–20 characters, uppercase letters and digits only.
+`nationalId` is exactly 11 digits. Password must be 8+ characters with at
+least one uppercase letter, one lowercase letter, one digit, and one
+punctuation/special character.
 
 **`201 Created`** on success. **`409 Conflict`** (`CONFLICT`) if the email
 or user code is already registered.

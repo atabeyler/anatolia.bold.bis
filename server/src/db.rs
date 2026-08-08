@@ -146,6 +146,7 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                     user_code VARCHAR(20) UNIQUE NOT NULL,
                     first_name VARCHAR(100) NOT NULL,
                     last_name VARCHAR(100) NOT NULL,
+                    national_id VARCHAR(11) UNIQUE NOT NULL,
                     email VARCHAR(255) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
                     role VARCHAR(20) NOT NULL DEFAULT 'pending',
@@ -168,6 +169,7 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                     user_code TEXT UNIQUE NOT NULL,
                     first_name TEXT NOT NULL,
                     last_name TEXT NOT NULL,
+                    national_id TEXT UNIQUE NOT NULL,
                     email TEXT UNIQUE NOT NULL,
                     password_hash TEXT NOT NULL,
                     role TEXT NOT NULL DEFAULT 'pending',
@@ -192,6 +194,7 @@ pub struct UserRow {
     pub user_code: String,
     pub first_name: String,
     pub last_name: String,
+    pub national_id: String,
     pub email: String,
     pub password_hash: String,
     pub role: String,
@@ -206,6 +209,7 @@ struct PgUserRow {
     user_code: String,
     first_name: String,
     last_name: String,
+    national_id: String,
     email: String,
     password_hash: String,
     role: String,
@@ -221,6 +225,7 @@ impl From<PgUserRow> for UserRow {
             user_code: row.user_code,
             first_name: row.first_name,
             last_name: row.last_name,
+            national_id: row.national_id,
             email: row.email,
             password_hash: row.password_hash,
             role: row.role,
@@ -237,6 +242,7 @@ struct SqliteUserRow {
     user_code: String,
     first_name: String,
     last_name: String,
+    national_id: String,
     email: String,
     password_hash: String,
     role: String,
@@ -252,6 +258,7 @@ impl From<SqliteUserRow> for UserRow {
             user_code: row.user_code,
             first_name: row.first_name,
             last_name: row.last_name,
+            national_id: row.national_id,
             email: row.email,
             password_hash: row.password_hash,
             role: row.role,
@@ -263,7 +270,7 @@ impl From<SqliteUserRow> for UserRow {
 }
 
 const USER_COLUMNS: &str =
-    "id, user_code, first_name, last_name, email, password_hash, role, is_approved, is_banned, ban_reason";
+    "id, user_code, first_name, last_name, national_id, email, password_hash, role, is_approved, is_banned, ban_reason";
 
 pub async fn load_user_by_code(backend: &DbBackend, user_code: &str) -> Result<Option<UserRow>, sqlx::Error> {
     let code = user_code.trim().to_uppercase();
@@ -345,6 +352,7 @@ pub async fn create_user(
     email: &str,
     first_name: &str,
     last_name: &str,
+    national_id: &str,
     password_hash: &str,
     role: &str,
     is_approved: bool,
@@ -352,14 +360,15 @@ pub async fn create_user(
     match backend {
         DbBackend::Postgres(pool) => {
             let row = sqlx::query_as::<_, PgUserRow>(&format!(
-                "INSERT INTO users (user_code, email, first_name, last_name, password_hash, role, is_approved)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                "INSERT INTO users (user_code, email, first_name, last_name, national_id, password_hash, role, is_approved)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  RETURNING {USER_COLUMNS}"
             ))
             .bind(user_code)
             .bind(email)
             .bind(first_name)
             .bind(last_name)
+            .bind(national_id)
             .bind(password_hash)
             .bind(role)
             .bind(is_approved)
@@ -370,14 +379,15 @@ pub async fn create_user(
         DbBackend::Sqlite(pool) => {
             let id = Uuid::new_v4().to_string();
             sqlx::query(
-                "INSERT INTO users (id, user_code, email, first_name, last_name, password_hash, role, is_approved)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO users (id, user_code, email, first_name, last_name, national_id, password_hash, role, is_approved)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             )
             .bind(&id)
             .bind(user_code)
             .bind(email)
             .bind(first_name)
             .bind(last_name)
+            .bind(national_id)
             .bind(password_hash)
             .bind(role)
             .bind(is_approved as i64)

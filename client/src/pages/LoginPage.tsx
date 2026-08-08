@@ -12,6 +12,7 @@ import * as authClient from '../services/authClient';
 type Mode = 'login' | 'register';
 
 const USER_CODE_PATTERN = /^[A-Z0-9]{4,20}$/;
+const NATIONAL_ID_PATTERN = /^[0-9]{11}$/;
 
 export function LoginPage() {
   const { t, i18n } = useTranslation();
@@ -23,6 +24,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [nationalId, setNationalId] = useState('');
   const [email, setEmail] = useState('');
   const [rememberMe, setRememberMe] = useState(Boolean(rememberedUserCode));
   const [submitting, setSubmitting] = useState(false);
@@ -64,7 +66,7 @@ export function LoginPage() {
         playChimeIfEnabled();
       } else {
         const code = userCode.trim().toUpperCase();
-        await register({ firstName, lastName, email, password, userCode: code });
+        await register({ firstName, lastName, nationalId, email, password, userCode: code });
         setPendingCode(code);
         setMode('login');
         setPassword('');
@@ -135,22 +137,16 @@ export function LoginPage() {
         </div>
 
         {mode === 'register' && (
-          <>
-            <div className="auth-field-row">
-              <label className="auth-field">
-                <span>{t('auth.firstName')}</span>
-                <input value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-              </label>
-              <label className="auth-field">
-                <span>{t('auth.lastName')}</span>
-                <input value={lastName} onChange={(e) => setLastName(e.target.value)} required />
-              </label>
-            </div>
+          <div className="auth-field-row">
             <label className="auth-field">
-              <span>{t('auth.email')}</span>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <span>{t('auth.firstName')}</span>
+              <input value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
             </label>
-          </>
+            <label className="auth-field">
+              <span>{t('auth.lastName')}</span>
+              <input value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+            </label>
+          </div>
         )}
 
         <label className="auth-field">
@@ -164,6 +160,26 @@ export function LoginPage() {
           />
           {mode === 'register' && <small>{t('auth.userCodeHint')}</small>}
         </label>
+
+        {mode === 'register' && (
+          <label className="auth-field">
+            <span>{t('auth.nationalId')}</span>
+            <input
+              value={nationalId}
+              onChange={(e) => setNationalId(e.target.value.replace(/[^0-9]/g, ''))}
+              maxLength={11}
+              pattern={NATIONAL_ID_PATTERN.source}
+              required
+            />
+          </label>
+        )}
+
+        {mode === 'register' && (
+          <label className="auth-field">
+            <span>{t('auth.email')}</span>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </label>
+        )}
 
         <label className="auth-field">
           <span>{t('auth.password')}</span>

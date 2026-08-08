@@ -43,6 +43,7 @@ async fn full_registration_and_admin_approval_flow() {
             json!({
                 "firstName": "Ada",
                 "lastName": "Operator",
+                "nationalId": "12345678901",
                 "email": "ada@example.test",
                 "password": "OperatorPass1!",
                 "userCode": "OPER01",

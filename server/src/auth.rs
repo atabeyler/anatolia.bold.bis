@@ -26,6 +26,7 @@ pub struct Claims {
 pub struct RegisterPayload {
     pub first_name: String,
     pub last_name: String,
+    pub national_id: String,
     pub email: String,
     pub password: String,
     pub user_code: String,
@@ -261,7 +262,13 @@ pub async fn register(State(state): State<AppState>, headers: HeaderMap, Json(pa
         || payload.email.trim().is_empty()
         || payload.password.is_empty()
         || payload.user_code.trim().is_empty()
+        || payload.national_id.trim().is_empty()
     {
+        return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
+    }
+
+    let national_id = payload.national_id.trim();
+    if national_id.len() != 11 || !national_id.chars().all(|c| c.is_ascii_digit()) {
         return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
     }
 
@@ -285,6 +292,7 @@ pub async fn register(State(state): State<AppState>, headers: HeaderMap, Json(pa
         &payload.email.trim().to_lowercase(),
         payload.first_name.trim(),
         payload.last_name.trim(),
+        national_id,
         &hashed,
         roles::PENDING,
         false,

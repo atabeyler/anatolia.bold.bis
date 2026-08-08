@@ -27,6 +27,7 @@
     "userCodeHint": "4–20 Zeichen, nur Buchstaben und Zahlen",
     "firstName": "Vorname",
     "lastName": "Nachname",
+    "nationalId": "Ausweisnummer",
     "email": "E-Mail",
     "password": "Passwort",
     "passwordHint": "Mindestens 8 Zeichen mit Großbuchstabe, Kleinbuchstabe, Ziffer und Sonderzeichen",
