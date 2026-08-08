@@ -11,12 +11,28 @@ authorized institutional use.
 
 ## Project Status
 
-**Repository foundation stage.** No application code has been implemented
-yet. `AGENTS.md` and `CLAUDE.md` currently establish the engineering rules
-and target architecture that all subsequent work follows. This README will
-be expanded, section by section, as each part of the system is actually
-built — it will never describe a feature, endpoint, or integration ahead of
-the code that implements it.
+**Phase 1 (repository foundation) complete.** The backend shell (Rust/Axum,
+`GET /api/health`), the frontend shell (React/TypeScript/Vite), the
+six-language i18n system, Docker images, a local docker-compose stack, and
+CI are implemented and verified (backend tests + clippy, frontend
+typecheck + tests + build all pass). No authentication, database,
+biometric provider, or search workflow exists yet — see
+`docs/ROADMAP.md` for what's planned next. This README is expanded as each
+part of the system is actually built — it never describes a feature,
+endpoint, or integration ahead of the code that implements it.
+
+### Running locally
+
+```bash
+# Backend
+cd server && cargo run
+
+# Frontend (separate terminal)
+cd client && npm install && npm run dev
+
+# Or the full stack
+docker compose up --build
+```
 
 ---
 
@@ -38,17 +54,17 @@ face alone. The intended workflow is:
 
 ---
 
-## Architecture (Planned)
+## Architecture
 
-| Layer | Technology |
-|---|---|
-| Backend | Rust, single Axum binary, SQLx (PostgreSQL in production, SQLite for local development) |
-| Biometric provider | Abstracted interface; mock implementation first, server-side ONNX-based implementation later |
-| Vector search / connectors | Abstracted providers — never hard-coupled to one vector database or one external data source |
-| Frontend | React, TypeScript, Vite, i18next |
-| Desktop | Tauri, wrapping the same web client |
-| Android / iOS | Thin clients (capture/upload + result display); biometric inference and search always run server-side |
-| Deployment | Render, native Rust binary |
+| Layer | Technology | Status |
+|---|---|---|
+| Backend | Rust, single Axum binary, SQLx (PostgreSQL in production, SQLite for local development) | Shell implemented (health endpoint only); SQLx not yet wired up |
+| Biometric provider | Abstracted interface; mock implementation first, server-side ONNX-based implementation later | Planned |
+| Vector search / connectors | Abstracted providers — never hard-coupled to one vector database or one external data source | Planned |
+| Frontend | React, TypeScript, Vite, i18next | Shell implemented |
+| Desktop | Tauri, wrapping the same web client | Planned |
+| Android / iOS | Thin clients (capture/upload + result display); biometric inference and search always run server-side | Planned |
+| Deployment | Render, native Rust binary | Documented (`docs/DEPLOYMENT.md`); not yet provisioned |
 
 See `CLAUDE.md` for the full architecture rationale.
 
