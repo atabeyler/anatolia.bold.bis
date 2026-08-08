@@ -66,7 +66,7 @@ face alone. The intended workflow is:
 | Frontend | React, TypeScript, Vite, i18next | Shell implemented |
 | Desktop | Tauri, wrapping the same web client | Planned |
 | Android / iOS | Thin clients (capture/upload + result display); biometric inference and search always run server-side | Planned |
-| Deployment | Render, native Rust binary | Documented (`docs/DEPLOYMENT.md`); not yet provisioned |
+| Deployment | Render, single native Rust web service (serves the built frontend itself — no separate static-site resource) | Documented (`docs/DEPLOYMENT.md`); provisioning in progress |
 
 See `CLAUDE.md` for the full architecture rationale.
 

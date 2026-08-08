@@ -15,15 +15,16 @@ services:
       timeout: 5s
       retries: 5
 
-  api:
+  # Single service: serves both the API and the built frontend from one
+  # process/port, matching the single-service Render deploy (render.yaml).
+  app:
     build:
       context: .
-      dockerfile: server/Dockerfile
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     environment:
       PORT: 8080
-      ALLOWED_ORIGINS: http://localhost:5173
       DATABASE_URL: postgres://anatolia:anatolia@postgres:5432/anatolia_bis
       RUST_LOG: info
       JWT_SECRET: local-compose-access-secret
@@ -35,17 +36,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-
-  web:
-    build:
-      context: .
-      dockerfile: client/Dockerfile
-      args:
-        VITE_API_BASE_URL: http://localhost:8080/api
-    ports:
-      - "5173:80"
-    depends_on:
-      - api
 
 volumes:
   postgres-data:

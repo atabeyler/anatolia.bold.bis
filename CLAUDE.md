@@ -22,7 +22,9 @@ Core product principles (do not weaken these when implementing features):
 ## Architecture
 
 - **Backend**: Rust, single Axum binary (API + WebSocket where needed), SQLx against
-  PostgreSQL in production with SQLite as a local-development fallback only.
+  PostgreSQL in production with SQLite as a local-development fallback only. The same
+  binary also serves the built frontend (with an SPA fallback) from the same origin —
+  one deployed service, one URL; no separate frontend resource, no "api"/"web" in it.
 - **Biometric provider**: behind a trait/interface abstraction (`BiometricProvider`),
   implemented first as a mock provider so the full workflow is developable and testable
   without a real model. A production provider (ONNX Runtime via `ort`, running
@@ -36,7 +38,8 @@ Core product principles (do not weaken these when implementing features):
   deliberate architectural choice, not a temporary limitation: it keeps every search
   auditable and centrally governed, and it avoids the cross-compilation and iOS
   subprocess constraints that on-device inference would run into.
-- **Deploy**: Render, native Rust binary, `GET /api/health` reports the live commit SHA.
+- **Deploy**: Render, a single native Rust web service, `GET /api/health` reports the live
+  commit SHA.
 
 ## Repository Rules
 

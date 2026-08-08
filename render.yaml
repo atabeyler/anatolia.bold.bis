@@ -1,31 +1,26 @@
 # No `databases:` block: this account's free plan allows only one active
-# free-tier Postgres, already in use by another project. anatolia-bis-api
+# free-tier Postgres, already in use by another project. anatolia-bis
 # instead points DATABASE_URL (set in the Render dashboard, not committed
 # here) at that existing instance — the backend creates and uses its own
 # `anatolia_bis` schema there (see server/src/db.rs), so its tables never
 # collide with the other project's.
 
 services:
-  # Backend: native Rust binary, no Docker layer. See docs/DEPLOYMENT.md.
+  # Single service, one URL: the Rust binary serves both the API (under
+  # /api/*) and the built frontend (everything else, with an SPA fallback
+  # to index.html) from the same process — no separate static-site
+  # resource, so the deployed URL never has "api" or "web" in it.
   - type: web
-    name: anatolia-bis-api
+    name: anatolia-bis
     env: rust
     plan: free
     branch: main
-    rootDir: server
     autoDeployTrigger: commit
-    buildCommand: cargo build --release
-    startCommand: ./target/release/anatolia-bis-server
+    # Builds the frontend first (its output is embedded into the service
+    # at STATIC_DIR below), then the backend binary.
+    buildCommand: cd client && npm install && npm run build && cd ../server && cargo build --release
+    startCommand: ./server/target/release/anatolia-bis-server
     healthCheckPath: /api/health
-    # Changes that only touch the frontend or docs never affect this
-    # service's build output — skip the (expensive) Rust release compile
-    # for those pushes.
-    buildFilter:
-      ignoredPaths:
-        - "client/**"
-        - "*.md"
-        - "docs/**"
-        - ".github/**"
     envVars:
       # Set in the Render dashboard: the existing Postgres instance's
       # "Internal Database URL" (from that database's own Render page).
@@ -45,10 +40,19 @@ services:
         sync: false
       - key: ADMIN_EMAIL
         sync: false
-      # The deployed frontend's origin — set once the static site below
-      # has its own Render URL (or a custom domain).
+      # Frontend is served from this same service now, so no separate
+      # origin needs to be allow-listed for the web app itself; leave
+      # unset unless/until a mobile or desktop client needs cross-origin
+      # API access.
       - key: ALLOWED_ORIGINS
         sync: false
+      # Where the built frontend lives relative to this service's working
+      # directory (repository root on Render, since rootDir is unset
+      # above) — see server/src/main.rs.
+      - key: STATIC_DIR
+        value: client/dist
+      # Falls back to RENDER_EXTERNAL_URL (this service's own URL) if
+      # unset, which is now always correct since there's only one URL.
       - key: APP_URL
         sync: false
       # Optional: registration/approval emails are silently skipped if unset.
@@ -56,28 +60,3 @@ services:
         sync: false
       - key: RUST_LOG
         value: info
-
-  # Frontend: static build, served from Render's CDN — no server process.
-  - type: web
-    name: anatolia-bis-web
-    env: static
-    branch: main
-    rootDir: client
-    autoDeployTrigger: commit
-    buildCommand: npm install && npm run build
-    staticPublishPath: dist
-    buildFilter:
-      ignoredPaths:
-        - "server/**"
-        - "*.md"
-        - "docs/**"
-        - ".github/**"
-    envVars:
-      # The backend service's own Render URL + /api, once known.
-      - key: VITE_API_BASE_URL
-        sync: false
-    routes:
-      # Client-side routing: any unmatched path falls back to index.html.
-      - type: rewrite
-        source: /*
-        destination: /index.html

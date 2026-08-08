@@ -4,6 +4,7 @@ use axum::middleware::from_fn;
 use tokio::net::TcpListener;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
@@ -44,7 +45,21 @@ async fn main() {
 
     let state = AppState::new().await.expect("failed to initialize application state");
 
+    // Serves the built frontend from the same process/origin as the API —
+    // one deployed service, one URL, no separate static-site resource.
+    // Defaults to the path a local `cd server && cargo run` finds the
+    // sibling client/dist build at; Render's single-service deploy (see
+    // render.yaml) runs from the repository root instead and overrides
+    // this to "client/dist". Any request that isn't a static asset falls
+    // through to index.html so client-side routing resolves on a hard
+    // refresh/deep link, exactly like the SPA fallback already used for
+    // the local Docker Compose nginx config.
+    let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "../client/dist".to_string());
+    let index_file = format!("{static_dir}/index.html");
+    let serve_frontend = ServeDir::new(&static_dir).not_found_service(ServeFile::new(index_file));
+
     let app = routes::router(state)
+        .fallback_service(serve_frontend)
         .layer(from_fn(middleware::security_headers))
         .layer(TraceLayer::new_for_http())
         .layer(PropagateRequestIdLayer::new(request_id_header.clone()))

@@ -27,11 +27,12 @@ Everything else:
 | Variable | Description | Required |
 |---|---|---|
 | `PORT` | Port the server listens on. Defaults to `8080` if unset. | No |
-| `ALLOWED_ORIGINS` | Comma-separated list of origins allowed by CORS. If unset, all cross-origin requests are rejected — a deliberate fail-closed default. | No (but effectively required for any browser client) |
+| `ALLOWED_ORIGINS` | Comma-separated list of origins allowed by CORS. The deployed app is single-origin (the backend serves the built frontend itself — see `STATIC_DIR`), so this is normally unset in production; it only matters for local dev when running the frontend's own dev server on a different origin, or for a future cross-origin client (mobile/desktop). If unset, all cross-origin requests are rejected — a deliberate fail-closed default. | No |
+| `STATIC_DIR` | Directory the built frontend (`client/dist`) is served from. Defaults to `../client/dist`, which is where a local `cd server && cargo run` finds it relative to `server/`. Render's single-service deploy (`render.yaml`) sets this to `client/dist` instead, since it builds and runs from the repository root. Any request that doesn't match an API route or an existing static file falls back to `index.html` (SPA routing). | No |
 | `RUST_LOG` | Log level filter for structured logging (e.g. `info`, `debug`). Defaults to `info`. | No |
 | `SERVER_DATA_DIR` | Directory the local SQLite fallback database is written to. Defaults to `server/data`. | No |
 | `RESEND_FROM` | Sender address for outgoing email. Defaults to a `resend.dev` sandbox address. | No |
-| `APP_URL` | The app's externally-reachable URL, used in emailed links. Falls back to `RENDER_EXTERNAL_URL`, then `http://localhost:8080`. | No |
+| `APP_URL` | The app's externally-reachable URL, used in emailed links. Falls back to `RENDER_EXTERNAL_URL` (which, since the deploy is single-service, is always the app's one real URL), then `http://localhost:8080`. | No |
 | `RENDER_EXTERNAL_URL` | Set automatically by Render on a running web service; also the signal the backend uses to decide "this is the production web deploy, `DATABASE_URL` is mandatory here." | Platform-provided |
 | `RENDER`, `NODE_ENV` | Either being set to a production value switches the refresh-token cookie to `Secure` and selects `SameSite=Lax`/`None` instead of the dev-only `Strict`. | No |
 | `GIT_COMMIT_SHA` | Build-time only (not a runtime env var). Passed as a Docker build arg when `.git` isn't available in the build context; `server/build.rs` falls back to reading the checkout's own commit directly otherwise. | No |
