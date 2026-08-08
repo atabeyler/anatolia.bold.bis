@@ -422,6 +422,16 @@ body::before {
   gap: 1.25rem;
 }
 
+.auth-telemetry {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
 .brand-logo {
   position: relative;
   width: 96px;

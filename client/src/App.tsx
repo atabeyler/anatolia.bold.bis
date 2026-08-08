@@ -5,6 +5,7 @@ import { MenuOverlay } from './components/MenuOverlay';
 import { SettingsOverlay } from './components/SettingsOverlay';
 import { useAuth } from './features/auth/AuthContext';
 import { useHealthCheck } from './hooks/useHealthCheck';
+import { brandMark } from './lib/brand';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 
@@ -14,7 +15,7 @@ function App() {
   const health = useHealthCheck();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const brand = i18n.resolvedLanguage === 'tr' ? 'ANATOLİA-BİS' : 'ANATOLIA-BIS';
+  const brand = brandMark(i18n.resolvedLanguage);
 
   return (
     <div className="app-shell">

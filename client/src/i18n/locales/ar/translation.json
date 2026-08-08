@@ -7,7 +7,10 @@
     "checking": "جارٍ التحقق من حالة الخادم…",
     "online": "الخادم متصل",
     "offline": "تعذّر الوصول إلى الخادم",
-    "version": "الإصدار"
+    "version": "الإصدار",
+    "locationRequesting": "جارٍ طلب الموقع…",
+    "locationDenied": "الموقع غير متاح",
+    "locationUnsupported": "الموقع غير مدعوم"
   },
   "footer": {
     "legal": "BIS 200120401018 © 2026 · Bold Askeri Teknoloji ve Savunma Sanayi A.Ş. · جميع الحقوق محفوظة."

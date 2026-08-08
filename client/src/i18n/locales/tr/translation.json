@@ -7,7 +7,10 @@
     "checking": "Sunucu durumu kontrol ediliyor…",
     "online": "Sunucu aktif",
     "offline": "Sunucuya ulaşılamıyor",
-    "version": "Sürüm"
+    "version": "Sürüm",
+    "locationRequesting": "Konum isteniyor…",
+    "locationDenied": "Konum alınamadı",
+    "locationUnsupported": "Konum desteklenmiyor"
   },
   "footer": {
     "legal": "BIS 200120401018 © 2026 · Bold Askeri Teknoloji ve Savunma Sanayi A.Ş. · Tüm hakları saklıdır."

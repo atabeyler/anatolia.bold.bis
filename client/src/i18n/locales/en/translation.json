@@ -7,7 +7,10 @@
     "checking": "Checking backend status…",
     "online": "Backend online",
     "offline": "Backend unreachable",
-    "version": "Version"
+    "version": "Version",
+    "locationRequesting": "Requesting location…",
+    "locationDenied": "Location unavailable",
+    "locationUnsupported": "Location not supported"
   },
   "footer": {
     "legal": "BIS 200120401018 © 2026 · Bold Askeri Teknoloji ve Savunma Sanayi A.Ş. · All rights reserved."

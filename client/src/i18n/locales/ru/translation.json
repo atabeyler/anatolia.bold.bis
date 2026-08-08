@@ -7,7 +7,10 @@
     "checking": "Проверка состояния сервера…",
     "online": "Сервер доступен",
     "offline": "Сервер недоступен",
-    "version": "Версия"
+    "version": "Версия",
+    "locationRequesting": "Запрос местоположения…",
+    "locationDenied": "Местоположение недоступно",
+    "locationUnsupported": "Определение местоположения не поддерживается"
   },
   "footer": {
     "legal": "BIS 200120401018 © 2026 · Bold Askeri Teknoloji ve Savunma Sanayi A.Ş. · Все права защищены."

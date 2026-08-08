@@ -7,7 +7,10 @@
     "checking": "Vérification de l'état du serveur…",
     "online": "Serveur opérationnel",
     "offline": "Serveur inaccessible",
-    "version": "Version"
+    "version": "Version",
+    "locationRequesting": "Demande de localisation…",
+    "locationDenied": "Position indisponible",
+    "locationUnsupported": "Localisation non prise en charge"
   },
   "footer": {
     "legal": "BIS 200120401018 © 2026 · Bold Askeri Teknoloji ve Savunma Sanayi A.Ş. · Tous droits réservés."

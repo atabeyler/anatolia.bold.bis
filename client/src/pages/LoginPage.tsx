@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 
 import { Logo } from '../components/Logo';
 import { useAuth } from '../features/auth/AuthContext';
+import { formatLatitude, formatLongitude, useGeolocation } from '../hooks/useGeolocation';
+import { brandMark } from '../lib/brand';
 import { playChimeIfEnabled } from '../lib/sound';
 import { apiErrorMessageKey } from '../services/apiClient';
 import * as authClient from '../services/authClient';
@@ -12,8 +14,9 @@ type Mode = 'login' | 'register';
 const USER_CODE_PATTERN = /^[A-Z0-9]{4,20}$/;
 
 export function LoginPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { login, register, rememberedUserCode } = useAuth();
+  const geolocation = useGeolocation();
 
   const [mode, setMode] = useState<Mode>('login');
   const [userCode, setUserCode] = useState(rememberedUserCode);
@@ -74,8 +77,21 @@ export function LoginPage() {
     }
   }
 
+  const locationLine =
+    geolocation.status === 'granted' && geolocation.coords
+      ? `LAT: ${formatLatitude(geolocation.coords.latitude)} · LON: ${formatLongitude(geolocation.coords.longitude)}`
+      : geolocation.status === 'denied'
+        ? t('status.locationDenied')
+        : geolocation.status === 'unsupported'
+          ? t('status.locationUnsupported')
+          : t('status.locationRequesting');
+
   return (
     <div className="auth-shell">
+      <div className="auth-telemetry">
+        <div>SYS: {brandMark(i18n.resolvedLanguage)} v{__APP_VERSION__}</div>
+        <div>{locationLine}</div>
+      </div>
       <Logo />
       <form className="auth-panel" onSubmit={handleSubmit}>
         <div className="auth-mode-toggle">
