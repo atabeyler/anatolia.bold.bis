@@ -60,7 +60,6 @@ services:
   - type: web
     name: anatolia-bis-web
     env: static
-    plan: free
     branch: main
     rootDir: client
     autoDeployTrigger: commit
