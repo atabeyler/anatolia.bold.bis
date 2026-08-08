@@ -1,0 +1,50 @@
+{
+  "app": {
+    "title": "Anatolia B.I.S.",
+    "tagline": "Kurumsal biyometrik aday eşleştirme ve kimlik doğrulama platformu"
+  },
+  "status": {
+    "checking": "Sunucu durumu kontrol ediliyor…",
+    "online": "Sunucu aktif",
+    "offline": "Sunucuya ulaşılamıyor",
+    "version": "Sürüm"
+  },
+  "footer": {
+    "foundationStage": "Depo temel aşaması — Faz 1"
+  },
+  "language": {
+    "label": "Dil"
+  },
+  "auth": {
+    "signIn": "Giriş yap",
+    "signUp": "Kayıt ol",
+    "userCode": "Kullanıcı kodu",
+    "userCodeHint": "4-20 karakter, yalnızca harf ve rakam",
+    "firstName": "Ad",
+    "lastName": "Soyad",
+    "email": "E-posta",
+    "password": "Şifre",
+    "passwordHint": "En az 8 karakter; büyük harf, küçük harf, rakam ve sembol içermeli",
+    "rememberMe": "Beni hatırla",
+    "submitLogin": "Giriş yap",
+    "submitRegister": "Talebi gönder",
+    "submitting": "İşleniyor…",
+    "registrationPendingMessage": "Talebiniz alındı. Kullanıcı kodu: {{code}} — yönetici onayı bekleniyor…",
+    "accountApproved": "Hesabınız onaylandı. Artık giriş yapabilirsiniz.",
+    "logout": "Çıkış yap",
+    "welcomeBack": "{{name}} olarak giriş yapıldı"
+  },
+  "errors": {
+    "validation": "Lütfen alanları kontrol edip tekrar deneyin.",
+    "invalidCredentials": "Kullanıcı kodu veya şifre hatalı.",
+    "accountBanned": "Hesabınız yasaklanmış.",
+    "accountNotApproved": "Hesabınız henüz onaylanmadı. Lütfen yönetici onayını bekleyin.",
+    "registrationConflict": "Bu e-posta veya kullanıcı kodu zaten kayıtlı.",
+    "rateLimited": "Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.",
+    "sessionExpired": "Oturumunuzun süresi doldu. Lütfen tekrar giriş yapın.",
+    "unauthorized": "Devam etmek için giriş yapın.",
+    "forbidden": "Bu işlem için yetkiniz yok.",
+    "notFound": "Bulunamadı.",
+    "internal": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
+  }
+}

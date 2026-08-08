@@ -1,0 +1,50 @@
+{
+  "app": {
+    "title": "Anatolia B.I.S.",
+    "tagline": "Institutionelle Plattform für biometrischen Kandidatenabgleich und Identitätsprüfung"
+  },
+  "status": {
+    "checking": "Serverstatus wird geprüft…",
+    "online": "Server verfügbar",
+    "offline": "Server nicht erreichbar",
+    "version": "Version"
+  },
+  "footer": {
+    "foundationStage": "Grundlagenphase des Repositorys — Phase 1"
+  },
+  "language": {
+    "label": "Sprache"
+  },
+  "auth": {
+    "signIn": "Anmelden",
+    "signUp": "Registrieren",
+    "userCode": "Benutzercode",
+    "userCodeHint": "4–20 Zeichen, nur Buchstaben und Zahlen",
+    "firstName": "Vorname",
+    "lastName": "Nachname",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "passwordHint": "Mindestens 8 Zeichen mit Großbuchstabe, Kleinbuchstabe, Ziffer und Sonderzeichen",
+    "rememberMe": "Angemeldet bleiben",
+    "submitLogin": "Anmelden",
+    "submitRegister": "Anfrage senden",
+    "submitting": "Wird verarbeitet…",
+    "registrationPendingMessage": "Anfrage erhalten. Benutzercode: {{code}} — wartet auf Genehmigung durch den Administrator…",
+    "accountApproved": "Ihr Konto wurde genehmigt. Sie können sich jetzt anmelden.",
+    "logout": "Abmelden",
+    "welcomeBack": "Angemeldet als {{name}}"
+  },
+  "errors": {
+    "validation": "Bitte überprüfen Sie die Felder und versuchen Sie es erneut.",
+    "invalidCredentials": "Benutzercode oder Passwort ist falsch.",
+    "accountBanned": "Ihr Konto wurde gesperrt.",
+    "accountNotApproved": "Ihr Konto wurde noch nicht genehmigt. Bitte warten Sie auf die Genehmigung durch den Administrator.",
+    "registrationConflict": "Diese E-Mail-Adresse oder dieser Benutzercode ist bereits registriert.",
+    "rateLimited": "Zu viele Versuche. Bitte versuchen Sie es später erneut.",
+    "sessionExpired": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
+    "unauthorized": "Bitte melden Sie sich an, um fortzufahren.",
+    "forbidden": "Sie sind dazu nicht berechtigt.",
+    "notFound": "Nicht gefunden.",
+    "internal": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut."
+  }
+}

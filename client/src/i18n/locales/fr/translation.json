@@ -1,0 +1,50 @@
+{
+  "app": {
+    "title": "Anatolia B.I.S.",
+    "tagline": "Plateforme institutionnelle de rapprochement biométrique de candidats et de vérification d'identité"
+  },
+  "status": {
+    "checking": "Vérification de l'état du serveur…",
+    "online": "Serveur opérationnel",
+    "offline": "Serveur inaccessible",
+    "version": "Version"
+  },
+  "footer": {
+    "foundationStage": "Phase de fondation du dépôt — Phase 1"
+  },
+  "language": {
+    "label": "Langue"
+  },
+  "auth": {
+    "signIn": "Se connecter",
+    "signUp": "S'inscrire",
+    "userCode": "Code utilisateur",
+    "userCodeHint": "4 à 20 caractères, lettres et chiffres uniquement",
+    "firstName": "Prénom",
+    "lastName": "Nom",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "passwordHint": "Au moins 8 caractères, avec une majuscule, une minuscule, un chiffre et un symbole",
+    "rememberMe": "Se souvenir de moi",
+    "submitLogin": "Se connecter",
+    "submitRegister": "Envoyer la demande",
+    "submitting": "Traitement…",
+    "registrationPendingMessage": "Demande reçue. Code utilisateur : {{code}} — en attente d'approbation par l'administrateur…",
+    "accountApproved": "Votre compte a été approuvé. Vous pouvez maintenant vous connecter.",
+    "logout": "Se déconnecter",
+    "welcomeBack": "Connecté en tant que {{name}}"
+  },
+  "errors": {
+    "validation": "Veuillez vérifier les champs et réessayer.",
+    "invalidCredentials": "Code utilisateur ou mot de passe incorrect.",
+    "accountBanned": "Votre compte a été banni.",
+    "accountNotApproved": "Votre compte n'a pas encore été approuvé. Veuillez attendre l'approbation de l'administrateur.",
+    "registrationConflict": "Cet e-mail ou ce code utilisateur est déjà enregistré.",
+    "rateLimited": "Trop de tentatives. Veuillez réessayer plus tard.",
+    "sessionExpired": "Votre session a expiré. Veuillez vous reconnecter.",
+    "unauthorized": "Veuillez vous connecter pour continuer.",
+    "forbidden": "Vous n'avez pas la permission de faire cela.",
+    "notFound": "Introuvable.",
+    "internal": "Une erreur est survenue. Veuillez réessayer."
+  }
+}

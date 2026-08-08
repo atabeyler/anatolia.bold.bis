@@ -216,3 +216,17 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Rust
+/server/target/
+**/*.rs.bk
+
+# Node / frontend
+/client/node_modules/
+/client/dist/
+/client/node_modules/.tmp/
+npm-debug.log*
+
+# Editors
+.vscode/
+.idea/

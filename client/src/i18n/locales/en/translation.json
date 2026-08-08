@@ -1,0 +1,50 @@
+{
+  "app": {
+    "title": "Anatolia B.I.S.",
+    "tagline": "Institutional biometric candidate-matching and identity verification platform"
+  },
+  "status": {
+    "checking": "Checking backend status…",
+    "online": "Backend online",
+    "offline": "Backend unreachable",
+    "version": "Version"
+  },
+  "footer": {
+    "foundationStage": "Repository foundation stage — Phase 1"
+  },
+  "language": {
+    "label": "Language"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "userCode": "User code",
+    "userCodeHint": "4–20 characters, letters and numbers only",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "email": "Email",
+    "password": "Password",
+    "passwordHint": "At least 8 characters, with an uppercase letter, a lowercase letter, a digit, and a symbol",
+    "rememberMe": "Remember me",
+    "submitLogin": "Sign in",
+    "submitRegister": "Submit request",
+    "submitting": "Processing…",
+    "registrationPendingMessage": "Request received. User code: {{code}} — awaiting admin approval…",
+    "accountApproved": "Your account has been approved. You can now sign in.",
+    "logout": "Sign out",
+    "welcomeBack": "Signed in as {{name}}"
+  },
+  "errors": {
+    "validation": "Please check the fields and try again.",
+    "invalidCredentials": "Invalid user code or password.",
+    "accountBanned": "Your account has been banned.",
+    "accountNotApproved": "Your account has not been approved yet. Please wait for admin approval.",
+    "registrationConflict": "This email or user code is already registered.",
+    "rateLimited": "Too many attempts. Please try again later.",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "unauthorized": "Please sign in to continue.",
+    "forbidden": "You do not have permission to do that.",
+    "notFound": "Not found.",
+    "internal": "Something went wrong. Please try again."
+  }
+}

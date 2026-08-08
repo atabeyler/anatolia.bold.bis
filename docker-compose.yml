@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: anatolia
+      POSTGRES_PASSWORD: anatolia
+      POSTGRES_DB: anatolia_bis
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U anatolia"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      ALLOWED_ORIGINS: http://localhost:5173
+      DATABASE_URL: postgres://anatolia:anatolia@postgres:5432/anatolia_bis
+      RUST_LOG: info
+      JWT_SECRET: local-compose-access-secret
+      JWT_REFRESH_SECRET: local-compose-refresh-secret
+      ADMIN_SEED_TOKEN: local-compose-seed-token
+      ADMIN_USER_CODE: ADMIN01
+      ADMIN_PASSWORD: ChangeMe1!
+      ADMIN_EMAIL: info@boldkimya.com.tr
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:8080/api
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
