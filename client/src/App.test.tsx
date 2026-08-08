@@ -18,10 +18,17 @@ function renderApp() {
 }
 
 describe('App', () => {
-  it('renders the application title in the active language', async () => {
+  it('renders the application brand mark in the active language', async () => {
     await i18n.changeLanguage('en');
     renderApp();
-    expect(screen.getByText('Anatolia B.I.S.')).toBeInTheDocument();
+    expect(screen.getByText('ANATOLIA-BIS')).toBeInTheDocument();
+  });
+
+  it('renders the Turkish brand mark with a dotted İ when Turkish is active', async () => {
+    await i18n.changeLanguage('tr');
+    renderApp();
+    expect(screen.getByText('ANATOLİA-BİS')).toBeInTheDocument();
+    await i18n.changeLanguage('en');
   });
 
   it('sets RTL direction on the document when Arabic is selected', () => {
