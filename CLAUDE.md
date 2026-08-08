@@ -59,3 +59,6 @@ it does not relax them.
   Label planned-but-unimplemented features explicitly as planned.
 - Never commit secrets, real biometric data, real subject photographs, or production
   credentials. Only `.env.example` placeholders belong in the repository.
+- Always ask the repository owner for confirmation before running `git push`, to any
+  branch, no matter how small the change — commits can be prepared locally first, but
+  the push itself always waits for explicit go-ahead.

@@ -8,6 +8,7 @@ These instructions apply to all automated development agents working in this rep
 - Never modify global Git configuration. Use repository-local identity only:
   - `git config --local user.name "atabeyler"`
   - `git config --local user.email "info@boldkimya.com.tr"`
+- **Always ask the repository owner for confirmation before running `git push`** (to any branch), regardless of how small or routine the change looks. Commits may be prepared locally, but the push itself is never automatic.
 
 ## Commit and Pull Request Style
 - Use professional, human-written commit messages.
