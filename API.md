@@ -81,6 +81,11 @@ if the cookie is missing, invalid, or the account is banned/unapproved.
 
 Clears the refresh cookie.
 
+#### `GET /api/v1/auth/pending-status/{userCode}`
+
+Polled by the registration form to detect admin approval without a manual
+refresh. Response: `{ "status": "pending" | "approved" | "banned" | "not_found" }`.
+
 #### `GET /api/v1/users/me`
 
 Requires `Authorization: Bearer <accessToken>`. Returns the caller's own

@@ -11,7 +11,8 @@ pub fn router(state: AppState) -> Router {
         .route("/register", post(auth::register))
         .route("/login", post(auth::login))
         .route("/refresh", post(auth::refresh))
-        .route("/logout", post(auth::logout));
+        .route("/logout", post(auth::logout))
+        .route("/pending-status/:user_code", get(auth::pending_status));
 
     let admin_routes = Router::new()
         .route("/seed-admin", post(admin::seed_admin))

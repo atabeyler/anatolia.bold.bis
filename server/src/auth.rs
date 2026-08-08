@@ -388,6 +388,33 @@ pub async fn refresh(State(state): State<AppState>, headers: HeaderMap) -> Respo
     .into_response()
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", tag = "status")]
+enum PendingStatus {
+    #[serde(rename = "approved")]
+    Approved,
+    #[serde(rename = "pending")]
+    Pending,
+    #[serde(rename = "banned")]
+    Banned,
+    #[serde(rename = "not_found")]
+    NotFound,
+}
+
+/// Polled by the registration form so it can move a pending applicant
+/// straight to the login tab, pre-filled, the moment an admin approves
+/// them — without requiring a manual page refresh.
+pub async fn pending_status(State(state): State<AppState>, axum::extract::Path(user_code): axum::extract::Path<String>) -> Response {
+    let status = match load_user_by_code(&state.backend, &user_code).await {
+        Ok(Some(user)) if user.is_banned => PendingStatus::Banned,
+        Ok(Some(user)) if user.is_approved => PendingStatus::Approved,
+        Ok(Some(_)) => PendingStatus::Pending,
+        Ok(None) => PendingStatus::NotFound,
+        Err(_) => PendingStatus::NotFound,
+    };
+    Json(status).into_response()
+}
+
 pub async fn logout() -> Response {
     let mut response = Json(serde_json::json!({ "messageKey": "auth.loggedOut" })).into_response();
     response.headers_mut().insert(

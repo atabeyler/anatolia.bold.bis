@@ -3,13 +3,16 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import App from './App';
+import { AuthProvider } from './features/auth/AuthContext';
 import i18n, { applyDocumentDirection } from './i18n/config';
 
 function renderApp() {
   const queryClient = new QueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </QueryClientProvider>,
   );
 }
