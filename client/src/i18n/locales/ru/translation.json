@@ -50,7 +50,20 @@
   "settings": {
     "openLabel": "Настройки",
     "title": "Настройки",
-    "language": "Язык"
+    "tabs": {
+      "language": "Язык",
+      "sound": "Звук",
+      "appearance": "Внешний вид",
+      "about": "О программе"
+    },
+    "sound": {
+      "enable": "Включить звуки интерфейса",
+      "test": "Воспроизвести тестовый звук"
+    },
+    "appearance": {
+      "dark": "Тёмная",
+      "light": "Светлая"
+    }
   },
   "menu": {
     "openLabel": "Меню",

@@ -50,7 +50,20 @@
   "settings": {
     "openLabel": "الإعدادات",
     "title": "الإعدادات",
-    "language": "اللغة"
+    "tabs": {
+      "language": "اللغة",
+      "sound": "الصوت",
+      "appearance": "المظهر",
+      "about": "حول"
+    },
+    "sound": {
+      "enable": "تفعيل أصوات الواجهة",
+      "test": "تشغيل صوت تجريبي"
+    },
+    "appearance": {
+      "dark": "داكن",
+      "light": "فاتح"
+    }
   },
   "menu": {
     "openLabel": "القائمة",

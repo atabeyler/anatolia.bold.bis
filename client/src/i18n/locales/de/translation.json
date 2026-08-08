@@ -50,7 +50,20 @@
   "settings": {
     "openLabel": "Einstellungen",
     "title": "Einstellungen",
-    "language": "Sprache"
+    "tabs": {
+      "language": "Sprache",
+      "sound": "Ton",
+      "appearance": "Erscheinungsbild",
+      "about": "Über"
+    },
+    "sound": {
+      "enable": "Oberflächentöne aktivieren",
+      "test": "Testton abspielen"
+    },
+    "appearance": {
+      "dark": "Dunkel",
+      "light": "Hell"
+    }
   },
   "menu": {
     "openLabel": "Menü",

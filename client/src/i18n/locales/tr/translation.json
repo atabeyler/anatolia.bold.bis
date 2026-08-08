@@ -50,7 +50,20 @@
   "settings": {
     "openLabel": "Ayarlar",
     "title": "Ayarlar",
-    "language": "Dil"
+    "tabs": {
+      "language": "Dil",
+      "sound": "Ses",
+      "appearance": "Görünüm",
+      "about": "Hakkında"
+    },
+    "sound": {
+      "enable": "Arayüz seslerini etkinleştir",
+      "test": "Test sesi çal"
+    },
+    "appearance": {
+      "dark": "Koyu",
+      "light": "Açık"
+    }
   },
   "menu": {
     "openLabel": "Menü",

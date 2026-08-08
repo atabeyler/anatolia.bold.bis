@@ -50,7 +50,20 @@
   "settings": {
     "openLabel": "Settings",
     "title": "Settings",
-    "language": "Language"
+    "tabs": {
+      "language": "Language",
+      "sound": "Sound",
+      "appearance": "Appearance",
+      "about": "About"
+    },
+    "sound": {
+      "enable": "Enable interface sounds",
+      "test": "Play test sound"
+    },
+    "appearance": {
+      "dark": "Dark",
+      "light": "Light"
+    }
   },
   "menu": {
     "openLabel": "Menu",

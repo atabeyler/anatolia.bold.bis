@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Logo } from '../components/Logo';
 import { useAuth } from '../features/auth/AuthContext';
+import { playChimeIfEnabled } from '../lib/sound';
 import { apiErrorMessageKey } from '../services/apiClient';
 import * as authClient from '../services/authClient';
 
@@ -57,12 +58,14 @@ export function LoginPage() {
     try {
       if (mode === 'login') {
         await login(userCode.trim().toUpperCase(), password, rememberMe);
+        playChimeIfEnabled();
       } else {
         const code = userCode.trim().toUpperCase();
         await register({ firstName, lastName, email, password, userCode: code });
         setPendingCode(code);
         setMode('login');
         setPassword('');
+        playChimeIfEnabled();
       }
     } catch (err) {
       setErrorKey(apiErrorMessageKey(err));

@@ -5,7 +5,10 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { AuthProvider } from './features/auth/AuthContext';
 import './i18n/config';
+import { applyTheme, getStoredTheme } from './lib/theme';
 import './index.css';
+
+applyTheme(getStoredTheme());
 
 const queryClient = new QueryClient();
 

@@ -50,7 +50,20 @@
   "settings": {
     "openLabel": "Paramètres",
     "title": "Paramètres",
-    "language": "Langue"
+    "tabs": {
+      "language": "Langue",
+      "sound": "Son",
+      "appearance": "Apparence",
+      "about": "À propos"
+    },
+    "sound": {
+      "enable": "Activer les sons de l'interface",
+      "test": "Jouer un son de test"
+    },
+    "appearance": {
+      "dark": "Sombre",
+      "light": "Clair"
+    }
   },
   "menu": {
     "openLabel": "Menu",
