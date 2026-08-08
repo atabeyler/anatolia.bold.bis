@@ -1,8 +1,9 @@
-databases:
-  - name: anatolia-bis-db
-    databaseName: anatolia_bis
-    user: anatolia
-    plan: free
+# No `databases:` block: this account's free plan allows only one active
+# free-tier Postgres, already in use by another project. anatolia-bis-api
+# instead points DATABASE_URL (set in the Render dashboard, not committed
+# here) at that existing instance — the backend creates and uses its own
+# `anatolia_bis` schema there (see server/src/db.rs), so its tables never
+# collide with the other project's.
 
 services:
   # Backend: native Rust binary, no Docker layer. See docs/DEPLOYMENT.md.
@@ -26,10 +27,10 @@ services:
         - "docs/**"
         - ".github/**"
     envVars:
+      # Set in the Render dashboard: the existing Postgres instance's
+      # "Internal Database URL" (from that database's own Render page).
       - key: DATABASE_URL
-        fromDatabase:
-          name: anatolia-bis-db
-          property: connectionString
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET

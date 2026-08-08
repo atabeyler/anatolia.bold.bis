@@ -11,7 +11,7 @@ them missing by falling back to SQLite and locally-generated defaults:
 
 | Variable | Description |
 |---|---|
-| `DATABASE_URL` | PostgreSQL connection string. On Render (`RENDER_EXTERNAL_URL` set) the server panics at startup if this is missing — it deliberately refuses to fall back to a throwaway SQLite database on the production web deploy. Locally, an unset `DATABASE_URL` falls back to a SQLite file under `SERVER_DATA_DIR` (default `server/data/dev.db`). |
+| `DATABASE_URL` | PostgreSQL connection string. May point at a database instance shared with another project — the backend creates and uses its own `anatolia_bis` schema there (never `public`), so its tables can't collide with anyone else's. On Render (`RENDER_EXTERNAL_URL` set) the server panics at startup if this is missing — it deliberately refuses to fall back to a throwaway SQLite database on the production web deploy. Locally, an unset `DATABASE_URL` falls back to a SQLite file under `SERVER_DATA_DIR` (default `server/data/dev.db`). |
 | `JWT_SECRET`, `JWT_REFRESH_SECRET` | JWT signing secrets. Fall back to fixed local-development values if unset, so `cargo run`/`cargo test` work with zero setup — **must** be set to real random values in production. |
 | `ADMIN_SEED_TOKEN`, `ADMIN_USER_CODE`, `ADMIN_PASSWORD`, `ADMIN_EMAIL` | Required together to create the first `SYSTEM_ADMIN` account via `POST /api/v1/admin/seed-admin` (rate-limited to 5 attempts/15 min, constant-time token comparison). Without a seeded admin, no registration can ever be approved. |
 

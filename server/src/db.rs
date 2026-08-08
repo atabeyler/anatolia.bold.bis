@@ -62,12 +62,35 @@ impl AppState {
     }
 }
 
+/// Dedicated schema for this application's tables — the database this
+/// connects to may be shared with another, unrelated application (e.g. on
+/// a hosting plan that only permits one free-tier database per account),
+/// so tables must never land in the shared `public` schema.
+const PG_SCHEMA: &str = "anatolia_bis";
+
 async fn connect_postgres(database_url: &str) -> Result<PgPool, sqlx::Error> {
     let mut last_err: Option<sqlx::Error> = None;
     for attempt in 0..3 {
         match PgPoolOptions::new()
             .max_connections(10)
             .acquire_timeout(Duration::from_secs(20))
+            // `SET search_path` is a per-session setting. Running it only
+            // once (e.g. inside migrate()) would apply to whichever single
+            // connection happened to service that one query — every other
+            // connection the pool later opens would keep Postgres's
+            // default search_path (which does not include PG_SCHEMA), so
+            // two logically identical queries could resolve `users` to two
+            // different physical tables depending on which pooled
+            // connection served each one. after_connect runs this on every
+            // connection the pool ever opens, so every query resolves
+            // against the same schema regardless of which physical
+            // connection handles it.
+            .after_connect(|conn, _meta| {
+                Box::pin(async move {
+                    sqlx::Executor::execute(conn, format!("SET search_path TO {PG_SCHEMA}, public").as_str()).await?;
+                    Ok(())
+                })
+            })
             .connect(database_url)
             .await
         {
@@ -110,6 +133,9 @@ pub fn backend_name(backend: &DbBackend) -> &'static str {
 async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
+            sqlx::query(&format!("CREATE SCHEMA IF NOT EXISTS {PG_SCHEMA}"))
+                .execute(pool)
+                .await?;
             sqlx::query("CREATE EXTENSION IF NOT EXISTS pgcrypto")
                 .execute(pool)
                 .await?;
