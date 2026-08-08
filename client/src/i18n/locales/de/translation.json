@@ -1,0 +1,18 @@
+{
+  "app": {
+    "title": "Anatolia B.I.S.",
+    "tagline": "Institutionelle Plattform für biometrischen Kandidatenabgleich und Identitätsprüfung"
+  },
+  "status": {
+    "checking": "Serverstatus wird geprüft…",
+    "online": "Server verfügbar",
+    "offline": "Server nicht erreichbar",
+    "version": "Version"
+  },
+  "footer": {
+    "foundationStage": "Grundlagenphase des Repositorys — Phase 1"
+  },
+  "language": {
+    "label": "Sprache"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "app": {
+    "title": "Anatolia B.I.S.",
+    "tagline": "Kurumsal biyometrik aday eşleştirme ve kimlik doğrulama platformu"
+  },
+  "status": {
+    "checking": "Sunucu durumu kontrol ediliyor…",
+    "online": "Sunucu aktif",
+    "offline": "Sunucuya ulaşılamıyor",
+    "version": "Sürüm"
+  },
+  "footer": {
+    "foundationStage": "Depo temel aşaması — Faz 1"
+  },
+  "language": {
+    "label": "Dil"
+  }
+}
