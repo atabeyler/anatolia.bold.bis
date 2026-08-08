@@ -46,5 +46,27 @@
     "forbidden": "Sie sind dazu nicht berechtigt.",
     "notFound": "Nicht gefunden.",
     "internal": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut."
+  },
+  "settings": {
+    "openLabel": "Einstellungen",
+    "title": "Einstellungen",
+    "language": "Sprache"
+  },
+  "menu": {
+    "openLabel": "Menü",
+    "title": "Anatolia B.I.S.",
+    "back": "Zurück",
+    "guide": "Anleitung",
+    "about": "Über uns",
+    "mission": "Mission & Vision",
+    "contact": "Kontakt",
+    "guideTitle": "Anleitung",
+    "aboutTitle": "Über uns",
+    "missionTitle": "Mission & Vision",
+    "contactTitle": "Kontakt",
+    "guideContent": "ANMELDEN\nMelden Sie sich mit Ihrem Benutzercode und Passwort an.\n\nREGISTRIEREN\nReichen Sie eine Anfrage mit Vorname, Nachname, E-Mail und einem Benutzercode ein. Ihre Anfrage geht zur Genehmigung an einen Administrator — Sie können sich erst nach der Genehmigung anmelden.\n\nWARTEN AUF GENEHMIGUNG\nNach der Registrierung prüft die App automatisch, ob Ihr Konto genehmigt wurde.",
+    "aboutContent": "Anatolia B.I.S. ist eine Plattform für biometrischen Kandidatenabgleich und Identitätsprüfung, entwickelt von Bold Askeri Teknoloji ve Savunma Sanayi A.Ş. für autorisierte Institutionen. Das System basiert auf durch Menschen geprüften Kandidatenübereinstimmungen, nicht auf automatisierten Identitätsentscheidungen.\n\nProjektcode: BIS 200120401018",
+    "missionContent": "MISSION\nAutorisierten Institutionen eine zuverlässige, überprüfbare und datenschutzorientierte biometrische Verifizierungsinfrastruktur bereitstellen.\n\nVISION\nDer institutionelle Standard für Verifizierungssysteme werden, die Entscheidungen Menschen statt Algorithmen überlassen und jede Aktion protokollieren.",
+    "contactContent": "Organisation: Bold Askeri Teknoloji ve Savunma Sanayi A.Ş.\nE-Mail: info@boldkimya.com.tr\nTelefon: +90 532 217 07 76\n\n© 2026 Alle Rechte vorbehalten."
   }
 }

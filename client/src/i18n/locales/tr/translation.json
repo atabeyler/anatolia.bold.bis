@@ -46,5 +46,27 @@
     "forbidden": "Bu işlem için yetkiniz yok.",
     "notFound": "Bulunamadı.",
     "internal": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
+  },
+  "settings": {
+    "openLabel": "Ayarlar",
+    "title": "Ayarlar",
+    "language": "Dil"
+  },
+  "menu": {
+    "openLabel": "Menü",
+    "title": "Anatolia B.I.S.",
+    "back": "Geri",
+    "guide": "Kullanım Kılavuzu",
+    "about": "Hakkımızda",
+    "mission": "Misyon & Vizyon",
+    "contact": "İletişim",
+    "guideTitle": "Kullanım Kılavuzu",
+    "aboutTitle": "Hakkımızda",
+    "missionTitle": "Misyon & Vizyon",
+    "contactTitle": "İletişim",
+    "guideContent": "GİRİŞ YAP\nKullanıcı kodunuz ve şifrenizle giriş yapın.\n\nKAYIT OL\nAd, soyad, e-posta ve bir kullanıcı kodu ile kayıt talebinde bulunun. Talebiniz yönetici onayına gönderilir — onaylanana kadar giriş yapamazsınız.\n\nONAY BEKLENİYOR\nKayıt sonrası uygulama, hesabınızın onaylanıp onaylanmadığını otomatik olarak kontrol eder.",
+    "aboutContent": "Anatolia B.I.S., Bold Askeri Teknoloji ve Savunma Sanayi A.Ş. tarafından yetkilendirilmiş kurumlar için geliştirilen bir biyometrik aday eşleştirme ve kimlik doğrulama platformudur. Sistem, otomatik kimlik kararı değil, insan onaylı aday değerlendirmesi esasına dayanır.\n\nProje kodu: BIS 200120401018",
+    "missionContent": "MİSYON\nYetkilendirilmiş kurumlara güvenilir, denetlenebilir ve gizlilik odaklı bir biyometrik doğrulama altyapısı sunmak.\n\nVİZYON\nKararı algoritmaya değil insana bırakan ve her işlemi kayıt altına alan doğrulama sistemleri için kurumsal standart olmak.",
+    "contactContent": "Kuruluş: Bold Askeri Teknoloji ve Savunma Sanayi A.Ş.\nE-posta: info@boldkimya.com.tr\nTelefon: +90 532 217 07 76\n\n© 2026 Tüm hakları saklıdır."
   }
 }

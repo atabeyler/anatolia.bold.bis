@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { LanguageSwitcher } from './components/LanguageSwitcher';
+import { MenuOverlay } from './components/MenuOverlay';
+import { SettingsOverlay } from './components/SettingsOverlay';
 import { useAuth } from './features/auth/AuthContext';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
@@ -8,6 +10,8 @@ import { LoginPage } from './pages/LoginPage';
 function App() {
   const { t } = useTranslation();
   const { user, status, logout } = useAuth();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div className="app-shell">
@@ -25,7 +29,14 @@ function App() {
               </button>
             </div>
           )}
-          <LanguageSwitcher />
+          <div className="app-header__nav">
+            <button type="button" className="app-header__nav-button" onClick={() => setSettingsOpen(true)}>
+              ⚙ {t('settings.openLabel')}
+            </button>
+            <button type="button" className="app-header__nav-button" onClick={() => setMenuOpen(true)}>
+              ☰ {t('menu.openLabel')}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -34,6 +45,9 @@ function App() {
       <footer className="app-footer">
         <p>{t('footer.legal')}</p>
       </footer>
+
+      {settingsOpen && <SettingsOverlay onClose={() => setSettingsOpen(false)} />}
+      {menuOpen && <MenuOverlay onClose={() => setMenuOpen(false)} />}
     </div>
   );
 }

@@ -12,6 +12,15 @@ import tr from './locales/tr/translation.json';
 export const SUPPORTED_LANGUAGES = ['en', 'tr', 'de', 'fr', 'ar', 'ru'] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
+export const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
+  en: 'English',
+  tr: 'Türkçe',
+  de: 'Deutsch',
+  fr: 'Français',
+  ar: 'العربية',
+  ru: 'Русский',
+};
+
 const RTL_LANGUAGES: ReadonlySet<SupportedLanguage> = new Set(['ar']);
 
 export function textDirectionFor(language: string): 'rtl' | 'ltr' {
