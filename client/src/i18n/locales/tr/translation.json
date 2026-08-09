@@ -168,10 +168,12 @@
     "status": {
       "pending": "Beklemede",
       "confirmed": "Kimlik Onaylandı",
-      "rejected": "Reddedildi"
+      "rejected": "Reddedildi",
+      "inconclusive": "Sonuçsuz"
     },
     "confirmIdentity": "Kimliği onayla",
     "rejectCandidate": "Reddet",
+    "markInconclusive": "Sonuçsuz olarak işaretle",
     "reviewedBy": "İnceleyen: {{name}}",
     "pastSearches": "Geçmiş aramalar",
     "loading": "Aramalar yükleniyor…",

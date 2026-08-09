@@ -168,10 +168,12 @@
     "status": {
       "pending": "En attente",
       "confirmed": "Identité confirmée",
-      "rejected": "Rejeté"
+      "rejected": "Rejeté",
+      "inconclusive": "Non concluant"
     },
     "confirmIdentity": "Confirmer l'identité",
     "rejectCandidate": "Rejeter",
+    "markInconclusive": "Marquer comme non concluant",
     "reviewedBy": "Examiné par {{name}}",
     "pastSearches": "Recherches précédentes",
     "loading": "Chargement des recherches…",

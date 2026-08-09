@@ -14,8 +14,8 @@ use crate::auth::{
 };
 use crate::db::{
     count_active_system_admins, create_user, delete_user, list_users as load_users,
-    load_user_by_id, revoke_all_sessions_for_user, update_user_flags, update_user_profile,
-    AppState,
+    load_user_by_id, revoke_all_sessions_for_user, soft_delete_user, update_user_flags,
+    update_user_profile, AppState,
 };
 use crate::email::escape_html;
 use crate::error::{request_id, ApiError};
@@ -457,8 +457,11 @@ pub async fn delete_user_route(
                 .into_response();
         }
     }
-    match delete_user(&state.backend, &id).await {
+    match soft_delete_user(&state.backend, &id).await {
         Ok(true) => {
+            // A deleted account must stop working immediately, not just
+            // for future logins — same reasoning as ban_user.
+            let _ = revoke_all_sessions_for_user(&state.backend, &id).await;
             AuditRecorder::new(action::USER_DELETED, audit_result::SUCCESS, rid)
                 .actor_opt(actor_claims(&state, &headers).as_ref())
                 .headers(&headers)

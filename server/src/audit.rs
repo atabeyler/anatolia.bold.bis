@@ -51,6 +51,7 @@ pub mod action {
     pub const SEARCH_FAILED: &str = "SEARCH_FAILED";
     pub const CANDIDATE_CONFIRMED: &str = "CANDIDATE_CONFIRMED";
     pub const CANDIDATE_REJECTED: &str = "CANDIDATE_REJECTED";
+    pub const CANDIDATE_MARKED_INCONCLUSIVE: &str = "CANDIDATE_MARKED_INCONCLUSIVE";
 
     // Admin bootstrap
     pub const ADMIN_SEED_USED: &str = "ADMIN_SEED_USED";

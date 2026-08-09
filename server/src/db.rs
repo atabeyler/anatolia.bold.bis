@@ -239,6 +239,16 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             sqlx::query("ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_tracking_expires_at TIMESTAMPTZ")
                 .execute(pool)
                 .await?;
+            // Soft delete: an admin removing an established account (as
+            // opposed to rejecting a never-approved registration, which is
+            // still a hard delete — see admin::reject_user) sets this
+            // instead of physically removing the row, so the account's
+            // search/audit/review history keeps a resolvable actor rather
+            // than an orphaned foreign key. Every read that should treat a
+            // deleted account as gone filters on `deleted_at IS NULL`.
+            sqlx::query("ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ")
+                .execute(pool)
+                .await?;
 
             sqlx::query(
                 r#"
@@ -513,6 +523,9 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                 sqlx::query("ALTER TABLE users ADD COLUMN registration_tracking_expires_at TEXT")
                     .execute(pool)
                     .await;
+            let _ = sqlx::query("ALTER TABLE users ADD COLUMN deleted_at TEXT")
+                .execute(pool)
+                .await;
 
             sqlx::query(
                 r#"
@@ -874,7 +887,7 @@ pub async fn load_user_by_code(
     match backend {
         DbBackend::Postgres(pool) => {
             let row = sqlx::query_as::<_, PgUserRow>(&format!(
-                "SELECT {USER_COLUMNS} FROM users WHERE user_code = $1"
+                "SELECT {USER_COLUMNS} FROM users WHERE user_code = $1 AND deleted_at IS NULL"
             ))
             .bind(&code)
             .fetch_optional(pool)
@@ -883,7 +896,7 @@ pub async fn load_user_by_code(
         }
         DbBackend::Sqlite(pool) => {
             let row = sqlx::query_as::<_, SqliteUserRow>(&format!(
-                "SELECT {USER_COLUMNS} FROM users WHERE user_code = ?1"
+                "SELECT {USER_COLUMNS} FROM users WHERE user_code = ?1 AND deleted_at IS NULL"
             ))
             .bind(&code)
             .fetch_optional(pool)
@@ -893,6 +906,12 @@ pub async fn load_user_by_code(
     }
 }
 
+/// Excludes soft-deleted accounts (`deleted_at IS NOT NULL`) — used
+/// everywhere a deleted account must behave as if it no longer exists
+/// (login, session/token validation, admin listing/editing). The row
+/// itself is kept, not physically removed, so `search`/`audit_events`/
+/// `verification_events` rows that reference this user's id as an actor
+/// stay resolvable.
 pub async fn load_user_by_id(
     backend: &DbBackend,
     id: &str,
@@ -903,7 +922,7 @@ pub async fn load_user_by_id(
                 return Ok(None);
             };
             let row = sqlx::query_as::<_, PgUserRow>(&format!(
-                "SELECT {USER_COLUMNS} FROM users WHERE id = $1"
+                "SELECT {USER_COLUMNS} FROM users WHERE id = $1 AND deleted_at IS NULL"
             ))
             .bind(uuid)
             .fetch_optional(pool)
@@ -912,7 +931,7 @@ pub async fn load_user_by_id(
         }
         DbBackend::Sqlite(pool) => {
             let row = sqlx::query_as::<_, SqliteUserRow>(&format!(
-                "SELECT {USER_COLUMNS} FROM users WHERE id = ?1"
+                "SELECT {USER_COLUMNS} FROM users WHERE id = ?1 AND deleted_at IS NULL"
             ))
             .bind(id)
             .fetch_optional(pool)
@@ -928,19 +947,21 @@ pub async fn load_user_by_id(
 pub async fn count_active_system_admins(backend: &DbBackend) -> Result<i64, sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
-            let (count,): (i64,) =
-                sqlx::query_as("SELECT COUNT(*) FROM users WHERE role = $1 AND is_banned = false")
-                    .bind(crate::roles::SYSTEM_ADMIN)
-                    .fetch_one(pool)
-                    .await?;
+            let (count,): (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM users WHERE role = $1 AND is_banned = false AND deleted_at IS NULL",
+            )
+            .bind(crate::roles::SYSTEM_ADMIN)
+            .fetch_one(pool)
+            .await?;
             Ok(count)
         }
         DbBackend::Sqlite(pool) => {
-            let (count,): (i64,) =
-                sqlx::query_as("SELECT COUNT(*) FROM users WHERE role = ?1 AND is_banned = 0")
-                    .bind(crate::roles::SYSTEM_ADMIN)
-                    .fetch_one(pool)
-                    .await?;
+            let (count,): (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM users WHERE role = ?1 AND is_banned = 0 AND deleted_at IS NULL",
+            )
+            .bind(crate::roles::SYSTEM_ADMIN)
+            .fetch_one(pool)
+            .await?;
             Ok(count)
         }
     }
@@ -950,7 +971,7 @@ pub async fn list_users(backend: &DbBackend) -> Result<Vec<UserRow>, sqlx::Error
     match backend {
         DbBackend::Postgres(pool) => {
             let rows = sqlx::query_as::<_, PgUserRow>(&format!(
-                "SELECT {USER_COLUMNS} FROM users ORDER BY created_at DESC"
+                "SELECT {USER_COLUMNS} FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC"
             ))
             .fetch_all(pool)
             .await?;
@@ -958,7 +979,7 @@ pub async fn list_users(backend: &DbBackend) -> Result<Vec<UserRow>, sqlx::Error
         }
         DbBackend::Sqlite(pool) => {
             let rows = sqlx::query_as::<_, SqliteUserRow>(&format!(
-                "SELECT {USER_COLUMNS} FROM users ORDER BY created_at DESC"
+                "SELECT {USER_COLUMNS} FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC"
             ))
             .fetch_all(pool)
             .await?;
@@ -1250,7 +1271,7 @@ pub async fn load_user_by_email(
     match backend {
         DbBackend::Postgres(pool) => {
             let row = sqlx::query_as::<_, PgUserRow>(&format!(
-                "SELECT {USER_COLUMNS} FROM users WHERE email = $1"
+                "SELECT {USER_COLUMNS} FROM users WHERE email = $1 AND deleted_at IS NULL"
             ))
             .bind(&email)
             .fetch_optional(pool)
@@ -1259,7 +1280,7 @@ pub async fn load_user_by_email(
         }
         DbBackend::Sqlite(pool) => {
             let row = sqlx::query_as::<_, SqliteUserRow>(&format!(
-                "SELECT {USER_COLUMNS} FROM users WHERE email = ?1"
+                "SELECT {USER_COLUMNS} FROM users WHERE email = ?1 AND deleted_at IS NULL"
             ))
             .bind(&email)
             .fetch_optional(pool)
@@ -1269,6 +1290,11 @@ pub async fn load_user_by_email(
     }
 }
 
+/// Hard delete — physically removes the row. Only appropriate for a
+/// pending registration that was never approved (`admin::reject_user`,
+/// `admin::quick_reject`): nothing else in the database can reference that
+/// user's id yet, so there is no history to orphan. An admin removing an
+/// established account uses `soft_delete_user` instead.
 pub async fn delete_user(backend: &DbBackend, id: &str) -> Result<bool, sqlx::Error> {
     let affected = match backend {
         DbBackend::Postgres(pool) => {
@@ -1288,6 +1314,77 @@ pub async fn delete_user(backend: &DbBackend, id: &str) -> Result<bool, sqlx::Er
             .rows_affected(),
     };
     Ok(affected > 0)
+}
+
+/// Marks an established account as deleted without removing the row —
+/// `searches.requested_by`, `verification_events.reviewer_user_id`, and
+/// `audit_events.actor_user_id` can all reference this user's id, and a
+/// hard delete would leave those pointing at nothing. Every read that
+/// should treat the account as gone (login, session/token validation,
+/// admin listing) filters on `deleted_at IS NULL`, so a soft-deleted user
+/// behaves as fully removed from every angle that matters, while its past
+/// actions remain attributable. Idempotent: deleting an already-deleted
+/// user is a no-op that still reports success, matching `delete_user`'s
+/// idempotent-looking shape (`Ok(false)` only for a truly nonexistent id).
+pub async fn soft_delete_user(backend: &DbBackend, id: &str) -> Result<bool, sqlx::Error> {
+    let affected = match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(uuid) = Uuid::parse_str(id) else {
+                return Ok(false);
+            };
+            sqlx::query("UPDATE users SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL")
+                .bind(uuid)
+                .execute(pool)
+                .await?
+                .rows_affected()
+        }
+        DbBackend::Sqlite(pool) => sqlx::query(
+            "UPDATE users SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+             WHERE id = ?1 AND deleted_at IS NULL",
+        )
+        .bind(id)
+        .execute(pool)
+        .await?
+        .rows_affected(),
+    };
+    if affected > 0 {
+        return Ok(true);
+    }
+    // Either the id doesn't exist at all, or it was already deleted —
+    // distinguish the two so the route can still return 404 for a
+    // genuinely unknown id.
+    Ok(load_user_by_id_including_deleted(backend, id)
+        .await?
+        .is_some())
+}
+
+async fn load_user_by_id_including_deleted(
+    backend: &DbBackend,
+    id: &str,
+) -> Result<Option<UserRow>, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(uuid) = Uuid::parse_str(id) else {
+                return Ok(None);
+            };
+            let row = sqlx::query_as::<_, PgUserRow>(&format!(
+                "SELECT {USER_COLUMNS} FROM users WHERE id = $1"
+            ))
+            .bind(uuid)
+            .fetch_optional(pool)
+            .await?;
+            Ok(row.map(UserRow::from))
+        }
+        DbBackend::Sqlite(pool) => {
+            let row = sqlx::query_as::<_, SqliteUserRow>(&format!(
+                "SELECT {USER_COLUMNS} FROM users WHERE id = ?1"
+            ))
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+            Ok(row.map(UserRow::from))
+        }
+    }
 }
 
 // ── Search workflow (Phase 3) ────────────────────────────────────────

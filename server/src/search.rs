@@ -446,10 +446,10 @@ async fn review(
     .await
     {
         Ok(Some(row)) => {
-            let event_action = if status == "confirmed" {
-                action::CANDIDATE_CONFIRMED
-            } else {
-                action::CANDIDATE_REJECTED
+            let event_action = match status {
+                "confirmed" => action::CANDIDATE_CONFIRMED,
+                "inconclusive" => action::CANDIDATE_MARKED_INCONCLUSIVE,
+                _ => action::CANDIDATE_REJECTED,
             };
             AuditRecorder::new(event_action, audit_result::SUCCESS, rid)
                 .actor(&claims)
@@ -481,4 +481,19 @@ pub async fn reject_candidate_route(
     Json(payload): Json<ReviewPayload>,
 ) -> Response {
     review(state, headers, id, payload, "rejected").await
+}
+
+/// Neither a positive nor a negative identification — the reviewer looked
+/// at the candidate and could not reach a confident decision either way
+/// (poor image quality, ambiguous similarity, insufficient context).
+/// Distinct from simply not reviewing yet (`pending`): this is itself a
+/// recorded decision, just one that leaves the candidate open rather than
+/// closing it out as confirmed or rejected.
+pub async fn mark_candidate_inconclusive_route(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    Json(payload): Json<ReviewPayload>,
+) -> Response {
+    review(state, headers, id, payload, "inconclusive").await
 }

@@ -168,10 +168,12 @@
     "status": {
       "pending": "قيد الانتظار",
       "confirmed": "هوية مؤكدة",
-      "rejected": "مرفوض"
+      "rejected": "مرفوض",
+      "inconclusive": "غير حاسم"
     },
     "confirmIdentity": "تأكيد الهوية",
     "rejectCandidate": "رفض",
+    "markInconclusive": "وضع علامة غير حاسم",
     "reviewedBy": "راجعه {{name}}",
     "pastSearches": "عمليات البحث السابقة",
     "loading": "جارٍ تحميل عمليات البحث…",

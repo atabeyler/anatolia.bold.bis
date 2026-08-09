@@ -60,6 +60,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/:candidate_id/reject",
             post(search::reject_candidate_route),
+        )
+        .route(
+            "/:candidate_id/inconclusive",
+            post(search::mark_candidate_inconclusive_route),
         );
 
     Router::new()

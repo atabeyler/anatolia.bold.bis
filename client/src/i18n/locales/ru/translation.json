@@ -168,10 +168,12 @@
     "status": {
       "pending": "Ожидает",
       "confirmed": "Личность подтверждена",
-      "rejected": "Отклонено"
+      "rejected": "Отклонено",
+      "inconclusive": "Неопределённо"
     },
     "confirmIdentity": "Подтвердить личность",
     "rejectCandidate": "Отклонить",
+    "markInconclusive": "Отметить как неопределённое",
     "reviewedBy": "Проверил(а): {{name}}",
     "pastSearches": "Предыдущие поиски",
     "loading": "Загрузка поисков…",

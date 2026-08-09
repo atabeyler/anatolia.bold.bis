@@ -90,9 +90,15 @@ Implemented controls:
 - **Transactional search + immutable review history**: a search and all
   of its candidate results are written in one database transaction — a
   failure rolls back rather than leaving a partial result set, and is
-  recorded as a `failed` search for traceability. Every confirm/reject
-  decision is appended to `verification_events` rather than overwriting
-  the previous one.
+  recorded as a `failed` search for traceability. Every confirm/reject/
+  inconclusive decision is appended to `verification_events` rather than
+  overwriting the previous one.
+- **Soft-deleted user accounts**: deleting a user marks `deleted_at`
+  and revokes all of their sessions instead of physically removing the
+  row, so past search/audit/review history stays attributable to a real
+  account rather than an orphaned id. A deleted account cannot log in and
+  no longer appears in the admin panel. See
+  `docs/SECURITY_ARCHITECTURE.md`.
 - **Real probe-image validation**: magic-byte sniff plus an actual decode
   (JPEG/PNG/WEBP only), a 10 MB size cap, dimension limits, and a
   decompression-bomb guard — replacing a bare non-empty-bytes check. See
