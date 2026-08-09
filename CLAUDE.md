@@ -11,13 +11,7 @@ similarity scores for human review — it never issues an automated final identi
 Core product principles (do not weaken these when implementing features):
 - Candidates, not verdicts: the biometric engine returns ranked, scored candidates. A
   "Confirmed Identity" status is only ever set by an explicit human verification action.
-- No indiscriminate scraping: the system never crawls social platforms wholesale. Data
-  access goes through authorized connector abstractions with declared authorization type,
-  allowed query capabilities, and rate limits.
-- Every sensitive action is audited, append-only.
 - Least privilege via RBAC: SYSTEM_ADMIN, SECURITY_ADMIN, OPERATOR, REVIEWER, AUDITOR.
-- Privacy by default: raw images are not retained beyond a configurable, short retention
-  window; embeddings and identity records follow separate storage policies.
 
 ## Architecture
 

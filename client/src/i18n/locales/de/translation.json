@@ -133,5 +133,32 @@
     "loadError": "Benutzer konnten nicht geladen werden.",
     "createSuccess": "Benutzer erstellt.",
     "createError": "Benutzer konnte nicht erstellt werden."
+  },
+  "search": {
+    "subtitle": "BIOMETRISCHE SUCHE",
+    "tabSearch": "SUCHE",
+    "newSearchHeading": "NEUE SUCHE",
+    "caseReference": "Fallreferenz",
+    "purpose": "Zweck der Suche",
+    "image": "Gesichtsbild",
+    "submit": "SUCHEN",
+    "searching": "Suche läuft…",
+    "resultsHint": "Kandidaten in Rangfolge zur menschlichen Prüfung — keiner gilt als bestätigte Identität, bis ein autorisierter Prüfer dies ausdrücklich bestätigt.",
+    "noCandidates": "Keine Kandidaten gefunden.",
+    "status": {
+      "pending": "Ausstehend",
+      "confirmed": "Identität bestätigt",
+      "rejected": "Abgelehnt"
+    },
+    "confirmIdentity": "Identität bestätigen",
+    "rejectCandidate": "Ablehnen",
+    "reviewedBy": "Geprüft von {{name}}",
+    "pastSearches": "Frühere Suchen",
+    "loading": "Suchen werden geladen…",
+    "loadError": "Suchen konnten nicht geladen werden.",
+    "empty": "Noch keine Suchen.",
+    "requestedBy": "Angefragt von {{name}}",
+    "createError": "Suche konnte nicht gestartet werden.",
+    "location": "Standort des Operators bei der Suche: {{lat}} · {{lon}}"
   }
 }

@@ -133,5 +133,32 @@
     "loadError": "Failed to load users.",
     "createSuccess": "User created.",
     "createError": "Failed to create user."
+  },
+  "search": {
+    "subtitle": "BIOMETRIC SEARCH",
+    "tabSearch": "SEARCH",
+    "newSearchHeading": "NEW SEARCH",
+    "caseReference": "Case reference",
+    "purpose": "Search purpose",
+    "image": "Face image",
+    "submit": "SEARCH",
+    "searching": "Searching…",
+    "resultsHint": "Ranked candidates for human review — none of these is a confirmed identity until an authorized reviewer explicitly confirms it.",
+    "noCandidates": "No candidates returned.",
+    "status": {
+      "pending": "Pending",
+      "confirmed": "Confirmed Identity",
+      "rejected": "Rejected"
+    },
+    "confirmIdentity": "Confirm identity",
+    "rejectCandidate": "Reject",
+    "reviewedBy": "Reviewed by {{name}}",
+    "pastSearches": "Past searches",
+    "loading": "Loading searches…",
+    "loadError": "Failed to load searches.",
+    "empty": "No searches yet.",
+    "requestedBy": "Requested by {{name}}",
+    "createError": "Failed to start search.",
+    "location": "Operator location at time of search: {{lat}} · {{lon}}"
   }
 }

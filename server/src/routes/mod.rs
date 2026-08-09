@@ -4,7 +4,7 @@ use axum::routing::{delete, get, post};
 use axum::Router;
 
 use crate::db::AppState;
-use crate::{admin, auth};
+use crate::{admin, auth, search};
 
 pub fn router(state: AppState) -> Router {
     let auth_routes = Router::new()
@@ -27,10 +27,23 @@ pub fn router(state: AppState) -> Router {
         .route("/quick-approve/:token", post(admin::quick_approve))
         .route("/quick-reject/:token", post(admin::quick_reject));
 
+    let search_routes = Router::new()
+        .route("/face", post(search::create_search_route))
+        .route("/", get(search::list_searches_route))
+        .route("/:search_id", get(search::get_search_route))
+        .route("/:search_id/candidates", get(search::get_search_candidates_route));
+
+    let candidate_routes = Router::new()
+        .route("/:candidate_id", get(search::get_candidate_route))
+        .route("/:candidate_id/verify", post(search::verify_candidate_route))
+        .route("/:candidate_id/reject", post(search::reject_candidate_route));
+
     Router::new()
         .route("/api/health", get(health::health))
         .route("/api/v1/users/me", get(auth::me))
         .nest("/api/v1/auth", auth_routes)
         .nest("/api/v1/admin", admin_routes)
+        .nest("/api/v1/search", search_routes)
+        .nest("/api/v1/candidates", candidate_routes)
         .with_state(state)
 }

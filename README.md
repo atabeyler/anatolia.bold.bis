@@ -42,8 +42,7 @@ docker compose up --build
 
 ## Purpose
 
-Anatolia B.I.S. is not a mass-surveillance scraper. It does not crawl social
-platforms and it does not make automated final identity decisions from a
+Anatolia B.I.S. does not make automated final identity decisions from a
 face alone. The intended workflow is:
 
 1. An authorized operator uploads or captures a face image, bound to a case
@@ -54,7 +53,6 @@ face alone. The intended workflow is:
 4. The system returns ranked candidate matches with similarity scores — not
    a final verdict.
 5. A human operator reviews candidates and records the verification outcome.
-6. Every sensitive action is written to an append-only audit log.
 
 ---
 
@@ -62,10 +60,10 @@ face alone. The intended workflow is:
 
 | Layer | Technology | Status |
 |---|---|---|
-| Backend | Rust, single Axum binary, SQLx (PostgreSQL in production, SQLite for local development) | Health endpoint + authentication (JWT, RBAC, admin approval) implemented |
-| Biometric provider | Abstracted interface; mock implementation first, server-side ONNX-based implementation later | Planned |
+| Backend | Rust, single Axum binary, SQLx (PostgreSQL in production, SQLite for local development) | Authentication, admin, and search workflow implemented |
+| Biometric provider | Abstracted interface; mock implementation first, server-side ONNX-based implementation later | Mock implemented |
 | Vector search / connectors | Abstracted providers — never hard-coupled to one vector database or one external data source | Planned |
-| Frontend | React, TypeScript, Vite, i18next | Shell implemented |
+| Frontend | React, TypeScript, Vite, i18next | Auth + search workflow implemented |
 | Desktop | Tauri, wrapping the same web client | Planned |
 | Android / iOS | Thin clients (capture/upload + result display); biometric inference and search always run server-side | Planned |
 | Deployment | Render, single native Rust web service (serves the built frontend itself — no separate static-site resource) | Documented (`docs/DEPLOYMENT.md`); provisioning in progress |
@@ -79,13 +77,8 @@ See `CLAUDE.md` for the full architecture rationale.
 - **Candidates, not verdicts** — the biometric engine returns ranked, scored
   candidates for human review. A "Confirmed Identity" status is only ever
   set by an explicit human verification action.
-- **No indiscriminate scraping** — data access goes through authorized
-  connector abstractions only.
-- **Every sensitive action is audited**, append-only.
 - **Least privilege** — role-based access control (SYSTEM_ADMIN,
   SECURITY_ADMIN, OPERATOR, REVIEWER, AUDITOR).
-- **Privacy by default** — raw images are not retained beyond a
-  configurable, short retention window.
 
 ---
 

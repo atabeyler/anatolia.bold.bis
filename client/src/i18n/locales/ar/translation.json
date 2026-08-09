@@ -133,5 +133,32 @@
     "loadError": "تعذّر تحميل المستخدمين.",
     "createSuccess": "تم إنشاء المستخدم.",
     "createError": "تعذّر إنشاء المستخدم."
+  },
+  "search": {
+    "subtitle": "بحث بيومتري",
+    "tabSearch": "بحث",
+    "newSearchHeading": "بحث جديد",
+    "caseReference": "مرجع الحالة",
+    "purpose": "الغرض من البحث",
+    "image": "صورة الوجه",
+    "submit": "بحث",
+    "searching": "جارٍ البحث…",
+    "resultsHint": "مرشحون مرتبون للمراجعة البشرية — لا يُعتبر أي منهم هوية مؤكدة إلى أن يوافق عليه مراجع مخوَّل صراحةً.",
+    "noCandidates": "لم يتم العثور على مرشحين.",
+    "status": {
+      "pending": "قيد الانتظار",
+      "confirmed": "هوية مؤكدة",
+      "rejected": "مرفوض"
+    },
+    "confirmIdentity": "تأكيد الهوية",
+    "rejectCandidate": "رفض",
+    "reviewedBy": "راجعه {{name}}",
+    "pastSearches": "عمليات البحث السابقة",
+    "loading": "جارٍ تحميل عمليات البحث…",
+    "loadError": "تعذّر تحميل عمليات البحث.",
+    "empty": "لا توجد عمليات بحث بعد.",
+    "requestedBy": "طلبه {{name}}",
+    "createError": "تعذّر بدء البحث.",
+    "location": "موقع المشغّل وقت البحث: {{lat}} · {{lon}}"
   }
 }

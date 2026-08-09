@@ -145,22 +145,68 @@ links require a `SYSTEM_ADMIN` or `SECURITY_ADMIN` bearer token.
 - `POST /api/v1/admin/quick-approve/{token}` / `POST /api/v1/admin/quick-reject/{token}` —
   the review page's own form targets.
 
+### Search workflow
+
+All routes below require `Authorization: Bearer <accessToken>`.
+
+#### `POST /api/v1/search/face`
+
+Multipart form: `caseReference`, `purpose`, `image` (file), plus optional
+`latitude`/`longitude` (the operator's captured geolocation, sent by the
+frontend from `useGeolocation`'s last known coordinate — see
+`docs/ROADMAP.md`'s "Operator geolocation"). Requires `OPERATOR`,
+`REVIEWER`, `SECURITY_ADMIN`, or `SYSTEM_ADMIN`. Runs the
+`BiometricProvider` (currently `MockBiometricProvider` — see CLAUDE.md)
+over every known candidate and stores the result. The probe image itself
+is never persisted; only its derived scores are.
+
+**`200 OK`**:
+```json
+{
+  "search": { "id": "...", "caseReference": "...", "purpose": "...", "requestedByName": "...", "status": "completed", "latitude": 41.0082, "longitude": 28.9784, "createdAt": "..." },
+  "candidates": [
+    { "id": "...", "candidateId": "...", "referenceCode": "CAND-0001", "fullName": "...", "score": 0.87, "status": "pending", "reviewedByName": null, "reviewedAt": null }
+  ]
+}
+```
+`candidates` is ranked highest score first, capped at 5. `score` is a
+similarity value in `[0, 1]` — never a match/no-match verdict; see
+"Candidates, not verdicts" in CLAUDE.md.
+
+#### `GET /api/v1/search`
+
+Lists every search (any authenticated, approved user).
+
+#### `GET /api/v1/search/{search_id}`
+
+Returns one search's metadata (same shape as the `search` object above).
+
+#### `GET /api/v1/search/{search_id}/candidates`
+
+Returns that search's ranked candidates (same shape as the `candidates`
+array above).
+
+#### `GET /api/v1/candidates/{candidate_id}`
+
+Returns `{ "id": "...", "referenceCode": "...", "fullName": "...", "notes": "..." }`.
+
+#### `POST /api/v1/candidates/{candidate_id}/verify`
+
+Body: `{ "searchId": "..." }`. Requires `REVIEWER`, `SECURITY_ADMIN`, or
+`SYSTEM_ADMIN`. The one explicit human verification action that sets a
+candidate's status to `confirmed` ("Confirmed Identity") for that search —
+never derived automatically from a score. Returns the updated candidate
+row.
+
+#### `POST /api/v1/candidates/{candidate_id}/reject`
+
+Same shape and role requirement as `verify`, sets status to `rejected`.
+
 ## Planned endpoints
 
 The following are designed but not implemented. Do not call them.
 
 ```
-POST /api/v1/search/face
-GET  /api/v1/search
-GET  /api/v1/search/{search_id}
-GET  /api/v1/search/{search_id}/candidates
-
-GET  /api/v1/candidates/{candidate_id}
-POST /api/v1/candidates/{candidate_id}/verify
-POST /api/v1/candidates/{candidate_id}/reject
-
-GET  /api/v1/audit
-
 GET  /api/v1/connectors
 POST /api/v1/connectors/{connector_id}/query
 ```

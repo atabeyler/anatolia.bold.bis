@@ -37,9 +37,9 @@ Implemented controls:
 
 ## Planned (see `docs/ROADMAP.md` and `docs/SECURITY_ARCHITECTURE.md`)
 
-MFA, enterprise SSO, upload validation, audit logging, and biometric data
-retention controls are designed but not yet implemented. Do not assume any
-of them are active until this document is updated to say otherwise.
+MFA, enterprise SSO, and upload validation are designed but not yet
+implemented. Do not assume any of them are active until this document is
+updated to say otherwise.
 
 ## Rules enforced in this repository
 

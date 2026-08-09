@@ -17,9 +17,10 @@ const TABS: Array<{ id: Tab; labelKey: string }> = [
 
 interface SettingsOverlayProps {
   onClose: () => void;
+  onBack?: () => void;
 }
 
-export function SettingsOverlay({ onClose }: SettingsOverlayProps) {
+export function SettingsOverlay({ onClose, onBack }: SettingsOverlayProps) {
   const { t, i18n } = useTranslation();
   const [tab, setTab] = useState<Tab>('language');
   const [soundEnabled, setSoundEnabledState] = useState(isSoundEnabled());
@@ -40,7 +41,7 @@ export function SettingsOverlay({ onClose }: SettingsOverlayProps) {
   }
 
   return (
-    <Overlay title={t('settings.title')} onClose={onClose}>
+    <Overlay title={t('settings.title')} onClose={onClose} onBack={onBack}>
       <div className="overlay-tabs">
         {TABS.map((item) => (
           <button

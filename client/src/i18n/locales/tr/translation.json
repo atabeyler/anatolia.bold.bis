@@ -133,5 +133,32 @@
     "loadError": "Kullanıcılar yüklenemedi.",
     "createSuccess": "Kullanıcı oluşturuldu.",
     "createError": "Kullanıcı oluşturulamadı."
+  },
+  "search": {
+    "subtitle": "BİYOMETRİK ARAMA",
+    "tabSearch": "ARAMA",
+    "newSearchHeading": "YENİ ARAMA",
+    "caseReference": "Vaka referansı",
+    "purpose": "Arama amacı",
+    "image": "Yüz görseli",
+    "submit": "ARA",
+    "searching": "Aranıyor…",
+    "resultsHint": "İnsan incelemesi için sıralanmış adaylar — yetkili bir inceleyici açıkça onaylamadıkça hiçbiri onaylanmış kimlik değildir.",
+    "noCandidates": "Aday bulunamadı.",
+    "status": {
+      "pending": "Beklemede",
+      "confirmed": "Kimlik Onaylandı",
+      "rejected": "Reddedildi"
+    },
+    "confirmIdentity": "Kimliği onayla",
+    "rejectCandidate": "Reddet",
+    "reviewedBy": "İnceleyen: {{name}}",
+    "pastSearches": "Geçmiş aramalar",
+    "loading": "Aramalar yükleniyor…",
+    "loadError": "Aramalar yüklenemedi.",
+    "empty": "Henüz arama yapılmadı.",
+    "requestedBy": "Talep eden: {{name}}",
+    "createError": "Arama başlatılamadı.",
+    "location": "Arama sırasında operatör konumu: {{lat}} · {{lon}}"
   }
 }

@@ -15,9 +15,11 @@ anatolia.bold.bis/
 │   │   │                 #   frontend static-file serving with SPA fallback
 │   │   ├── lib.rs        # Library surface (used by main.rs and tests)
 │   │   ├── config.rs     # Environment-driven configuration
-│   │   ├── db.rs         # DbBackend (Postgres/SQLite), AppState, users table
+│   │   ├── db.rs         # DbBackend (Postgres/SQLite), AppState, all tables
 │   │   ├── auth.rs       # JWT issuing/verification, register/login/refresh
 │   │   ├── admin.rs      # Admin-approval workflow, admin bootstrap
+│   │   ├── search.rs     # Search-workflow route handlers
+│   │   ├── biometric.rs  # BiometricProvider trait + mock implementation
 │   │   ├── email.rs      # Resend-backed registration notifications
 │   │   ├── roles.rs      # RBAC role identifiers
 │   │   ├── error.rs      # Shared ApiError type
@@ -45,11 +47,14 @@ anatolia.bold.bis/
   hashing, an admin-approval gate on new registrations, and RBAC
   (`SYSTEM_ADMIN`, `SECURITY_ADMIN`, `OPERATOR`, `REVIEWER`, `AUDITOR`).
   See `API.md` and `docs/SECURITY_ARCHITECTURE.md`.
-- **Provider abstractions** (planned, Phase 3+): `BiometricProvider` and
-  vector-search/connector traits keep the core application decoupled from
-  any specific model, vector database, or external data source. A mock
-  biometric provider is implemented first so the full workflow is
-  developable and testable without a real model.
+- **Provider abstractions**: `BiometricProvider` (`server/src/biometric.rs`)
+  keeps the core application decoupled from any specific model —
+  `MockBiometricProvider` is the only implementation today, ranking
+  candidates deterministically from the probe image's bytes, so the full
+  search workflow (`server/src/search.rs`) is developable and testable
+  without a real model. A production provider (ONNX Runtime via `ort`) and
+  vector-search/connector traits for authorized external data sources are
+  planned for later phases.
 - **Observability**: structured (JSON) logs, per-request IDs propagated
   via the `x-request-id` header, `GET /api/health` reporting the exact
   running commit SHA.
@@ -85,8 +90,6 @@ This means:
   temporary limitation:
   - The system only ever searches authorized, centrally governed data
     sources — those cannot meaningfully live on a phone.
-  - Every sensitive action must be audited centrally; on-device matching
-    would bypass that.
   - It avoids on-device ONNX Runtime cross-compilation for Android and the
     fact that iOS does not allow a persistent bundled server subprocess —
     neither constraint applies when the client is just an HTTPS API

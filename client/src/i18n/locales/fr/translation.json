@@ -133,5 +133,32 @@
     "loadError": "Échec du chargement des utilisateurs.",
     "createSuccess": "Utilisateur créé.",
     "createError": "Échec de la création de l'utilisateur."
+  },
+  "search": {
+    "subtitle": "RECHERCHE BIOMÉTRIQUE",
+    "tabSearch": "RECHERCHE",
+    "newSearchHeading": "NOUVELLE RECHERCHE",
+    "caseReference": "Référence du dossier",
+    "purpose": "Motif de la recherche",
+    "image": "Image du visage",
+    "submit": "RECHERCHER",
+    "searching": "Recherche en cours…",
+    "resultsHint": "Candidats classés pour examen humain — aucun n'est une identité confirmée tant qu'un examinateur autorisé ne l'a pas confirmé explicitement.",
+    "noCandidates": "Aucun candidat trouvé.",
+    "status": {
+      "pending": "En attente",
+      "confirmed": "Identité confirmée",
+      "rejected": "Rejeté"
+    },
+    "confirmIdentity": "Confirmer l'identité",
+    "rejectCandidate": "Rejeter",
+    "reviewedBy": "Examiné par {{name}}",
+    "pastSearches": "Recherches précédentes",
+    "loading": "Chargement des recherches…",
+    "loadError": "Échec du chargement des recherches.",
+    "empty": "Aucune recherche pour le moment.",
+    "requestedBy": "Demandé par {{name}}",
+    "createError": "Échec du démarrage de la recherche.",
+    "location": "Position de l'opérateur au moment de la recherche : {{lat}} · {{lon}}"
   }
 }

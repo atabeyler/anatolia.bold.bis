@@ -1,6 +1,6 @@
 # Roadmap
 
-Implemented incrementally. Nothing below Phase 2 is implemented yet.
+Implemented incrementally. Nothing below Phase 3 is implemented yet.
 
 ## Phase 1 — Repository foundation (this phase)
 
@@ -21,12 +21,11 @@ Implemented incrementally. Nothing below Phase 2 is implemented yet.
 
 ## Phase 3 — Search workflow
 
-- [ ] Mock biometric provider (`BiometricProvider` trait)
-- [ ] Search request creation (case reference + purpose required)
-- [ ] Candidate results (top-K), candidate detail view
-- [ ] Audit logging (append-only)
-- [ ] Attach the operator's captured location (see "Operator geolocation"
-      below) to case/candidate reports
+- [x] Mock biometric provider (`BiometricProvider` trait)
+- [x] Search request creation (case reference + purpose required)
+- [x] Candidate results (top-K), candidate detail view, human confirm/reject
+- [x] Attach the operator's captured location (see "Operator geolocation"
+      below) to searches
 
 ## Phase 4 — Production biometric provider
 
@@ -52,6 +51,6 @@ The sign-in screen requests the browser's real geolocation on load (no
 synthetic fallback coordinate on denial — an explicit "unavailable"
 message instead) and displays it alongside the running app version. The
 captured coordinate is exposed via `useGeolocation`'s
-`getLastKnownLocation()` for reuse once Phase 3's case/candidate reports
-exist, so an urgent person-check report can carry the operator's location
-alongside it. Not yet attached to anything, since no report exists yet.
+`getLastKnownLocation()`; `POST /api/v1/search/face` sends it along as
+optional `latitude`/`longitude` form fields, and the search-results view
+displays it when present.

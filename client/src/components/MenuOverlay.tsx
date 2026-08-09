@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Overlay } from './Overlay';
+import { SettingsOverlay } from './SettingsOverlay';
 
-type MenuPage = 'guide' | 'about' | 'mission' | 'contact' | null;
+type MenuPage = 'settings' | 'guide' | 'about' | 'mission' | 'contact' | null;
 
 const MENU_ITEMS: Array<{ id: NonNullable<MenuPage>; labelKey: string; titleKey: string; contentKey: string }> = [
   { id: 'guide', labelKey: 'menu.guide', titleKey: 'menu.guideTitle', contentKey: 'menu.guideContent' },
@@ -20,6 +21,10 @@ export function MenuOverlay({ onClose }: MenuOverlayProps) {
   const { t } = useTranslation();
   const [page, setPage] = useState<MenuPage>(null);
 
+  if (page === 'settings') {
+    return <SettingsOverlay onClose={onClose} onBack={() => setPage(null)} />;
+  }
+
   const activeItem = MENU_ITEMS.find((item) => item.id === page);
 
   return (
@@ -30,6 +35,12 @@ export function MenuOverlay({ onClose }: MenuOverlayProps) {
     >
       {!activeItem && (
         <ul className="overlay-list">
+          <li>
+            <button type="button" className="overlay-list__item overlay-list__item--nav" onClick={() => setPage('settings')}>
+              <span>{t('settings.openLabel')}</span>
+              <span aria-hidden="true">›</span>
+            </button>
+          </li>
           {MENU_ITEMS.map((item) => (
             <li key={item.id}>
               <button type="button" className="overlay-list__item overlay-list__item--nav" onClick={() => setPage(item.id)}>

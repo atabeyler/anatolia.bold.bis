@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod auth;
+pub mod biometric;
 pub mod config;
 pub mod db;
 pub mod email;
@@ -8,3 +9,4 @@ pub mod middleware;
 pub mod ratelimit;
 pub mod roles;
 pub mod routes;
+pub mod search;

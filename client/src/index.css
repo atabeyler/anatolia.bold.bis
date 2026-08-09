@@ -13,6 +13,12 @@
   --font-heading: 'Orbitron', sans-serif;
   --font-mono: 'Share Tech Mono', 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
 
+  /* HUD-style cut corners (top-right / bottom-left) — the sim project's
+     signature panel/button silhouette. Two sizes: -lg for panels, -sm for
+     buttons/cards where padding is tighter. */
+  --cut-lg: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  --cut-sm: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+
   color-scheme: dark;
 }
 
@@ -85,6 +91,7 @@ body::before {
   background: transparent;
   color: var(--color-text-muted);
   border: 1px solid var(--color-border);
+  clip-path: var(--cut-sm);
   padding: 0.4rem 0.75rem;
   font-family: var(--font-mono);
   font-size: 0.78rem;
@@ -101,6 +108,7 @@ body::before {
 .app-header__session {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
   font-size: 0.78rem;
   color: var(--color-text-muted);
@@ -111,6 +119,7 @@ body::before {
   background: transparent;
   color: var(--color-text);
   border: 1px solid var(--color-border);
+  clip-path: var(--cut-sm);
   padding: 0.3rem 0.6rem;
   font-family: var(--font-mono);
   font-size: 0.78rem;
@@ -121,6 +130,7 @@ body::before {
 .app-header__session button:hover {
   border-color: var(--color-accent);
   color: var(--color-accent-strong);
+  box-shadow: 0 0 10px rgba(79, 110, 247, 0.25);
 }
 
 .app-main {
@@ -152,7 +162,8 @@ body::before {
   max-height: 80vh;
   background: rgba(2, 4, 10, 0.98);
   border: 1px solid var(--color-panel-border);
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.8);
+  clip-path: var(--cut-lg);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(204, 68, 68, 0.18);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -297,6 +308,7 @@ body::before {
   background: transparent;
   color: var(--color-text-muted);
   border: 1px solid rgba(79, 110, 247, 0.3);
+  clip-path: var(--cut-sm);
   padding: 0.4rem 0.75rem;
   font-family: var(--font-mono);
   font-size: 0.8rem;
@@ -311,6 +323,7 @@ body::before {
 .overlay-secondary-button--active {
   color: var(--color-success);
   border-color: var(--color-success);
+  box-shadow: 0 0 10px rgba(0, 232, 135, 0.3);
 }
 
 /* ── Dashboard ─────────────────────────────────────────────────── */
@@ -344,6 +357,8 @@ body::before {
 .status-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
+  clip-path: var(--cut-lg);
+  box-shadow: 0 0 16px rgba(79, 110, 247, 0.12);
   padding: 1rem 1.25rem;
   max-width: 320px;
   font-family: var(--font-mono);
@@ -529,6 +544,8 @@ body::before {
   max-width: 420px;
   background: rgba(6, 9, 20, 0.9);
   border: 1px solid var(--color-panel-border);
+  clip-path: var(--cut-lg);
+  box-shadow: 0 0 22px rgba(204, 68, 68, 0.16), inset 0 0 32px rgba(204, 68, 68, 0.04);
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
@@ -549,6 +566,7 @@ body::before {
   background: transparent;
   color: var(--color-text-muted);
   border: 1px solid rgba(204, 68, 68, 0.35);
+  clip-path: var(--cut-sm);
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 0.82rem;
@@ -657,6 +675,8 @@ body::before {
   background: linear-gradient(135deg, rgba(79, 110, 247, 0.4), rgba(79, 110, 247, 0.2));
   color: #fff;
   border: 1px solid var(--color-accent-strong);
+  clip-path: var(--cut-sm);
+  box-shadow: 0 0 10px rgba(79, 110, 247, 0.25);
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 0.9rem;
@@ -666,7 +686,7 @@ body::before {
 }
 
 .auth-submit:hover:not(:disabled) {
-  box-shadow: 0 0 14px rgba(79, 110, 247, 0.45);
+  box-shadow: 0 0 18px rgba(79, 110, 247, 0.5);
 }
 
 .auth-submit:disabled {
@@ -697,6 +717,121 @@ body::before {
   color: var(--color-border);
 }
 
+/* ── HUD corner accents ───────────────────────────────────────────
+   The clip-path corner cut alone reads as too thin — sim's panels and
+   buttons emphasize the cut edge itself with a thicker highlight line.
+   Two sizes, matching --cut-lg/--cut-sm: a bar rotated 45° laid exactly
+   over each diagonal, at the top-right and bottom-left corners. */
+
+.auth-panel,
+.admin-panel,
+.overlay-panel,
+.status-card {
+  position: relative;
+  --accent-color: var(--color-accent-strong);
+}
+
+.auth-panel,
+.overlay-panel {
+  --accent-color: var(--color-panel-border);
+}
+
+.auth-panel::before,
+.auth-panel::after,
+.admin-panel::before,
+.admin-panel::after,
+.overlay-panel::before,
+.overlay-panel::after,
+.status-card::before,
+.status-card::after {
+  content: '';
+  position: absolute;
+  width: 22px;
+  height: 3px;
+  background: var(--accent-color);
+  box-shadow: 0 0 6px var(--accent-color);
+  pointer-events: none;
+}
+
+.auth-panel::before,
+.admin-panel::before,
+.overlay-panel::before,
+.status-card::before {
+  top: 5.5px;
+  right: -4px;
+  transform: rotate(45deg);
+}
+
+.auth-panel::after,
+.admin-panel::after,
+.overlay-panel::after,
+.status-card::after {
+  bottom: 5.5px;
+  left: -4px;
+  transform: rotate(45deg);
+}
+
+.auth-submit,
+.admin-submit,
+.admin-icon-button,
+.admin-user-card,
+.auth-mode-toggle button,
+.app-header__nav-button,
+.app-header__session button,
+.overlay-secondary-button {
+  position: relative;
+}
+
+.auth-submit::before,
+.auth-submit::after,
+.admin-submit::before,
+.admin-submit::after,
+.admin-icon-button::before,
+.admin-icon-button::after,
+.admin-user-card::before,
+.admin-user-card::after,
+.auth-mode-toggle button::before,
+.auth-mode-toggle button::after,
+.app-header__nav-button::before,
+.app-header__nav-button::after,
+.app-header__session button::before,
+.app-header__session button::after,
+.overlay-secondary-button::before,
+.overlay-secondary-button::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 2px;
+  background: currentColor;
+  pointer-events: none;
+}
+
+.auth-submit::before,
+.admin-submit::before,
+.admin-icon-button::before,
+.admin-user-card::before,
+.auth-mode-toggle button::before,
+.app-header__nav-button::before,
+.app-header__session button::before,
+.overlay-secondary-button::before {
+  top: 2.5px;
+  right: -2.5px;
+  transform: rotate(45deg);
+}
+
+.auth-submit::after,
+.admin-submit::after,
+.admin-icon-button::after,
+.admin-user-card::after,
+.auth-mode-toggle button::after,
+.app-header__nav-button::after,
+.app-header__session button::after,
+.overlay-secondary-button::after {
+  bottom: 2.5px;
+  left: -2.5px;
+  transform: rotate(45deg);
+}
+
 /* ── Admin management panel ───────────────────────────────────── */
 
 .admin-page {
@@ -710,6 +845,7 @@ body::before {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 1rem;
   border-bottom: 1px solid var(--color-panel-border);
   padding-bottom: 1rem;
@@ -757,6 +893,8 @@ body::before {
 .admin-panel {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
+  clip-path: var(--cut-lg);
+  box-shadow: 0 0 18px rgba(79, 110, 247, 0.1);
   padding: 1.25rem;
 }
 
@@ -817,10 +955,44 @@ body::before {
   opacity: 0.85;
 }
 
+.admin-field-file {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.admin-field-file input {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  padding: 0.5rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.search-score {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--color-success);
+  text-shadow: 0 0 8px rgba(0, 232, 135, 0.5);
+}
+
+.admin-user-card--clickable {
+  cursor: pointer;
+}
+
+.admin-user-card--clickable:hover {
+  border-color: var(--color-accent);
+}
+
 .admin-submit {
   padding: 0.75rem;
   background: rgba(79, 110, 247, 0.15);
   border: 1px solid var(--color-accent-strong);
+  clip-path: var(--cut-sm);
+  box-shadow: 0 0 10px rgba(79, 110, 247, 0.2);
   color: var(--color-accent-strong);
   font-family: var(--font-heading);
   letter-spacing: 0.08em;
@@ -829,6 +1001,7 @@ body::before {
 
 .admin-submit:hover:not(:disabled) {
   background: rgba(79, 110, 247, 0.28);
+  box-shadow: 0 0 18px rgba(79, 110, 247, 0.4);
 }
 
 .admin-submit:disabled {
@@ -845,7 +1018,13 @@ body::before {
 .admin-user-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
+  clip-path: var(--cut-sm);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
   padding: 0.85rem 1rem;
+}
+
+.admin-user-card:hover {
+  box-shadow: 0 0 12px rgba(79, 110, 247, 0.18);
 }
 
 .admin-user-card__row {
@@ -900,6 +1079,7 @@ body::before {
   font-size: 0.65rem;
   letter-spacing: 0.08em;
   border: 1px solid currentColor;
+  box-shadow: 0 0 6px currentColor;
 }
 
 .admin-badge--admin {
@@ -927,12 +1107,14 @@ body::before {
   letter-spacing: 0.05em;
   background: transparent;
   border: 1px solid var(--color-border);
+  clip-path: var(--cut-sm);
   color: var(--color-text-muted);
   cursor: pointer;
 }
 
 .admin-icon-button:hover:not(:disabled) {
   border-color: currentColor;
+  box-shadow: 0 0 10px currentColor;
 }
 
 .admin-icon-button:disabled {
