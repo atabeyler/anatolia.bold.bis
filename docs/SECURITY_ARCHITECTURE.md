@@ -126,6 +126,15 @@ reporting.
 - **Server-side pagination** on search history
   (`GET /api/v1/search?page=&pageSize=`, max page size 200), matching the
   pattern already used by `GET /api/v1/audit`.
+- **Production guard against a silent mock biometric provider**
+  (`Config::resolve_biometric_provider`, `server/src/config.rs`): only the
+  non-biometric `MockBiometricProvider` exists today (see "Not yet
+  implemented" below). `BIOMETRIC_PROVIDER` set to anything other than
+  `"mock"` is a hard startup failure in every environment. In production,
+  running the mock provider at all additionally requires an explicit
+  `ALLOW_MOCK_BIOMETRICS=true` — without it, the app refuses to start,
+  rather than silently serving deterministic-hash "matches" as if they
+  were real biometric comparisons.
 
 ## Not yet implemented
 

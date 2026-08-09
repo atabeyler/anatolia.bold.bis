@@ -30,6 +30,21 @@ services:
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
+      # Signs the registration approve/reject email links only — kept
+      # separate from the two secrets above so compromising one token type
+      # never compromises the others (see docs/SECURITY_ARCHITECTURE.md).
+      - key: APPROVAL_TOKEN_SECRET
+        generateValue: true
+      # BiometricProvider is mock-only until a real, server-side face
+      # provider ships (see docs/ROADMAP.md Phase 4). Production refuses to
+      # start with the mock provider unless this is explicitly set — set
+      # here, deliberately, as a conscious acknowledgment that this
+      # deployment does not yet perform real face comparison. Flip this
+      # entry to sync: false (unset) once a real provider is configured, so
+      # a future accidental redeploy without one fails loudly instead of
+      # silently serving mock "matches".
+      - key: ALLOW_MOCK_BIOMETRICS
+        value: "true"
       # Set in the Render dashboard (not this blueprint) once, then used to
       # seed the first SYSTEM_ADMIN via POST /api/v1/admin/seed-admin.
       - key: ADMIN_SEED_TOKEN

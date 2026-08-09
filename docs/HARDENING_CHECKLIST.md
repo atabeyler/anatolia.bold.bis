@@ -77,10 +77,16 @@ eşleşme bu dosyanın sonunda listelidir.
 
 ## P1 — Gerçek Biyometrik Motor
 
-19. [~] Mevcut `BiometricProvider` abstraction'ı korundu (zaten vardı).
-    `ALLOW_MOCK_BIOMETRICS=false` production guard'ı (mock'un production'da
-    sessizce kullanılmasını engelleme) **yapılmadı**.
+19. [x] Mevcut `BiometricProvider` abstraction'ı korundu (zaten vardı).
+    `BIOMETRIC_PROVIDER` config + `ALLOW_MOCK_BIOMETRICS` production guard'ı
+    eklendi: production'da mock provider'ın kullanılabilmesi için
+    `ALLOW_MOCK_BIOMETRICS=true` açıkça set edilmesi gerekiyor, aksi halde
+    startup fail ediyor; `mock` dışında bir `BIOMETRIC_PROVIDER` değeri her
+    ortamda hard failure (henüz başka bir implementasyon yok). (Milestone D,
+    kısmi)
 20. [ ] Production face provider (ONNX Runtime / `ort`) — **yapılmadı**.
+    Gerçek bir model kaynağı/lisansı gerektiriyor; repo sahibinin kararı
+    bekleniyor (hangi model, nereden temin edilecek).
 21. [ ] Embedding storage (`biometric_templates` tablosu, pgvector vb.) —
     **yapılmadı**.
 22. [ ] Enrollment pipeline (çoklu reference image, kalite kontrolü) —
