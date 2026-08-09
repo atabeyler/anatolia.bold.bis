@@ -134,8 +134,15 @@ eşleşme bu dosyanın sonunda listelidir.
 
 31. [ ] Data domain ayrımı (Identity/Biometric/Search/Audit domain'lerinin
     repository/service katmanlarında ayrılması) — **yapılmadı**.
-32. [ ] National ID hassasiyeti (encrypted/lookup-hash, maskeleme, response'a
-    gereksiz koymama) — **yapılmadı**, national_id hâlâ plaintext saklanıyor.
+32. [~] National ID hassasiyeti — `GET`/`PATCH /api/v1/admin/users`
+    yanıtlarında `nationalId` artık son iki hane dışında maskeleniyor
+    (`admin::mask_national_id`); admin panelindeki düzenleme formu da
+    dokunulmayan (maskeli) değeri sunucuya geri göndermeyecek şekilde
+    güncellendi (`nationalIdTouched` bayrağı). **Eksik kalan:** veritabanı
+    tarafında hâlâ plaintext saklanıyor — encrypted-at-rest/lookup-hash
+    (madde başlığındaki ikinci kısım) bir şifreleme anahtarı yönetimi ve
+    mevcut prod verisinin migrate edilme stratejisi kararı gerektiriyor,
+    bu oturumda başlanmadı.
 33. [x] Database index/constraint — `sessions`, `audit_events`,
     `verification_events` için indexler zaten vardı (Milestone A/B/C).
     Eklendi: `search_candidates (search_id, candidate_id)` üzerinde unique
@@ -213,8 +220,11 @@ eşleşme bu dosyanın sonunda listelidir.
 
 ## P2 — Frontend
 
-44. [ ] Global CSS'i parçala (`styles/tokens.css` vb.) — **yapılmadı**,
-    `index.css` hâlâ tek dosya.
+44. [x] Global CSS'i parçala — renk/font/type-scale/tracking token'ları
+    `client/src/styles/tokens.css`'e taşındı, `index.css` bunu en başta
+    `@import` ediyor. `index.css`'in geri kalanı (layout/component
+    kuralları) bilinçli olarak tek dosyada bırakıldı — bileşen bazlı tam
+    parçalama daha büyük, ayrı bir refactor.
 45. [~] Error/empty/loading state — Audit Logs ekranında eklendi. Diğer
     sayfalarda sistematik olarak gözden geçirilmedi.
 46. [ ] Accessibility denetimi (keyboard nav, focus trap, aria, contrast,
@@ -272,9 +282,13 @@ eşleşme bu dosyanın sonunda listelidir.
     audit generated, password reset single-use/expiry (madde 9), last-admin
     protection + seed-admin self-disable (madde 43) kapsandı. **Kapsanmayan:**
     organization scoping (madde 12, ayrı büyük mimari iş).
-63. [ ] Role matrix test (table-driven, her hassas endpoint × her rol) —
-    **yapılmadı** (rol kontrolleri endpoint bazlı ad-hoc test edildi, sistemik
-    matris testi yok).
+63. [x] Role matrix test — `server/tests/role_matrix.rs` eklendi:
+    `GET /api/v1/audit`, `GET /api/v1/admin/users`, `GET /api/v1/search`,
+    `POST /api/v1/search/face`, `POST /api/v1/candidates/{id}/verify`
+    uç noktaları, beş rolün (`SYSTEM_ADMIN`/`SECURITY_ADMIN`/`OPERATOR`/
+    `REVIEWER`/`AUDITOR`) her biriyle tek tek deneniyor ve sonuç
+    `permission.rs`'teki policy ile karşılaştırılıyor (izinli roller asla
+    `403` görmemeli, izinsiz roller her zaman `403` görmeli).
 64. [ ] Frontend test genişletme (dil değişimi, RTL, login/logout, session
     expiry, search validation, review/audit/admin permission, error state) —
     **yapılmadı**, mevcut 8 test korunuyor ama yeni özellikler için test
@@ -298,8 +312,13 @@ eşleşme bu dosyanın sonunda listelidir.
 69. [~] Migration — inline `ALTER TABLE IF NOT EXISTS` tabanlı migration var
     (yeni tablolar için de aynı desen kullanıldı). Ayrı bir rollback
     dokümanı **yok**.
-70. [ ] Backup dokümantasyonu (DB backup, biometric template backup,
-    encryption, restore procedure) — **yapılmadı**.
+70. [x] Backup dokümantasyonu — `docs/DEPLOYMENT.md`'ye "Backups" bölümü
+    eklendi: nelerin (tek bir Postgres şeması) yedeklenmesi gerektiği,
+    henüz var olmayan biometric template depolamasının şu an neden
+    kapsam dışı olduğu, şema bazlı `pg_dump`/`pg_restore` komutları,
+    restore sonrası doğrulama adımları. Sıklık/saklama süresi repo
+    sahibinin kararına bırakıldı — otomatik bir yedekleme job'ı bu
+    oturumda **eklenmedi**, sadece manuel prosedür belgelendi.
 
 ## P3 — Dokümantasyon
 

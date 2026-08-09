@@ -225,6 +225,15 @@ what these controls defend against.
   it downstream. Re-encoding drops that metadata unconditionally, since
   the `image` crate's encoders never write EXIF/XMP chunks back out; no
   separate metadata-scrubbing pass is needed.
+- **National ID response masking** (`admin::mask_national_id`): `GET`/
+  `PATCH /api/v1/admin/users` responses only ever return the last two
+  digits of a stored national ID (e.g. `"*********12"`); the full value
+  is used server-side (registration uniqueness check) but never sent to
+  a client. The admin panel's edit form tracks whether the field was
+  actually edited (`nationalIdTouched`) so re-submitting the masked
+  display value on an unrelated field change can never overwrite the
+  real stored value. Encryption of the stored value itself is not yet
+  implemented — see "Not yet implemented" below.
 - **Cross-tab sign-out sync** (`client/src/services/authBroadcast.ts`,
   used from `AuthContext`): logging out (or `logout-all`) posts a message
   on a same-origin `BroadcastChannel` so every other open tab clears its
@@ -240,4 +249,7 @@ planned (see `docs/ROADMAP.md`) but not present in the codebase yet. Do
 not assume any of them are active. The admin user list
 (`GET /api/v1/admin/users`) is intentionally not yet paginated — a small,
 bounded, manually-managed dataset, unlike search history or the audit
-trail.
+trail. National IDs are masked in every API response but are still stored
+in plaintext in the database; encryption-at-rest requires a key-management
+and existing-data migration decision the repository owner hasn't made yet
+(see item 32 in `docs/HARDENING_CHECKLIST.md`).

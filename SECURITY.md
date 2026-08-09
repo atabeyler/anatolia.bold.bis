@@ -146,6 +146,13 @@ Implemented controls:
   from its decoded pixel data before use, dropping EXIF/XMP metadata
   (GPS coordinates, device identifiers, capture timestamp) the original
   upload carried. See `docs/SECURITY_ARCHITECTURE.md`.
+- **National ID response masking**: admin API responses only ever return
+  the last two digits of a stored national ID; the full value is never
+  sent to a client. The stored value itself is not yet encrypted at rest
+  — see `docs/SECURITY_ARCHITECTURE.md`.
+- **Role matrix test coverage**: `server/tests/role_matrix.rs` exercises
+  every RBAC role against every sensitive endpoint's role gate, checked
+  against the policy in `server/src/permission.rs`.
 - **Cross-tab sign-out sync**: logging out in one browser tab notifies
   every other open tab of the same origin via `BroadcastChannel`, so a
   stale access token doesn't linger in another tab after logout. See

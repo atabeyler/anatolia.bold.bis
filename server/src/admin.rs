@@ -48,13 +48,27 @@ pub struct UpdateUserPayload {
     pub password: Option<String>,
 }
 
+/// Masks all but the last two digits of a national ID for display — the
+/// admin panel needs enough of the value to confirm it's the right
+/// person's record, not the full number. Full digits are still stored
+/// and used server-side (uniqueness check on registration); they are
+/// simply never sent back to a client. See `docs/SECURITY_ARCHITECTURE.md`.
+fn mask_national_id(value: &str) -> String {
+    let len = value.chars().count();
+    if len <= 2 {
+        return "*".repeat(len);
+    }
+    let visible: String = value.chars().skip(len - 2).collect();
+    format!("{}{}", "*".repeat(len - 2), visible)
+}
+
 fn user_json(user: &crate::db::UserRow) -> serde_json::Value {
     json!({
         "id": user.id,
         "userCode": user.user_code,
         "firstName": user.first_name,
         "lastName": user.last_name,
-        "nationalId": user.national_id,
+        "nationalId": user.national_id.as_deref().map(mask_national_id),
         "email": user.email,
         "role": user.role,
         "isApproved": user.is_approved,
@@ -753,5 +767,17 @@ mod tests {
     #[test]
     fn different_length_is_not_equal() {
         assert!(!constant_time_eq("short", "much-longer-value"));
+    }
+
+    #[test]
+    fn national_id_masking_keeps_only_the_last_two_digits() {
+        assert_eq!(mask_national_id("12345678912"), "*********12");
+    }
+
+    #[test]
+    fn national_id_masking_handles_short_values() {
+        assert_eq!(mask_national_id("1"), "*");
+        assert_eq!(mask_national_id(""), "");
+        assert_eq!(mask_national_id("12"), "**");
     }
 }
