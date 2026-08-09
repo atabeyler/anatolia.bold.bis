@@ -30,8 +30,15 @@ export interface UpdateUserPayload {
   password?: string;
 }
 
-export async function listUsers(): Promise<AdminUser[]> {
-  const { data } = await apiClient.get<AdminUser[]>('/v1/admin/users');
+export interface AdminUserPage {
+  items: AdminUser[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export async function listUsers(page = 1, pageSize = 50): Promise<AdminUserPage> {
+  const { data } = await apiClient.get<AdminUserPage>('/v1/admin/users', { params: { page, pageSize } });
   return data;
 }
 

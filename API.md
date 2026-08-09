@@ -4,6 +4,13 @@ Base path: `/api/v1`. `GET /api/health` is the one exception, kept
 unversioned since it must stay reachable before any API version
 negotiation.
 
+A machine-readable companion to this document lives at
+`docs/openapi.json` — a lightweight OpenAPI 3.0 spec listing every path
+and method below. It is not exhaustively typed (this file is still the
+source of truth for request/response shapes, rate limits, and error
+codes); its purpose is `server/tests/openapi_drift.rs`, which fails if a
+documented path stops corresponding to a real route.
+
 ## Error format
 
 All error responses share one shape:
@@ -181,10 +188,13 @@ links require a `SYSTEM_ADMIN` or `SECURITY_ADMIN` bearer token.
   explicitly set for a deliberate recovery (see `docs/ENVIRONMENT.md`).
   `/admin-seed.html` is a small static form (same origin, no separate CORS
   setup) that calls this endpoint from a browser instead of a terminal.
-- `GET /api/v1/admin/users` — list all users. `nationalId` in each returned
-  record is masked to its last two digits (e.g. `"*********12"`) — the full
-  value is never sent to a client. `PATCH` below only changes it when a new
-  value is explicitly submitted.
+- `GET /api/v1/admin/users` — server-side paginated user list. Query
+  parameters: `page` (1-indexed, default `1`), `pageSize` (default `50`,
+  clamped to a maximum of `200`). Response:
+  `{ "items": [ <user> ], "page": 1, "pageSize": 50, "total": 42 }`.
+  `nationalId` in each returned record is masked to its last two digits
+  (e.g. `"*********12"`) — the full value is never sent to a client.
+  `PATCH` below only changes it when a new value is explicitly submitted.
 - `POST /api/v1/admin/users` — admin creates a user directly (immediately
   approved, no self-registration/approval round trip). Body:
   `{ "userCode": "...", "password": "...", "firstName": "...", "lastName": "...", "nationalId": "...", "email": "...", "isAdmin": false }`.

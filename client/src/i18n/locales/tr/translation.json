@@ -152,7 +152,12 @@
     "empty": "Henüz kullanıcı yok.",
     "loadError": "Kullanıcılar yüklenemedi.",
     "createSuccess": "Kullanıcı oluşturuldu.",
-    "createError": "Kullanıcı oluşturulamadı."
+    "createError": "Kullanıcı oluşturulamadı.",
+    "pagination": {
+      "previous": "Önceki",
+      "next": "Sonraki",
+      "pageOf": "Sayfa {{page}} / {{totalPages}}"
+    }
   },
   "search": {
     "subtitle": "BİYOMETRİK ARAMA",
@@ -165,6 +170,8 @@
     "searching": "Aranıyor…",
     "resultsHint": "İnsan incelemesi için sıralanmış adaylar — yetkili bir inceleyici açıkça onaylamadıkça hiçbiri onaylanmış kimlik değildir.",
     "noCandidates": "Aday bulunamadı.",
+    "candidatesLoading": "Adaylar yükleniyor…",
+    "candidatesLoadError": "Bu aramanın adayları yüklenemedi.",
     "status": {
       "pending": "Beklemede",
       "confirmed": "Kimlik Onaylandı",

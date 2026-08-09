@@ -152,7 +152,12 @@
     "empty": "No users yet.",
     "loadError": "Failed to load users.",
     "createSuccess": "User created.",
-    "createError": "Failed to create user."
+    "createError": "Failed to create user.",
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "pageOf": "Page {{page}} of {{totalPages}}"
+    }
   },
   "search": {
     "subtitle": "BIOMETRIC SEARCH",
@@ -165,6 +170,8 @@
     "searching": "Searching…",
     "resultsHint": "Ranked candidates for human review — none of these is a confirmed identity until an authorized reviewer explicitly confirms it.",
     "noCandidates": "No candidates returned.",
+    "candidatesLoading": "Loading candidates…",
+    "candidatesLoadError": "Failed to load candidates for this search.",
     "status": {
       "pending": "Pending",
       "confirmed": "Confirmed Identity",

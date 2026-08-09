@@ -1,4 +1,4 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -13,7 +13,7 @@ use crate::auth::{
     Claims,
 };
 use crate::db::{
-    count_active_system_admins, create_user, delete_user, list_users as load_users,
+    count_active_system_admins, create_user, delete_user, list_users_page as load_users_page,
     load_user_by_id, revoke_all_sessions_for_user, soft_delete_user, update_user_flags,
     update_user_profile, AppState,
 };
@@ -25,6 +25,15 @@ use crate::roles;
 #[derive(Debug, Deserialize)]
 pub struct BanPayload {
     pub reason: Option<String>,
+}
+
+const DEFAULT_USER_PAGE_SIZE: i64 = 50;
+
+#[derive(Debug, Deserialize)]
+pub struct UserPageQuery {
+    pub page: Option<i64>,
+    #[serde(rename = "pageSize")]
+    pub page_size: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,15 +116,24 @@ fn actor_claims(state: &AppState, headers: &HeaderMap) -> Option<Claims> {
     auth_user_from_headers(headers, &state.secrets.jwt_secret)
 }
 
-pub async fn list_users(State(state): State<AppState>, headers: HeaderMap) -> Response {
+pub async fn list_users(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<UserPageQuery>,
+) -> Response {
     if let Some(denied) = require_admin(&state, &headers) {
         return denied;
     }
-    match load_users(&state.backend).await {
-        Ok(rows) => {
-            let payload: Vec<_> = rows.iter().map(user_json).collect();
-            Json(payload).into_response()
-        }
+    let page = query.page.unwrap_or(1).max(1);
+    let page_size = query.page_size.unwrap_or(DEFAULT_USER_PAGE_SIZE);
+    match load_users_page(&state.backend, page, page_size).await {
+        Ok((rows, total)) => Json(json!({
+            "items": rows.iter().map(user_json).collect::<Vec<_>>(),
+            "page": page,
+            "pageSize": page_size.clamp(1, 200),
+            "total": total,
+        }))
+        .into_response(),
         Err(_) => {
             ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response()
         }

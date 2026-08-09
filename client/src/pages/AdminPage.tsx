@@ -28,9 +28,13 @@ const EMPTY_EDIT_FORM: EditForm = {
   password: '',
 };
 
+const PAGE_SIZE = 50;
+
 export function AdminPage() {
   const { t } = useTranslation();
   const [users, setUsers] = useState<AdminUser[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loadError, setLoadError] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -49,17 +53,28 @@ export function AdminPage() {
   const [editMessage, setEditMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const loadUsers = () => {
+  const loadUsers = (targetPage = page) => {
     setLoadError(false);
     adminClient
-      .listUsers()
-      .then(setUsers)
+      .listUsers(targetPage, PAGE_SIZE)
+      .then((result) => {
+        setUsers(result.items);
+        setTotal(result.total);
+        setPage(result.page);
+      })
       .catch(() => setLoadError(true));
   };
 
   useEffect(() => {
-    loadUsers();
+    loadUsers(1);
+    // Only re-fetches the first page automatically on mount; `loadUsers`
+    // is called explicitly with the current page after any action
+    // (create/edit/ban/delete) so the list stays in sync without needing
+    // `page` as an effect dependency here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const runAction = async (id: string, action: () => Promise<void>) => {
     setBusyId(id);
@@ -370,6 +385,27 @@ export function AdminPage() {
             </article>
           );
         })}
+        {users !== null && users.length > 0 && (
+          <nav className="admin-pagination">
+            <button
+              type="button"
+              className="admin-icon-button"
+              disabled={page <= 1}
+              onClick={() => loadUsers(page - 1)}
+            >
+              {t('admin.pagination.previous')}
+            </button>
+            <span className="status-card__line">{t('admin.pagination.pageOf', { page, totalPages })}</span>
+            <button
+              type="button"
+              className="admin-icon-button"
+              disabled={page >= totalPages}
+              onClick={() => loadUsers(page + 1)}
+            >
+              {t('admin.pagination.next')}
+            </button>
+          </nav>
+        )}
       </section>
     </main>
   );

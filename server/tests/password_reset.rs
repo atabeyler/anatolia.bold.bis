@@ -86,7 +86,7 @@ async fn find_user_id(app: &axum::Router, admin_token: &str, user_code: &str) ->
         .await
         .unwrap();
     let users = body_json(response).await;
-    users
+    users["items"]
         .as_array()
         .unwrap()
         .iter()

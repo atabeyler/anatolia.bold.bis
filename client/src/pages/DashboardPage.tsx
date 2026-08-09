@@ -25,6 +25,8 @@ export function DashboardPage() {
 
   const [activeSearch, setActiveSearch] = useState<SearchSummary | null>(null);
   const [activeCandidates, setActiveCandidates] = useState<SearchCandidate[]>([]);
+  const [activeCandidatesLoading, setActiveCandidatesLoading] = useState(false);
+  const [activeCandidatesError, setActiveCandidatesError] = useState(false);
   const [reviewBusyId, setReviewBusyId] = useState<string | null>(null);
 
   const [pastSearches, setPastSearches] = useState<SearchSummary[] | null>(null);
@@ -44,7 +46,16 @@ export function DashboardPage() {
 
   const openSearch = async (search: SearchSummary) => {
     setActiveSearch(search);
-    setActiveCandidates(await searchClient.getSearchCandidates(search.id).catch(() => []));
+    setActiveCandidates([]);
+    setActiveCandidatesError(false);
+    setActiveCandidatesLoading(true);
+    try {
+      setActiveCandidates(await searchClient.getSearchCandidates(search.id));
+    } catch {
+      setActiveCandidatesError(true);
+    } finally {
+      setActiveCandidatesLoading(false);
+    }
   };
 
   const handleCreateSearch = async (event: FormEvent) => {
@@ -152,7 +163,13 @@ export function DashboardPage() {
             </p>
           )}
           <div className="admin-user-list">
-            {activeCandidates.length === 0 && <p className="status-card__line">{t('search.noCandidates')}</p>}
+            {activeCandidatesLoading && <p className="status-card__line">{t('search.candidatesLoading')}</p>}
+            {activeCandidatesError && (
+              <p className="status-card__line status-card__line--offline">{t('search.candidatesLoadError')}</p>
+            )}
+            {!activeCandidatesLoading && !activeCandidatesError && activeCandidates.length === 0 && (
+              <p className="status-card__line">{t('search.noCandidates')}</p>
+            )}
             {activeCandidates.map((candidate) => {
               const isBusy = reviewBusyId === candidate.candidateId;
               return (

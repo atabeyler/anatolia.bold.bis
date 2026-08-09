@@ -47,7 +47,7 @@ what these controls defend against.
   once at process startup and stores them in `AppState` — request
   handlers never re-read the environment per token operation. In
   production, a missing or sub-32-byte secret is a hard startup panic.
-- **Session table and refresh-token rotation** (`server/src/db.rs`
+- **Session table and refresh-token rotation** (`server/src/db/mod.rs`
   `sessions` table; `server/src/auth.rs` `login`/`refresh`/`logout`/
   `logout_all`): one row per token family, storing only a SHA-256 hash of
   the current refresh token (never the raw value). Every refresh rotates
@@ -241,15 +241,39 @@ what these controls defend against.
   instead of only discovering the session is gone on its next failed
   request. Degrades to no cross-tab sync (not a crash) on a runtime
   without `BroadcastChannel` support.
+- **Rate limiter provider abstraction** (`server/src/ratelimit.rs`):
+  `RateLimiterBackend` trait, with `InMemoryRateLimiter` as the only
+  implementation today (unchanged behavior — still a single in-memory
+  fixed-window map, still not distributed). `AppState.rate_limiter` is
+  typed as `Arc<dyn RateLimiterBackend>`, so a future Redis/DB-backed
+  limiter (needed once this runs as more than one process) is a drop-in
+  swap rather than a rewrite of every call site — the same pattern
+  already used for `BiometricProvider`.
+- **Expired session/token retention job** (`main.rs::spawn_retention_job`,
+  `db::purge_expired_auth_records`): deletes `sessions`/`approval_tokens`
+  rows past their `expires_at` on a fixed interval (default hourly, an
+  initial pass 30s after startup). Neither table is ever read once a row
+  is expired, so this is pure storage hygiene, not a behavior change —
+  see item 58 in `docs/HARDENING_CHECKLIST.md`.
+- **Paginated admin user list** (`GET /api/v1/admin/users`): now
+  server-side paginated the same way search history and the audit trail
+  already were, closing the one previously-deliberate exception noted
+  under "Not yet implemented" below.
 
 ## Not yet implemented
 
 MFA, organization/unit-scoped authorization, and enterprise SSO are
 planned (see `docs/ROADMAP.md`) but not present in the codebase yet. Do
-not assume any of them are active. The admin user list
-(`GET /api/v1/admin/users`) is intentionally not yet paginated — a small,
-bounded, manually-managed dataset, unlike search history or the audit
-trail. National IDs are masked in every API response but are still stored
-in plaintext in the database; encryption-at-rest requires a key-management
-and existing-data migration decision the repository owner hasn't made yet
-(see item 32 in `docs/HARDENING_CHECKLIST.md`).
+not assume any of them are active. National IDs are masked in every API
+response but are still stored in plaintext in the database;
+encryption-at-rest requires a key-management and existing-data migration
+decision the repository owner hasn't made yet (see item 32 in
+`docs/HARDENING_CHECKLIST.md`). There is also no endpoint to change an
+already-active account's role, so a role-downgrade session-revoke
+protection (item 11) has nothing to attach to yet — adding one is real
+feature work (who may assign which role to whom, self-role-change
+handling) rather than a hardening fix, and needs the same kind of design
+sign-off as the four-eyes review policy (item 37). Async search (202 +
+polling/SSE, item 57) is deliberately not implemented either: doing so
+changes `POST /api/v1/search/face`'s response contract, which needs the
+frontend and the polling/SSE choice decided together, not retrofitted.
