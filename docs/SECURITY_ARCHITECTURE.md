@@ -2,7 +2,9 @@
 
 This document describes security-relevant design decisions. See
 `SECURITY.md` for the current implementation status and vulnerability
-reporting.
+reporting, `docs/DATA_FLOW.md` for how data moves through the system end
+to end, and `docs/THREAT_MODEL.md` for an attacker-capability view of
+what these controls defend against.
 
 ## Design principles
 

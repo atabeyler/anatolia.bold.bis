@@ -295,8 +295,17 @@ eşleşme bu dosyanın sonunda listelidir.
 72. [x] Implemented/Mock/Planned ayrımı README/API.md/ROADMAP.md'de açık.
 73. [x] SECURITY.md / docs/SECURITY_ARCHITECTURE.md her milestone'da
     güncellendi.
-74. [ ] `docs/DATA_FLOW.md` — **yapılmadı**.
-75. [ ] `docs/THREAT_MODEL.md` — **yapılmadı**.
+74. [x] `docs/DATA_FLOW.md` — eklendi: registration/approval, login/session
+    lifecycle, password reset, biometric search, review/audit trail ve
+    hesap silme akışlarının uçtan uca izlenebilir dökümü, gerçek koda
+    referansla (uydurma mimari değil).
+75. [x] `docs/THREAT_MODEL.md` — eklendi: STRIDE tarzı bir geçiş
+    (spoofing/tampering/repudiation/information disclosure/denial of
+    service/elevation of privilege), her tehdit için mevcut mitigasyon ya
+    da açıkça "henüz ele alınmadı" notu, ve bilinçli olarak kapsam dışı
+    bırakılan maddelerin (organizasyon modeli, gerçek biyometrik motor,
+    MFA, national ID koruması, OSINT, DB-seviyesi audit tamper direnci)
+    referansı.
 
 ---
 
