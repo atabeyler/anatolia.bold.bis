@@ -3,14 +3,25 @@ use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use bcrypt::{hash, verify, DEFAULT_COST};
-use chrono::Utc;
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::time::Duration;
 
-use crate::db::{create_user, load_user_by_code, load_user_by_email, load_user_by_id, AppState, UserRow};
+use crate::db::{
+    create_session, create_user, find_session_by_family, load_registration_tracking_status,
+    load_user_by_code, load_user_by_email, load_user_by_id, revoke_all_sessions_for_user,
+    revoke_session, revoke_session_family, rotate_session, set_registration_tracking_token,
+    AppState, UserRow,
+};
 use crate::error::ApiError;
 use crate::roles;
+
+const ACCESS_TOKEN_TTL_SECS: i64 = 15 * 60;
+const REFRESH_TOKEN_TTL_DAYS: i64 = 30;
+const REGISTRATION_TRACKING_TOKEN_TTL_DAYS: i64 = 14;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
@@ -19,6 +30,14 @@ pub struct Claims {
     pub email: String,
     pub role: String,
     pub exp: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct RefreshClaims {
+    sub: String,
+    family: String,
+    jti: String,
+    exp: usize,
 }
 
 #[derive(Debug, Deserialize)]
@@ -67,17 +86,6 @@ pub fn public_user(user: &UserRow) -> PublicUser {
     }
 }
 
-// Falls back to a fixed local-development secret so `cargo test`/`cargo
-// run` work with zero setup. Production (Render) must set JWT_SECRET and
-// JWT_REFRESH_SECRET explicitly — see docs/ENVIRONMENT.md.
-fn access_secret() -> String {
-    std::env::var("JWT_SECRET").unwrap_or_else(|_| "anatolia-bis-local-access-secret".to_string())
-}
-
-fn refresh_secret() -> String {
-    std::env::var("JWT_REFRESH_SECRET").unwrap_or_else(|_| "anatolia-bis-local-refresh-secret".to_string())
-}
-
 pub fn validate_password(password: &str) -> Option<&'static str> {
     if password.len() < 8 {
         return Some("Password must be at least 8 characters.");
@@ -97,26 +105,53 @@ pub fn validate_password(password: &str) -> Option<&'static str> {
     None
 }
 
-fn sign_access(user: &UserRow) -> Result<String, jsonwebtoken::errors::Error> {
+fn sign_access(user: &UserRow, secret: &str) -> Result<String, jsonwebtoken::errors::Error> {
     let claims = Claims {
         id: user.id.clone(),
         user_code: user.user_code.clone(),
         email: user.email.clone().unwrap_or_default(),
         role: user.role.clone(),
-        exp: (Utc::now().timestamp() + 15 * 60) as usize,
+        exp: (Utc::now().timestamp() + ACCESS_TOKEN_TTL_SECS) as usize,
     };
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(access_secret().as_bytes()))
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
 }
 
-fn sign_refresh(user_id: &str) -> Result<String, jsonwebtoken::errors::Error> {
-    let claims = Claims {
-        id: user_id.to_string(),
-        user_code: String::new(),
-        email: String::new(),
-        role: String::new(),
-        exp: (Utc::now().timestamp() + 30 * 24 * 60 * 60) as usize,
+/// Random hex string of `bytes` bytes of entropy — used for both the
+/// refresh JWT's `jti` (so two refresh tokens signed in the same instant
+/// still hash differently) and the registration tracking token.
+fn random_hex(bytes: usize) -> String {
+    let mut buf = vec![0u8; bytes];
+    rand::thread_rng().fill_bytes(&mut buf);
+    hex::encode(buf)
+}
+
+fn sha256_hex(value: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(value.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+fn sign_refresh(
+    user_id: &str,
+    family: &str,
+    secret: &str,
+    expires_at: DateTime<Utc>,
+) -> Result<String, jsonwebtoken::errors::Error> {
+    let claims = RefreshClaims {
+        sub: user_id.to_string(),
+        family: family.to_string(),
+        jti: random_hex(16),
+        exp: expires_at.timestamp() as usize,
     };
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(refresh_secret().as_bytes()))
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
 }
 
 /// True only when the request's `Origin` genuinely names a different host
@@ -133,7 +168,7 @@ fn is_cross_origin_request(headers: &HeaderMap) -> bool {
 }
 
 fn is_production() -> bool {
-    std::env::var("NODE_ENV").map(|v| v == "production").unwrap_or(false) || std::env::var("RENDER").is_ok()
+    crate::config::is_production()
 }
 
 fn cookie_value(token: &str, headers: &HeaderMap) -> String {
@@ -148,32 +183,63 @@ fn cookie_value(token: &str, headers: &HeaderMap) -> String {
         "refresh_token={}; Path=/; HttpOnly; SameSite={}; Max-Age={};{}",
         token,
         same_site,
-        30 * 24 * 60 * 60,
+        REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60,
         if is_production() { " Secure;" } else { "" },
     )
 }
 
 fn extract_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
     let raw = headers.get(header::COOKIE)?.to_str().ok()?;
-    raw.split(';')
-        .map(|part| part.trim())
-        .find_map(|part| part.strip_prefix(&format!("{name}=")).map(|v| v.to_string()))
+    raw.split(';').map(|part| part.trim()).find_map(|part| {
+        part.strip_prefix(&format!("{name}="))
+            .map(|v| v.to_string())
+    })
 }
 
-pub fn decode_access_token(token: &str) -> Option<Claims> {
+/// Only trusts `X-Forwarded-For` when this deployment is known to sit
+/// behind a trusted reverse proxy (Render always fronts the app with one
+/// in production; `TRUST_PROXY=true` opts a local reverse-proxy setup in
+/// too). Otherwise the header is attacker-controlled and ignored — better
+/// no IP than a spoofed one silently driving rate limits or audit trails.
+fn trust_proxy() -> bool {
+    std::env::var("TRUST_PROXY")
+        .map(|v| v == "true")
+        .unwrap_or_else(|_| is_production())
+}
+
+fn client_ip(headers: &HeaderMap) -> Option<String> {
+    if !trust_proxy() {
+        return None;
+    }
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn user_agent(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.chars().take(300).collect())
+}
+
+pub fn decode_access_token(token: &str, secret: &str) -> Option<Claims> {
     decode::<Claims>(
         token,
-        &DecodingKey::from_secret(access_secret().as_bytes()),
+        &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::new(Algorithm::HS256),
     )
     .ok()
     .map(|data| data.claims)
 }
 
-fn decode_refresh_token(token: &str) -> Option<Claims> {
-    decode::<Claims>(
+fn decode_refresh_token(token: &str, secret: &str) -> Option<RefreshClaims> {
+    decode::<RefreshClaims>(
         token,
-        &DecodingKey::from_secret(refresh_secret().as_bytes()),
+        &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::new(Algorithm::HS256),
     )
     .ok()
@@ -181,35 +247,107 @@ fn decode_refresh_token(token: &str) -> Option<Claims> {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ApprovalClaims {
-    pub user_id: String,
-    pub purpose: String,
-    pub exp: usize,
+struct ApprovalClaims {
+    user_id: String,
+    purpose: String,
+    jti: String,
+    exp: usize,
 }
+
+const APPROVAL_TOKEN_TTL_DAYS: i64 = 3;
+const APPROVAL_PURPOSE: &str = "registration_approval";
 
 /// Signs a link a pending registration can be approved/rejected through
 /// directly from the admin's email, without needing to be logged in —
 /// possession of this token (mailed only to `ADMIN_EMAIL`) is the
-/// authorization. Reuses the refresh-token secret rather than adding a new
-/// one; distinct from a login/refresh token by shape.
-pub fn sign_approval_token(user_id: &str) -> Result<String, jsonwebtoken::errors::Error> {
+/// authorization. Uses its own secret (`APPROVAL_TOKEN_SECRET`, distinct
+/// from both the access and refresh secrets) and is additionally recorded
+/// server-side in `approval_tokens` (as a hash, keyed by `jti`) so it can
+/// be marked consumed and rejected on reuse even though the JWT itself
+/// would still verify.
+pub async fn sign_approval_token(state: &AppState, user_id: &str) -> Result<String, ApiError> {
+    let expires_at = Utc::now() + ChronoDuration::days(APPROVAL_TOKEN_TTL_DAYS);
     let claims = ApprovalClaims {
         user_id: user_id.to_string(),
-        purpose: "registration_approval".to_string(),
-        exp: (Utc::now().timestamp() + 7 * 24 * 60 * 60) as usize,
+        purpose: APPROVAL_PURPOSE.to_string(),
+        jti: random_hex(16),
+        exp: expires_at.timestamp() as usize,
     };
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(refresh_secret().as_bytes()))
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(state.secrets.approval_token_secret.as_bytes()),
+    )
+    .map_err(|_| ApiError::new("INTERNAL_ERROR", "errors.internal", String::new()))?;
+    crate::db::create_approval_token(
+        &state.backend,
+        user_id,
+        &sha256_hex(&token),
+        APPROVAL_PURPOSE,
+        expires_at,
+    )
+    .await
+    .map_err(|_| ApiError::new("INTERNAL_ERROR", "errors.internal", String::new()))?;
+    Ok(token)
 }
 
-pub fn decode_approval_token(token: &str) -> Option<String> {
+/// Verifies an approval-link token cryptographically *and* against its
+/// single-use server-side record; on success, atomically marks it
+/// consumed with `result` (`"approved"`/`"rejected"`) so the same link can
+/// never apply twice. Returns the target user's id only when both checks
+/// pass.
+pub async fn consume_approval_token(state: &AppState, token: &str, result: &str) -> Option<String> {
     let claims = decode::<ApprovalClaims>(
         token,
-        &DecodingKey::from_secret(refresh_secret().as_bytes()),
+        &DecodingKey::from_secret(state.secrets.approval_token_secret.as_bytes()),
         &Validation::new(Algorithm::HS256),
     )
     .ok()?
     .claims;
-    if claims.purpose != "registration_approval" {
+    if claims.purpose != APPROVAL_PURPOSE {
+        return None;
+    }
+    let row = crate::db::find_approval_token_by_hash(&state.backend, &sha256_hex(token))
+        .await
+        .ok()??;
+    if row.user_id != claims.user_id {
+        return None;
+    }
+    let expires_at: DateTime<Utc> = row.expires_at.parse().ok()?;
+    if expires_at < Utc::now() || row.consumed_at.is_some() {
+        return None;
+    }
+    let consumed = crate::db::consume_approval_token(&state.backend, &row.id, result)
+        .await
+        .ok()?;
+    if !consumed {
+        return None;
+    }
+    Some(claims.user_id)
+}
+
+/// Read-only counterpart to `consume_approval_token`, for the GET review
+/// page that only displays the pending request — approving/rejecting
+/// happens through a separate POST that does consume the token.
+pub async fn peek_approval_token(state: &AppState, token: &str) -> Option<String> {
+    let claims = decode::<ApprovalClaims>(
+        token,
+        &DecodingKey::from_secret(state.secrets.approval_token_secret.as_bytes()),
+        &Validation::new(Algorithm::HS256),
+    )
+    .ok()?
+    .claims;
+    if claims.purpose != APPROVAL_PURPOSE {
+        return None;
+    }
+    let row = crate::db::find_approval_token_by_hash(&state.backend, &sha256_hex(token))
+        .await
+        .ok()??;
+    if row.user_id != claims.user_id || row.consumed_at.is_some() {
+        return None;
+    }
+    let expires_at: DateTime<Utc> = row.expires_at.parse().ok()?;
+    if expires_at < Utc::now() {
         return None;
     }
     Some(claims.user_id)
@@ -220,12 +358,12 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
     value.strip_prefix("Bearer ").map(|s| s.to_string())
 }
 
-pub fn auth_user_from_headers(headers: &HeaderMap) -> Option<Claims> {
-    decode_access_token(&bearer_token(headers)?)
+pub fn auth_user_from_headers(headers: &HeaderMap, secret: &str) -> Option<Claims> {
+    decode_access_token(&bearer_token(headers)?, secret)
 }
 
-pub fn require_role(headers: &HeaderMap, allowed: &[&str]) -> bool {
-    auth_user_from_headers(headers)
+pub fn require_role(state: &AppState, headers: &HeaderMap, allowed: &[&str]) -> bool {
+    auth_user_from_headers(headers, &state.secrets.jwt_secret)
         .map(|claims| allowed.contains(&claims.role.as_str()))
         .unwrap_or(false)
 }
@@ -243,7 +381,7 @@ fn unauthorized(headers: &HeaderMap) -> Response {
 }
 
 pub async fn me(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    let Some(claims) = auth_user_from_headers(&headers) else {
+    let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
         return unauthorized(&headers);
     };
     match load_user_by_id(&state.backend, &claims.id).await {
@@ -252,14 +390,21 @@ pub async fn me(State(state): State<AppState>, headers: HeaderMap) -> Response {
     }
 }
 
-pub async fn register(State(state): State<AppState>, headers: HeaderMap, Json(payload): Json<RegisterPayload>) -> Response {
+pub async fn register(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<RegisterPayload>,
+) -> Response {
     let rid = request_id(&headers);
 
     // Keyed globally (not per-key): an attacker controls every field in
     // this payload, so a per-key limit is trivially bypassed by varying
     // user_code/email each time. Every registration also fires an admin
     // notification email, so unthrottled spam floods the admin's inbox.
-    if !state.rate_limiter.check("register", 20, Duration::from_secs(15 * 60)) {
+    if !state
+        .rate_limiter
+        .check("register", 20, Duration::from_secs(15 * 60))
+    {
         return ApiError::new("RATE_LIMITED", "errors.rateLimited", rid).into_response();
     }
 
@@ -279,7 +424,11 @@ pub async fn register(State(state): State<AppState>, headers: HeaderMap, Json(pa
     }
 
     let code = payload.user_code.trim().to_uppercase();
-    if !(4..=20).contains(&code.len()) || !code.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()) {
+    if !(4..=20).contains(&code.len())
+        || !code
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+    {
         return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
     }
 
@@ -307,17 +456,39 @@ pub async fn register(State(state): State<AppState>, headers: HeaderMap, Json(pa
     .await
     {
         Ok(Some(user)) => {
-            if let Ok(token) = sign_approval_token(&user.id) {
-                crate::email::send_admin_registration_notification(crate::email::RegistrationInfo {
-                    first_name: &user.first_name,
-                    last_name: &user.last_name,
-                    email: user.email.as_deref().unwrap_or_default(),
-                    user_code: &user.user_code,
-                    approval_token: &token,
-                })
+            // Unguessable pointer the frontend polls with instead of the
+            // (guessable) user code — see registration_status.
+            let tracking_token = random_hex(32);
+            let tracking_expires_at =
+                Utc::now() + ChronoDuration::days(REGISTRATION_TRACKING_TOKEN_TTL_DAYS);
+            let _ = set_registration_tracking_token(
+                &state.backend,
+                &user.id,
+                &tracking_token,
+                tracking_expires_at,
+            )
+            .await;
+
+            if let Ok(token) = sign_approval_token(&state, &user.id).await {
+                crate::email::send_admin_registration_notification(
+                    crate::email::RegistrationInfo {
+                        first_name: &user.first_name,
+                        last_name: &user.last_name,
+                        email: user.email.as_deref().unwrap_or_default(),
+                        user_code: &user.user_code,
+                        approval_token: &token,
+                    },
+                )
                 .await;
             }
-            (StatusCode::CREATED, Json(serde_json::json!({ "messageKey": "auth.registrationPending" }))).into_response()
+            (
+                StatusCode::CREATED,
+                Json(serde_json::json!({
+                    "messageKey": "auth.registrationPending",
+                    "registrationTrackingToken": tracking_token,
+                })),
+            )
+                .into_response()
         }
         Ok(None) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
         Err(err) => {
@@ -330,20 +501,81 @@ pub async fn register(State(state): State<AppState>, headers: HeaderMap, Json(pa
     }
 }
 
-pub async fn login(State(state): State<AppState>, headers: HeaderMap, Json(payload): Json<LoginPayload>) -> Response {
+/// Issues an access token plus a brand-new session (family id, hashed
+/// refresh token stored server-side, raw refresh token only ever placed
+/// in the HttpOnly cookie).
+async fn issue_session(
+    state: &AppState,
+    user: &UserRow,
+    headers: &HeaderMap,
+) -> Result<(String, String), ApiError> {
+    let family = uuid::Uuid::new_v4().to_string();
+    let expires_at = Utc::now() + ChronoDuration::days(REFRESH_TOKEN_TTL_DAYS);
+    let refresh_token = sign_refresh(
+        &user.id,
+        &family,
+        &state.secrets.jwt_refresh_secret,
+        expires_at,
+    )
+    .map_err(|_| ApiError::new("INTERNAL_ERROR", "errors.internal", String::new()))?;
+    create_session(
+        &state.backend,
+        &user.id,
+        &sha256_hex(&refresh_token),
+        &family,
+        expires_at,
+        user_agent(headers).as_deref(),
+        client_ip(headers).as_deref(),
+        "login",
+    )
+    .await
+    .map_err(|_| ApiError::new("INTERNAL_ERROR", "errors.internal", String::new()))?;
+    let access_token = sign_access(user, &state.secrets.jwt_secret)
+        .map_err(|_| ApiError::new("INTERNAL_ERROR", "errors.internal", String::new()))?;
+    Ok((access_token, refresh_token))
+}
+
+pub async fn login(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<LoginPayload>,
+) -> Response {
     let rid = request_id(&headers);
 
-    // Keyed by user_code (not IP): the actual threat is brute-forcing a
-    // specific account's password, attemptable from any/rotating IP but
-    // not without the account's own code.
+    // Account-based (the specific account being brute-forced, attemptable
+    // from any/rotating IP), IP-based (one source hammering many accounts),
+    // and a tight burst window (blunts fast automated retries even before
+    // either slower window trips). IP-based/burst checks are skipped when
+    // the client IP cannot be trusted (see `trust_proxy`) rather than
+    // keying on a spoofable header.
     let rate_key = payload.user_code.trim().to_uppercase();
-    if !state.rate_limiter.check(&format!("login:{rate_key}"), 10, Duration::from_secs(15 * 60)) {
+    if !state.rate_limiter.check(
+        &format!("login-account:{rate_key}"),
+        10,
+        Duration::from_secs(15 * 60),
+    ) {
         return ApiError::new("RATE_LIMITED", "errors.rateLimited", rid).into_response();
+    }
+    if let Some(ip) = client_ip(&headers) {
+        if !state
+            .rate_limiter
+            .check(&format!("login-ip:{ip}"), 50, Duration::from_secs(15 * 60))
+        {
+            return ApiError::new("RATE_LIMITED", "errors.rateLimited", rid).into_response();
+        }
+        if !state
+            .rate_limiter
+            .check(&format!("login-burst:{ip}"), 10, Duration::from_secs(60))
+        {
+            return ApiError::new("RATE_LIMITED", "errors.rateLimited", rid).into_response();
+        }
     }
 
     let user = match load_user_by_code(&state.backend, &payload.user_code).await {
         Ok(Some(user)) => user,
-        Ok(None) => return ApiError::new("UNAUTHORIZED", "errors.invalidCredentials", rid).into_response(),
+        Ok(None) => {
+            return ApiError::new("UNAUTHORIZED", "errors.invalidCredentials", rid).into_response()
+        }
         Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     };
 
@@ -357,12 +589,8 @@ pub async fn login(State(state): State<AppState>, headers: HeaderMap, Json(paylo
         return ApiError::new("FORBIDDEN", "errors.accountNotApproved", rid).into_response();
     }
 
-    let access_token = match sign_access(&user) {
-        Ok(token) => token,
-        Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
-    };
-    let refresh_token = match sign_refresh(&user.id) {
-        Ok(token) => token,
+    let (access_token, refresh_token) = match issue_session(&state, &user, &headers).await {
+        Ok(pair) => pair,
         Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     };
 
@@ -382,30 +610,84 @@ pub async fn refresh(State(state): State<AppState>, headers: HeaderMap) -> Respo
     let Some(token) = extract_cookie(&headers, "refresh_token") else {
         return ApiError::new("UNAUTHORIZED", "errors.sessionExpired", rid).into_response();
     };
-    let Some(claims) = decode_refresh_token(&token) else {
+    let Some(claims) = decode_refresh_token(&token, &state.secrets.jwt_refresh_secret) else {
         return unauthorized(&headers);
     };
-    let user = match load_user_by_id(&state.backend, &claims.id).await {
+
+    let Ok(Some(session)) = find_session_by_family(&state.backend, &claims.family).await else {
+        return unauthorized(&headers);
+    };
+
+    // A previously-revoked family being presented again means either the
+    // user already logged out (harmless: still unauthorized) or a refresh
+    // token was stolen and both the thief and the legitimate holder are
+    // racing to use it (a genuine reuse signal) — treated identically here
+    // because a stolen-and-not-yet-noticed session is exactly the case
+    // this defends. Re-revoking an already-revoked family is a no-op.
+    let token_hash = sha256_hex(&token);
+    if session.revoked_at.is_some() || session.refresh_token_hash != token_hash {
+        let _ = revoke_session_family(&state.backend, &claims.family).await;
+        return unauthorized(&headers);
+    }
+
+    let Ok(expires_at) = session.expires_at.parse::<DateTime<Utc>>() else {
+        return unauthorized(&headers);
+    };
+    if expires_at < Utc::now() {
+        let _ = revoke_session(&state.backend, &session.id).await;
+        return unauthorized(&headers);
+    }
+
+    let user = match load_user_by_id(&state.backend, &claims.sub).await {
         Ok(Some(user)) => user,
         _ => return unauthorized(&headers),
     };
     if user.is_banned || !user.is_approved {
+        let _ = revoke_session(&state.backend, &session.id).await;
         return unauthorized(&headers);
     }
-    let access_token = match sign_access(&user) {
+
+    let new_expires_at = Utc::now() + ChronoDuration::days(REFRESH_TOKEN_TTL_DAYS);
+    let new_refresh_token = match sign_refresh(
+        &user.id,
+        &claims.family,
+        &state.secrets.jwt_refresh_secret,
+        new_expires_at,
+    ) {
         Ok(token) => token,
         Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     };
-    Json(serde_json::json!({
+    if rotate_session(
+        &state.backend,
+        &session.id,
+        &sha256_hex(&new_refresh_token),
+        new_expires_at,
+    )
+    .await
+    .is_err()
+    {
+        return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response();
+    }
+
+    let access_token = match sign_access(&user, &state.secrets.jwt_secret) {
+        Ok(token) => token,
+        Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    };
+
+    let mut response = Json(serde_json::json!({
         "accessToken": access_token,
         "user": public_user(&user),
     }))
-    .into_response()
+    .into_response();
+    if let Ok(value) = HeaderValue::from_str(&cookie_value(&new_refresh_token, &headers)) {
+        response.headers_mut().insert(header::SET_COOKIE, value);
+    }
+    response
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase", tag = "status")]
-enum PendingStatus {
+enum RegistrationStatus {
     #[serde(rename = "approved")]
     Approved,
     #[serde(rename = "pending")]
@@ -418,14 +700,32 @@ enum PendingStatus {
 
 /// Polled by the registration form so it can move a pending applicant
 /// straight to the login tab, pre-filled, the moment an admin approves
-/// them — without requiring a manual page refresh.
-pub async fn pending_status(State(state): State<AppState>, axum::extract::Path(user_code): axum::extract::Path<String>) -> Response {
-    let status = match load_user_by_code(&state.backend, &user_code).await {
-        Ok(Some(user)) if user.is_banned => PendingStatus::Banned,
-        Ok(Some(user)) if user.is_approved => PendingStatus::Approved,
-        Ok(Some(_)) => PendingStatus::Pending,
-        Ok(None) => PendingStatus::NotFound,
-        Err(_) => PendingStatus::NotFound,
+/// them — without requiring a manual page refresh. Looked up by the
+/// unguessable `registrationTrackingToken` issued at registration time
+/// (never by the user's own, guessable user code) so this endpoint cannot
+/// be used to enumerate arbitrary accounts' status.
+pub async fn registration_status(
+    State(state): State<AppState>,
+    axum::extract::Path(tracking_token): axum::extract::Path<String>,
+) -> Response {
+    let status = match load_registration_tracking_status(&state.backend, &tracking_token).await {
+        Ok(Some(row)) => {
+            let expired = row
+                .expires_at
+                .parse::<DateTime<Utc>>()
+                .map(|exp| exp < Utc::now())
+                .unwrap_or(true);
+            if expired {
+                RegistrationStatus::NotFound
+            } else if row.is_banned {
+                RegistrationStatus::Banned
+            } else if row.is_approved {
+                RegistrationStatus::Approved
+            } else {
+                RegistrationStatus::Pending
+            }
+        }
+        _ => RegistrationStatus::NotFound,
     };
     Json(status).into_response()
 }
@@ -437,38 +737,85 @@ pub async fn pending_status(State(state): State<AppState>, axum::extract::Path(u
 /// Always responds with the same success message whether or not a
 /// matching account was found, so this can't be used to enumerate
 /// registered user codes/emails.
-pub async fn forgot_password(State(state): State<AppState>, headers: HeaderMap, Json(payload): Json<ForgotPasswordPayload>) -> Response {
+pub async fn forgot_password(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<ForgotPasswordPayload>,
+) -> Response {
     let rid = request_id(&headers);
     let identifier = payload.identifier.trim();
     if identifier.is_empty() {
         return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
     }
-    if !state
-        .rate_limiter
-        .check(&format!("forgot-password:{}", identifier.to_lowercase()), 5, Duration::from_secs(15 * 60))
-    {
+    if !state.rate_limiter.check(
+        &format!("forgot-password:{}", identifier.to_lowercase()),
+        5,
+        Duration::from_secs(15 * 60),
+    ) {
         return ApiError::new("RATE_LIMITED", "errors.rateLimited", rid).into_response();
     }
 
     let user = if identifier.contains('@') {
-        load_user_by_email(&state.backend, identifier).await.ok().flatten()
+        load_user_by_email(&state.backend, identifier)
+            .await
+            .ok()
+            .flatten()
     } else {
-        load_user_by_code(&state.backend, identifier).await.ok().flatten()
+        load_user_by_code(&state.backend, identifier)
+            .await
+            .ok()
+            .flatten()
     };
 
     if let Some(user) = user {
-        crate::email::send_password_reset_request(&user.first_name, &user.last_name, &user.user_code, user.email.as_deref()).await;
+        crate::email::send_password_reset_request(
+            &user.first_name,
+            &user.last_name,
+            &user.user_code,
+            user.email.as_deref(),
+        )
+        .await;
     }
 
     Json(serde_json::json!({ "messageKey": "auth.forgotPasswordReceived" })).into_response()
 }
 
-pub async fn logout() -> Response {
+fn cleared_cookie() -> HeaderValue {
+    HeaderValue::from_static("refresh_token=; Path=/; HttpOnly; Max-Age=0; SameSite=Strict")
+}
+
+pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    // Best-effort: revoke the session this refresh token belongs to. Any
+    // failure to decode/find it still results in the cookie being cleared
+    // — logout must never appear to fail from the client's perspective.
+    if let Some(token) = extract_cookie(&headers, "refresh_token") {
+        if let Some(claims) = decode_refresh_token(&token, &state.secrets.jwt_refresh_secret) {
+            if let Ok(Some(session)) = find_session_by_family(&state.backend, &claims.family).await
+            {
+                let _ = revoke_session(&state.backend, &session.id).await;
+            }
+        }
+    }
     let mut response = Json(serde_json::json!({ "messageKey": "auth.loggedOut" })).into_response();
-    response.headers_mut().insert(
-        header::SET_COOKIE,
-        HeaderValue::from_static("refresh_token=; Path=/; HttpOnly; Max-Age=0; SameSite=Strict"),
-    );
+    response
+        .headers_mut()
+        .insert(header::SET_COOKIE, cleared_cookie());
+    response
+}
+
+/// Revokes every session belonging to the authenticated user — "log out
+/// everywhere". Requires a currently-valid access token; the refresh
+/// cookie on this device is cleared same as ordinary logout.
+pub async fn logout_all(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
+        return unauthorized(&headers);
+    };
+    let _ = revoke_all_sessions_for_user(&state.backend, &claims.id).await;
+    let mut response =
+        Json(serde_json::json!({ "messageKey": "auth.loggedOutAll" })).into_response();
+    response
+        .headers_mut()
+        .insert(header::SET_COOKIE, cleared_cookie());
     response
 }
 
@@ -492,13 +839,19 @@ mod tests {
 
     #[test]
     fn same_origin_web_visit_is_not_cross_origin() {
-        let h = headers(Some("https://anatolia-bis.onrender.com"), Some("anatolia-bis.onrender.com"));
+        let h = headers(
+            Some("https://anatolia-bis.onrender.com"),
+            Some("anatolia-bis.onrender.com"),
+        );
         assert!(!is_cross_origin_request(&h));
     }
 
     #[test]
     fn different_host_is_cross_origin() {
-        let h = headers(Some("http://127.0.0.1:1420"), Some("anatolia-bis.onrender.com"));
+        let h = headers(
+            Some("http://127.0.0.1:1420"),
+            Some("anatolia-bis.onrender.com"),
+        );
         assert!(is_cross_origin_request(&h));
     }
 
@@ -535,7 +888,10 @@ mod tests {
     fn prod_cross_origin_cookie_is_none() {
         let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_var("RENDER", "1");
-        let h = headers(Some("http://127.0.0.1:1420"), Some("anatolia-bis.onrender.com"));
+        let h = headers(
+            Some("http://127.0.0.1:1420"),
+            Some("anatolia-bis.onrender.com"),
+        );
         let cookie = cookie_value("tok", &h);
         std::env::remove_var("RENDER");
         assert!(cookie.contains("SameSite=None"), "got: {cookie}");
@@ -549,5 +905,49 @@ mod tests {
         assert!(validate_password("NoDigitsHere!").is_some());
         assert!(validate_password("NoSpecial1Chars").is_some());
         assert!(validate_password("Valid1Password!").is_none());
+    }
+
+    #[test]
+    fn client_ip_is_ignored_without_trusted_proxy() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var("RENDER");
+        std::env::remove_var("NODE_ENV");
+        std::env::remove_var("TRUST_PROXY");
+        let mut h = HeaderMap::new();
+        h.insert("x-forwarded-for", HeaderValue::from_static("203.0.113.5"));
+        assert_eq!(client_ip(&h), None);
+    }
+
+    #[test]
+    fn client_ip_is_read_when_proxy_trusted() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var("RENDER");
+        std::env::remove_var("NODE_ENV");
+        std::env::set_var("TRUST_PROXY", "true");
+        let mut h = HeaderMap::new();
+        h.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("203.0.113.5, 10.0.0.1"),
+        );
+        let ip = client_ip(&h);
+        std::env::remove_var("TRUST_PROXY");
+        assert_eq!(ip.as_deref(), Some("203.0.113.5"));
+    }
+
+    #[test]
+    fn refresh_token_round_trips_and_carries_family() {
+        let secret = "test-refresh-secret-not-for-prod-use-only";
+        let expires_at = Utc::now() + ChronoDuration::days(REFRESH_TOKEN_TTL_DAYS);
+        let token = sign_refresh("user-1", "family-1", secret, expires_at).unwrap();
+        let claims = decode_refresh_token(&token, secret).expect("token should decode");
+        assert_eq!(claims.sub, "user-1");
+        assert_eq!(claims.family, "family-1");
+    }
+
+    #[test]
+    fn refresh_token_signed_with_wrong_secret_is_rejected() {
+        let expires_at = Utc::now() + ChronoDuration::days(REFRESH_TOKEN_TTL_DAYS);
+        let token = sign_refresh("user-1", "family-1", "secret-a", expires_at).unwrap();
+        assert!(decode_refresh_token(&token, "secret-b").is_none());
     }
 }

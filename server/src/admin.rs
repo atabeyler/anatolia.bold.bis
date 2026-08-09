@@ -7,9 +7,10 @@ use serde::Deserialize;
 use serde_json::json;
 use std::time::Duration;
 
-use crate::auth::{decode_approval_token, public_user, require_role};
+use crate::auth::{consume_approval_token, peek_approval_token, public_user, require_role};
 use crate::db::{
-    create_user, delete_user, list_users as load_users, load_user_by_id, update_user_flags, update_user_profile, AppState,
+    create_user, delete_user, list_users as load_users, load_user_by_id,
+    revoke_all_sessions_for_user, update_user_flags, update_user_profile, AppState,
 };
 use crate::email::escape_html;
 use crate::error::ApiError;
@@ -64,13 +65,16 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
     if a.len() != b.len() {
         return false;
     }
-    a.iter().zip(b.iter()).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
+    a.iter()
+        .zip(b.iter())
+        .fold(0u8, |diff, (x, y)| diff | (x ^ y))
+        == 0
 }
 
 const ADMIN_ROLES: &[&str] = &[roles::SYSTEM_ADMIN, roles::SECURITY_ADMIN];
 
-fn require_admin(headers: &HeaderMap) -> Option<Response> {
-    if require_role(headers, ADMIN_ROLES) {
+fn require_admin(state: &AppState, headers: &HeaderMap) -> Option<Response> {
+    if require_role(state, headers, ADMIN_ROLES) {
         None
     } else {
         Some(ApiError::new("FORBIDDEN", "errors.forbidden", request_id(headers)).into_response())
@@ -86,7 +90,7 @@ fn request_id(headers: &HeaderMap) -> String {
 }
 
 pub async fn list_users(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    if let Some(denied) = require_admin(&headers) {
+    if let Some(denied) = require_admin(&state, &headers) {
         return denied;
     }
     match load_users(&state.backend).await {
@@ -94,7 +98,9 @@ pub async fn list_users(State(state): State<AppState>, headers: HeaderMap) -> Re
             let payload: Vec<_> = rows.iter().map(user_json).collect();
             Json(payload).into_response()
         }
-        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response(),
+        Err(_) => {
+            ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response()
+        }
     }
 }
 
@@ -104,14 +110,22 @@ pub async fn list_users(State(state): State<AppState>, headers: HeaderMap) -> Re
 /// `register`: no national ID is collected here, email is optional, and
 /// the password policy is only a minimum length since the admin is
 /// choosing it, not the account's eventual owner.
-pub async fn create_user_route(State(state): State<AppState>, headers: HeaderMap, Json(payload): Json<CreateUserPayload>) -> Response {
-    if let Some(denied) = require_admin(&headers) {
+pub async fn create_user_route(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<CreateUserPayload>,
+) -> Response {
+    if let Some(denied) = require_admin(&state, &headers) {
         return denied;
     }
     let rid = request_id(&headers);
 
     let code = payload.user_code.trim().to_uppercase();
-    if !(4..=20).contains(&code.len()) || !code.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()) {
+    if !(4..=20).contains(&code.len())
+        || !code
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+    {
         return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
     }
     if payload.password.len() < 8 {
@@ -126,16 +140,43 @@ pub async fn create_user_route(State(state): State<AppState>, headers: HeaderMap
         return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
     }
 
-    let first_name = payload.first_name.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or(&code).to_string();
-    let last_name = payload.last_name.as_deref().map(str::trim).unwrap_or("").to_string();
+    let first_name = payload
+        .first_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&code)
+        .to_string();
+    let last_name = payload
+        .last_name
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or("")
+        .to_string();
 
     let hashed = match hash(&payload.password, bcrypt::DEFAULT_COST) {
         Ok(v) => v,
         Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     };
-    let role = if payload.is_admin { roles::SYSTEM_ADMIN } else { roles::DEFAULT_APPROVED_ROLE };
+    let role = if payload.is_admin {
+        roles::SYSTEM_ADMIN
+    } else {
+        roles::DEFAULT_APPROVED_ROLE
+    };
 
-    match create_user(&state.backend, &code, Some(&email), &first_name, &last_name, Some(national_id), &hashed, role, true).await {
+    match create_user(
+        &state.backend,
+        &code,
+        Some(&email),
+        &first_name,
+        &last_name,
+        Some(national_id),
+        &hashed,
+        role,
+        true,
+    )
+    .await
+    {
         Ok(Some(user)) => Json(json!({ "user": user_json(&user) })).into_response(),
         Ok(None) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
         Err(err) if err.to_string().to_lowercase().contains("unique") => {
@@ -156,7 +197,7 @@ pub async fn update_user_route(
     headers: HeaderMap,
     Json(payload): Json<UpdateUserPayload>,
 ) -> Response {
-    if let Some(denied) = require_admin(&headers) {
+    if let Some(denied) = require_admin(&state, &headers) {
         return denied;
     }
     let rid = request_id(&headers);
@@ -195,13 +236,24 @@ pub async fn update_user_route(
             }
             match hash(p, bcrypt::DEFAULT_COST) {
                 Ok(v) => v,
-                Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+                Err(_) => {
+                    return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response()
+                }
             }
         }
         _ => current.password_hash.clone(),
     };
 
-    match update_user_profile(&state.backend, &id, &first_name, email.as_deref(), national_id.as_deref(), &password_hash).await {
+    match update_user_profile(
+        &state.backend,
+        &id,
+        &first_name,
+        email.as_deref(),
+        national_id.as_deref(),
+        &password_hash,
+    )
+    .await
+    {
         Ok(Some(user)) => Json(json!({ "user": user_json(&user) })).into_response(),
         Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
         Err(err) if err.to_string().to_lowercase().contains("unique") => {
@@ -211,24 +263,51 @@ pub async fn update_user_route(
     }
 }
 
-pub async fn approve_user(State(state): State<AppState>, Path(id): Path<String>, headers: HeaderMap) -> Response {
-    if let Some(denied) = require_admin(&headers) {
+pub async fn approve_user(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(denied) = require_admin(&state, &headers) {
         return denied;
     }
-    match update_user_flags(&state.backend, &id, Some(true), Some(false), None, Some(roles::DEFAULT_APPROVED_ROLE)).await {
+    match update_user_flags(
+        &state.backend,
+        &id,
+        Some(true),
+        Some(false),
+        None,
+        Some(roles::DEFAULT_APPROVED_ROLE),
+    )
+    .await
+    {
         Ok(Some(user)) => {
             if let Some(email) = user.email.as_deref() {
-                crate::email::send_approval_email(&user.first_name, &user.last_name, email, &user.user_code).await;
+                crate::email::send_approval_email(
+                    &user.first_name,
+                    &user.last_name,
+                    email,
+                    &user.user_code,
+                )
+                .await;
             }
             Json(json!({ "user": public_user(&user) })).into_response()
         }
-        Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response(),
-        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response(),
+        Ok(None) => {
+            ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response()
+        }
+        Err(_) => {
+            ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response()
+        }
     }
 }
 
-pub async fn reject_user(State(state): State<AppState>, Path(id): Path<String>, headers: HeaderMap) -> Response {
-    if let Some(denied) = require_admin(&headers) {
+pub async fn reject_user(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(denied) = require_admin(&state, &headers) {
         return denied;
     }
     let user = load_user_by_id(&state.backend, &id).await.ok().flatten();
@@ -236,13 +315,18 @@ pub async fn reject_user(State(state): State<AppState>, Path(id): Path<String>, 
         Ok(true) => {
             if let Some(user) = user {
                 if let Some(email) = user.email.as_deref() {
-                    crate::email::send_rejection_email(&user.first_name, &user.last_name, email).await;
+                    crate::email::send_rejection_email(&user.first_name, &user.last_name, email)
+                        .await;
                 }
             }
             Json(json!({ "messageKey": "admin.requestRejected" })).into_response()
         }
-        Ok(false) => ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response(),
-        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response(),
+        Ok(false) => {
+            ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response()
+        }
+        Err(_) => {
+            ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response()
+        }
     }
 }
 
@@ -252,35 +336,70 @@ pub async fn ban_user(
     headers: HeaderMap,
     Json(payload): Json<BanPayload>,
 ) -> Response {
-    if let Some(denied) = require_admin(&headers) {
+    if let Some(denied) = require_admin(&state, &headers) {
         return denied;
     }
-    match update_user_flags(&state.backend, &id, None, Some(true), payload.reason.as_deref(), None).await {
-        Ok(Some(_)) => Json(json!({ "messageKey": "admin.userBanned" })).into_response(),
-        Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response(),
-        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response(),
+    match update_user_flags(
+        &state.backend,
+        &id,
+        None,
+        Some(true),
+        payload.reason.as_deref(),
+        None,
+    )
+    .await
+    {
+        Ok(Some(_)) => {
+            // A ban must take effect immediately, not just for future
+            // logins — a short-lived access token issued before the ban
+            // would otherwise keep working until it expires.
+            let _ = revoke_all_sessions_for_user(&state.backend, &id).await;
+            Json(json!({ "messageKey": "admin.userBanned" })).into_response()
+        }
+        Ok(None) => {
+            ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response()
+        }
+        Err(_) => {
+            ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response()
+        }
     }
 }
 
-pub async fn unban_user(State(state): State<AppState>, Path(id): Path<String>, headers: HeaderMap) -> Response {
-    if let Some(denied) = require_admin(&headers) {
+pub async fn unban_user(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(denied) = require_admin(&state, &headers) {
         return denied;
     }
     match update_user_flags(&state.backend, &id, None, Some(false), None, None).await {
         Ok(Some(_)) => Json(json!({ "messageKey": "admin.banLifted" })).into_response(),
-        Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response(),
-        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response(),
+        Ok(None) => {
+            ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response()
+        }
+        Err(_) => {
+            ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response()
+        }
     }
 }
 
-pub async fn delete_user_route(State(state): State<AppState>, Path(id): Path<String>, headers: HeaderMap) -> Response {
-    if let Some(denied) = require_admin(&headers) {
+pub async fn delete_user_route(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(denied) = require_admin(&state, &headers) {
         return denied;
     }
     match delete_user(&state.backend, &id).await {
         Ok(true) => Json(json!({ "messageKey": "admin.userDeleted" })).into_response(),
-        Ok(false) => ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response(),
-        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response(),
+        Ok(false) => {
+            ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response()
+        }
+        Err(_) => {
+            ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response()
+        }
     }
 }
 
@@ -290,11 +409,17 @@ pub async fn delete_user_route(State(state): State<AppState>, Path(id): Path<Str
 /// nothing in the application can be administered.
 pub async fn seed_admin(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let rid = request_id(&headers);
-    if !state.rate_limiter.check("seed-admin", 5, Duration::from_secs(15 * 60)) {
+    if !state
+        .rate_limiter
+        .check("seed-admin", 5, Duration::from_secs(15 * 60))
+    {
         return ApiError::new("RATE_LIMITED", "errors.rateLimited", rid).into_response();
     }
     let expected = std::env::var("ADMIN_SEED_TOKEN").unwrap_or_default();
-    let provided = headers.get("x-seed-token").and_then(|v| v.to_str().ok()).unwrap_or("");
+    let provided = headers
+        .get("x-seed-token")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
     if expected.is_empty() || !constant_time_eq(provided, &expected) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
@@ -351,23 +476,40 @@ form{{display:inline}}
 </head><body><h1>{title}</h1>{body}</body></html>"#
     );
     (
-        [(header::CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8"))],
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("text/html; charset=utf-8"),
+        )],
         page,
     )
         .into_response()
 }
 
 pub async fn review(State(state): State<AppState>, Path(token): Path<String>) -> Response {
-    let Some(user_id) = decode_approval_token(&token) else {
-        return html_page("Invalid or expired link", "<p>This approval link is invalid or has expired (7 days).</p>");
+    let Some(user_id) = peek_approval_token(&state, &token).await else {
+        return html_page(
+            "Invalid or expired link",
+            "<p>This approval link is invalid, has expired, or has already been used.</p>",
+        );
     };
-    let Some(user) = load_user_by_id(&state.backend, &user_id).await.ok().flatten() else {
-        return html_page("Not found", "<p>This registration request no longer exists.</p>");
+    let Some(user) = load_user_by_id(&state.backend, &user_id)
+        .await
+        .ok()
+        .flatten()
+    else {
+        return html_page(
+            "Not found",
+            "<p>This registration request no longer exists.</p>",
+        );
     };
     if user.is_approved {
         return html_page(
             "Already approved",
-            &format!("<p>{} {} has already been approved.</p>", escape_html(&user.first_name), escape_html(&user.last_name)),
+            &format!(
+                "<p>{} {} has already been approved.</p>",
+                escape_html(&user.first_name),
+                escape_html(&user.last_name)
+            ),
         );
     }
     let body = format!(
@@ -387,41 +529,83 @@ pub async fn review(State(state): State<AppState>, Path(token): Path<String>) ->
 }
 
 pub async fn quick_approve(State(state): State<AppState>, Path(token): Path<String>) -> Response {
-    let Some(user_id) = decode_approval_token(&token) else {
-        return html_page("Invalid or expired link", "<p>This approval link is invalid or has expired.</p>");
+    let Some(user_id) = consume_approval_token(&state, &token, "approved").await else {
+        return html_page(
+            "Invalid or expired link",
+            "<p>This approval link is invalid, has expired, or has already been used.</p>",
+        );
     };
-    match update_user_flags(&state.backend, &user_id, Some(true), Some(false), None, Some(roles::DEFAULT_APPROVED_ROLE)).await {
+    match update_user_flags(
+        &state.backend,
+        &user_id,
+        Some(true),
+        Some(false),
+        None,
+        Some(roles::DEFAULT_APPROVED_ROLE),
+    )
+    .await
+    {
         Ok(Some(user)) => {
             if let Some(email) = user.email.as_deref() {
-                crate::email::send_approval_email(&user.first_name, &user.last_name, email, &user.user_code).await;
+                crate::email::send_approval_email(
+                    &user.first_name,
+                    &user.last_name,
+                    email,
+                    &user.user_code,
+                )
+                .await;
             }
             html_page(
                 "Approved",
-                &format!("<p>{} {} has been approved and notified by email.</p>", escape_html(&user.first_name), escape_html(&user.last_name)),
+                &format!(
+                    "<p>{} {} has been approved and notified by email.</p>",
+                    escape_html(&user.first_name),
+                    escape_html(&user.last_name)
+                ),
             )
         }
-        Ok(None) => html_page("Not found", "<p>This registration request no longer exists.</p>"),
+        Ok(None) => html_page(
+            "Not found",
+            "<p>This registration request no longer exists.</p>",
+        ),
         Err(err) => html_page("Error", &format!("<p>{err}</p>")),
     }
 }
 
 pub async fn quick_reject(State(state): State<AppState>, Path(token): Path<String>) -> Response {
-    let Some(user_id) = decode_approval_token(&token) else {
-        return html_page("Invalid or expired link", "<p>This approval link is invalid or has expired.</p>");
+    let Some(user_id) = consume_approval_token(&state, &token, "rejected").await else {
+        return html_page(
+            "Invalid or expired link",
+            "<p>This approval link is invalid, has expired, or has already been used.</p>",
+        );
     };
-    let user = load_user_by_id(&state.backend, &user_id).await.ok().flatten();
+    let user = load_user_by_id(&state.backend, &user_id)
+        .await
+        .ok()
+        .flatten();
     match delete_user(&state.backend, &user_id).await {
         Ok(true) => {
             if let Some(user) = user {
                 if let Some(email) = user.email.as_deref() {
-                    crate::email::send_rejection_email(&user.first_name, &user.last_name, email).await;
+                    crate::email::send_rejection_email(&user.first_name, &user.last_name, email)
+                        .await;
                 }
-                html_page("Rejected", &format!("<p>{} {} has been rejected and notified by email.</p>", escape_html(&user.first_name), escape_html(&user.last_name)))
+                html_page(
+                    "Rejected",
+                    &format!(
+                        "<p>{} {} has been rejected and notified by email.</p>",
+                        escape_html(&user.first_name),
+                        escape_html(&user.last_name)
+                    ),
+                )
             } else {
                 html_page("Rejected", "<p>Registration request rejected.</p>")
             }
         }
-        Ok(false) => html_page("Not found", "<p>This registration request no longer exists.</p>"),
+        Ok(false) => html_page(
+            "Not found",
+            "<p>This registration request no longer exists.</p>",
+        ),
         Err(err) => html_page("Error", &format!("<p>{err}</p>")),
     }
 }

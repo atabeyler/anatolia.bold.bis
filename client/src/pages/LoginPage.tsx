@@ -30,24 +30,26 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [pendingCode, setPendingCode] = useState<string | null>(null);
+  const [pendingTrackingToken, setPendingTrackingToken] = useState<string | null>(null);
   const [approvedMessage, setApprovedMessage] = useState(false);
   const [forgotIdentifier, setForgotIdentifier] = useState('');
   const [forgotSuccess, setForgotSuccess] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (!pendingCode) {
+    if (!pendingTrackingToken) {
       return;
     }
     pollRef.current = setInterval(async () => {
       try {
-        const status = await authClient.pendingStatus(pendingCode);
+        const status = await authClient.registrationStatus(pendingTrackingToken);
         if (status === 'approved') {
           if (pollRef.current) clearInterval(pollRef.current);
-          setPendingCode(null);
+          setPendingTrackingToken(null);
           setApprovedMessage(true);
           setMode('login');
-          setUserCode(pendingCode);
+          setUserCode(pendingCode ?? '');
+          setPendingCode(null);
         }
       } catch {
         // Transient network errors just wait for the next poll tick.
@@ -56,7 +58,7 @@ export function LoginPage() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [pendingCode]);
+  }, [pendingTrackingToken, pendingCode]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -68,8 +70,9 @@ export function LoginPage() {
         playChimeIfEnabled();
       } else if (mode === 'register') {
         const code = userCode.trim().toUpperCase();
-        await register({ firstName, lastName, nationalId, email, password, userCode: code });
+        const trackingToken = await register({ firstName, lastName, nationalId, email, password, userCode: code });
         setPendingCode(code);
+        setPendingTrackingToken(trackingToken);
         setMode('login');
         setPassword('');
         playChimeIfEnabled();

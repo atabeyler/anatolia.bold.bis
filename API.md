@@ -44,7 +44,8 @@ a pushed commit to confirm a deployment has actually gone live.
 
 Access tokens are short-lived JWTs (15 minutes) returned in the response
 body; the refresh token (30 days) is set as an `HttpOnly` cookie, never
-returned in a body. See `docs/SECURITY_ARCHITECTURE.md`.
+returned in a body, and is backed by a server-side session record — see
+`docs/SECURITY_ARCHITECTURE.md` for rotation and reuse-detection details.
 
 #### `POST /api/v1/auth/register`
 
@@ -60,27 +61,45 @@ Request:
 least one uppercase letter, one lowercase letter, one digit, and one
 punctuation/special character.
 
-**`201 Created`** on success. **`409 Conflict`** (`CONFLICT`) if the email
-or user code is already registered.
+**`201 Created`**: `{ "messageKey": "auth.registrationPending", "registrationTrackingToken": "..." }`
+on success — the frontend polls `registration-status` below with this
+token, not the user code (see enumeration note there). **`409 Conflict`**
+(`CONFLICT`) if the email or user code is already registered.
 
 #### `POST /api/v1/auth/login`
 
 Request: `{ "userCode": "...", "password": "..." }`. Rate-limited per user
-code (10 / 15 min).
+code (10 / 15 min), per IP (50 / 15 min, only when `TRUST_PROXY` is
+enabled — see `docs/ENVIRONMENT.md`), and by a 1-minute burst window
+(10 / 1 min, same IP-trust condition).
 
 **`200 OK`**: `{ "accessToken": "...", "user": { ... } }`, plus the refresh
-cookie. **`401 Unauthorized`** (`errors.invalidCredentials`) on a wrong
-code/password. **`403 Forbidden`** if the account is banned
-(`errors.accountBanned`) or not yet approved (`errors.accountNotApproved`).
+cookie. This also creates a new session record server-side. **`401
+Unauthorized`** (`errors.invalidCredentials`) on a wrong code/password.
+**`403 Forbidden`** if the account is banned (`errors.accountBanned`) or
+not yet approved (`errors.accountNotApproved`).
 
 #### `POST /api/v1/auth/refresh`
 
-Reads the refresh cookie, returns a new access token. `401 Unauthorized`
-if the cookie is missing, invalid, or the account is banned/unapproved.
+Reads the refresh cookie, validates it against the matching session
+record, rotates the session to a new refresh token, and returns a new
+access token. **`401 Unauthorized`** if the cookie is missing, invalid,
+expired, already rotated away, belongs to a revoked session, or the
+account is banned/unapproved. Presenting a refresh token that no longer
+matches its session's current hash is treated as token theft: the entire
+token family is revoked immediately, so every device sharing that family
+must log in again.
 
 #### `POST /api/v1/auth/logout`
 
-Clears the refresh cookie.
+Revokes the session tied to the refresh cookie and clears it. Always
+**`200 OK`**, even if the cookie was missing or already invalid.
+
+#### `POST /api/v1/auth/logout-all`
+
+Requires `Authorization: Bearer <accessToken>`. Revokes every session
+belonging to the authenticated user (all devices) and clears the caller's
+own refresh cookie.
 
 #### `POST /api/v1/auth/forgot-password`
 
@@ -93,10 +112,15 @@ self-service reset flow. If the identifier matches an account, emails
 matching account was found, so it can't be used to enumerate registered
 user codes/emails.
 
-#### `GET /api/v1/auth/pending-status/{userCode}`
+#### `GET /api/v1/auth/registration-status/{trackingToken}`
 
 Polled by the registration form to detect admin approval without a manual
-refresh. Response: `{ "status": "pending" | "approved" | "banned" | "not_found" }`.
+refresh. Takes the unguessable `registrationTrackingToken` returned from
+`register` — **not** the account's own user code — so this cannot be used
+to enumerate arbitrary accounts' status by guessing codes. An unknown or
+expired token returns the same `not_found` shape as a token that never
+existed. Response:
+`{ "status": "pending" | "approved" | "banned" | "not_found" }`.
 
 #### `GET /api/v1/users/me`
 
@@ -138,12 +162,19 @@ links require a `SYSTEM_ADMIN` or `SECURITY_ADMIN` bearer token.
   registration, granting the default `OPERATOR` role.
 - `POST /api/v1/admin/users/{id}/reject` — deletes a pending registration.
 - `POST /api/v1/admin/users/{id}/ban` — body `{ "reason": "..." }` (optional).
+  Immediately revokes all of the user's active sessions, not just future
+  logins.
 - `POST /api/v1/admin/users/{id}/unban`
 - `DELETE /api/v1/admin/users/{id}`
 - `GET /api/v1/admin/review/{token}` — HTML approve/reject page linked from
-  the admin's registration-notification email (valid 7 days).
+  the admin's registration-notification email (valid 3 days, single-use;
+  signed with `APPROVAL_TOKEN_SECRET`, independent of the JWT secrets —
+  see `docs/SECURITY_ARCHITECTURE.md`). Viewing this page does not consume
+  the token; only the approve/reject actions below do.
 - `POST /api/v1/admin/quick-approve/{token}` / `POST /api/v1/admin/quick-reject/{token}` —
-  the review page's own form targets.
+  the review page's own form targets. Each token can be consumed exactly
+  once; a repeat request (double-click, retried email link) is rejected
+  the same as an expired or invalid one.
 
 ### Search workflow
 

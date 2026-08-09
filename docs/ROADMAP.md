@@ -1,6 +1,6 @@
 # Roadmap
 
-Implemented incrementally. Nothing below Phase 3 is implemented yet.
+Implemented incrementally. Nothing below Phase 3.5 is implemented yet.
 
 ## Phase 1 — Repository foundation (this phase)
 
@@ -17,7 +17,7 @@ Implemented incrementally. Nothing below Phase 3 is implemented yet.
 - [x] RBAC roles (SYSTEM_ADMIN, SECURITY_ADMIN, OPERATOR, REVIEWER, AUDITOR); approved registrations default to OPERATOR
 - [x] JWT auth (register/login/refresh/logout), bcrypt password hashing, per-key rate limiting
 - [x] Admin-approval workflow for new registrations, admin user administration (approve/reject/ban/unban/delete), rate-limited admin bootstrap (`seed-admin`)
-- [ ] Session/device management UI, MFA, enterprise SSO
+- [ ] Session/device management UI (server-side session model exists as of Phase 3.5 — no UI to list/revoke individual sessions yet), MFA, enterprise SSO
 
 ## Phase 3 — Search workflow
 
@@ -26,6 +26,26 @@ Implemented incrementally. Nothing below Phase 3 is implemented yet.
 - [x] Candidate results (top-K), candidate detail view, human confirm/reject
 - [x] Attach the operator's captured location (see "Operator geolocation"
       below) to searches
+
+## Phase 3.5 — Authentication hardening
+
+- [x] Centralized, production-fail-fast secret validation (`JWT_SECRET`,
+      `JWT_REFRESH_SECRET`, `APPROVAL_TOKEN_SECRET` — see
+      `docs/SECURITY_ARCHITECTURE.md`)
+- [x] Server-side `sessions` table; refresh-token rotation with
+      reuse/theft detection revoking the whole token family
+- [x] `POST /api/v1/auth/logout-all`; banning a user revokes its active
+      sessions immediately
+- [x] Registration approval tokens isolated from login tokens
+      (`APPROVAL_TOKEN_SECRET`, `approval_tokens` table, single-use)
+- [x] Registration-status polling by unguessable tracking token instead
+      of the account's own user code (enumeration fix)
+- [x] Login rate limiting layered with per-IP and burst windows (in
+      addition to the existing per-account window)
+- [x] CORS method list includes `PATCH`; CSP and Permissions-Policy
+      headers; HSTS restricted to production
+- [ ] Append-only audit log, MFA, organization/unit-scoped authorization
+      (tracked separately — see the milestones below)
 
 ## Phase 4 — Production biometric provider
 

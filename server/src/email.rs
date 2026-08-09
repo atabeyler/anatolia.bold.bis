@@ -29,7 +29,8 @@ async fn deliver(to: &str, subject: &str, text: &str, html: Option<&str>) {
         tracing::warn!(%subject, %to, "RESEND_API_KEY not set — email not sent");
         return;
     };
-    let from = std::env::var("RESEND_FROM").unwrap_or_else(|_| "Anatolia B.I.S. <onboarding@resend.dev>".to_string());
+    let from = std::env::var("RESEND_FROM")
+        .unwrap_or_else(|_| "Anatolia B.I.S. <onboarding@resend.dev>".to_string());
     let mut body = json!({
         "from": from,
         "to": [to],
@@ -95,7 +96,10 @@ pub async fn send_admin_registration_notification(info: RegistrationInfo<'_>) {
     );
     deliver(
         &admin_email(),
-        &format!("[Registration request] {} {}", info.first_name, info.last_name),
+        &format!(
+            "[Registration request] {} {}",
+            info.first_name, info.last_name
+        ),
         &text,
         Some(&html),
     )
@@ -107,15 +111,32 @@ pub async fn send_approval_email(first_name: &str, last_name: &str, email: &str,
         "Dear {first_name} {last_name},\n\nYour Anatolia B.I.S. registration has been approved.\n\nYour user code: {user_code}\nSign in at: {}\n\nBold Askeri Teknoloji ve Savunma Sanayi A.Ş.",
         app_url()
     );
-    deliver(email, "Anatolia B.I.S. — Your registration has been approved", &text, None).await;
+    deliver(
+        email,
+        "Anatolia B.I.S. — Your registration has been approved",
+        &text,
+        None,
+    )
+    .await;
 }
 
-pub async fn send_password_reset_request(first_name: &str, last_name: &str, user_code: &str, email: Option<&str>) {
+pub async fn send_password_reset_request(
+    first_name: &str,
+    last_name: &str,
+    user_code: &str,
+    email: Option<&str>,
+) {
     let text = format!(
         "A user has requested a password reset — Anatolia B.I.S.\n\nFull name: {first_name} {last_name}\nUser code: {user_code}\nEmail on file: {}\n\nSet a new password for this account from the management panel's \"Edit\" action.",
         email.unwrap_or("-")
     );
-    deliver(&admin_email(), &format!("[Password reset request] {first_name} {last_name}"), &text, None).await;
+    deliver(
+        &admin_email(),
+        &format!("[Password reset request] {first_name} {last_name}"),
+        &text,
+        None,
+    )
+    .await;
 }
 
 pub async fn send_rejection_email(first_name: &str, last_name: &str, email: &str) {
@@ -123,5 +144,11 @@ pub async fn send_rejection_email(first_name: &str, last_name: &str, email: &str
         "Dear {first_name} {last_name},\n\nYour registration request has been rejected. For questions, contact {}.\n\nBold Askeri Teknoloji ve Savunma Sanayi A.Ş.",
         admin_email()
     );
-    deliver(email, "Anatolia B.I.S. — Registration request rejected", &text, None).await;
+    deliver(
+        email,
+        "Anatolia B.I.S. — Registration request rejected",
+        &text,
+        None,
+    )
+    .await;
 }

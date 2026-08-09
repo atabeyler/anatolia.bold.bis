@@ -13,16 +13,26 @@ pub fn router(state: AppState) -> Router {
         .route("/refresh", post(auth::refresh))
         .route("/forgot-password", post(auth::forgot_password))
         .route("/logout", post(auth::logout))
-        .route("/pending-status/:user_code", get(auth::pending_status));
+        .route("/logout-all", post(auth::logout_all))
+        .route(
+            "/registration-status/:tracking_token",
+            get(auth::registration_status),
+        );
 
     let admin_routes = Router::new()
         .route("/seed-admin", post(admin::seed_admin))
-        .route("/users", get(admin::list_users).post(admin::create_user_route))
+        .route(
+            "/users",
+            get(admin::list_users).post(admin::create_user_route),
+        )
         .route("/users/:id/approve", post(admin::approve_user))
         .route("/users/:id/reject", post(admin::reject_user))
         .route("/users/:id/ban", post(admin::ban_user))
         .route("/users/:id/unban", post(admin::unban_user))
-        .route("/users/:id", delete(admin::delete_user_route).patch(admin::update_user_route))
+        .route(
+            "/users/:id",
+            delete(admin::delete_user_route).patch(admin::update_user_route),
+        )
         .route("/review/:token", get(admin::review))
         .route("/quick-approve/:token", post(admin::quick_approve))
         .route("/quick-reject/:token", post(admin::quick_reject));
@@ -31,12 +41,21 @@ pub fn router(state: AppState) -> Router {
         .route("/face", post(search::create_search_route))
         .route("/", get(search::list_searches_route))
         .route("/:search_id", get(search::get_search_route))
-        .route("/:search_id/candidates", get(search::get_search_candidates_route));
+        .route(
+            "/:search_id/candidates",
+            get(search::get_search_candidates_route),
+        );
 
     let candidate_routes = Router::new()
         .route("/:candidate_id", get(search::get_candidate_route))
-        .route("/:candidate_id/verify", post(search::verify_candidate_route))
-        .route("/:candidate_id/reject", post(search::reject_candidate_route));
+        .route(
+            "/:candidate_id/verify",
+            post(search::verify_candidate_route),
+        )
+        .route(
+            "/:candidate_id/reject",
+            post(search::reject_candidate_route),
+        );
 
     Router::new()
         .route("/api/health", get(health::health))
