@@ -778,19 +778,23 @@ body::before {
   bottom: 0;
   z-index: 25;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
   border-top: 1px solid var(--color-panel-border);
   box-shadow: 0 0 16px rgba(200, 34, 34, 0.25);
-  padding: 0.7rem 1.5rem;
+  padding: 0.6rem 1.5rem;
   background: var(--color-bar-surface);
+}
+
+.app-footer__text {
+  margin: 0;
+  max-width: 100%;
   color: var(--color-success);
   text-shadow: 0 0 6px var(--color-success), 0 0 16px rgba(0, 232, 135, 0.6);
   font-size: var(--text-xs);
   letter-spacing: var(--tracking-snug);
   text-align: center;
+  line-height: 1.2;
 }
 
 .app-footer__separator {

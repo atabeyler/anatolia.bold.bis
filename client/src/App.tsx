@@ -150,11 +150,10 @@ function App() {
       </div>
 
       <footer className="app-footer" ref={footerRef}>
-        <span>{t('footer.legalCode')}</span>
-        <span className="app-footer__separator">·</span>
-        <span>{t('footer.legalCompany')}</span>
-        <span className="app-footer__separator">·</span>
-        <span>{t('footer.legalRights')}</span>
+        <p className="app-footer__text">
+          {t('footer.legalCode')} <span className="app-footer__separator">·</span> {t('footer.legalCompany')}{' '}
+          <span className="app-footer__separator">·</span> {t('footer.legalRights')}
+        </p>
       </footer>
 
       {menuOpen && <MenuOverlay onClose={() => setMenuOpen(false)} />}
