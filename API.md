@@ -181,7 +181,10 @@ links require a `SYSTEM_ADMIN` or `SECURITY_ADMIN` bearer token.
   explicitly set for a deliberate recovery (see `docs/ENVIRONMENT.md`).
   `/admin-seed.html` is a small static form (same origin, no separate CORS
   setup) that calls this endpoint from a browser instead of a terminal.
-- `GET /api/v1/admin/users` — list all users.
+- `GET /api/v1/admin/users` — list all users. `nationalId` in each returned
+  record is masked to its last two digits (e.g. `"*********12"`) — the full
+  value is never sent to a client. `PATCH` below only changes it when a new
+  value is explicitly submitted.
 - `POST /api/v1/admin/users` — admin creates a user directly (immediately
   approved, no self-registration/approval round trip). Body:
   `{ "userCode": "...", "password": "...", "firstName": "...", "lastName": "...", "nationalId": "...", "email": "...", "isAdmin": false }`.

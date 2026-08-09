@@ -1,0 +1,74 @@
+/* Design tokens — colors, fonts, and the fluid type/tracking scale.
+   Split out of index.css so the values every component styles against
+   have one home, separate from the layout/component rules that consume
+   them. Imported first from index.css; nothing here should reference a
+   component class. */
+
+:root {
+  --color-bg: #030310;
+  --color-surface: #0a0e1f;
+  --color-border: rgba(79, 110, 247, 0.35);
+  --color-text: #c0c8e8;
+  --color-text-muted: #e8ecf9;
+  --color-accent: #4f6ef7;
+  --color-accent-strong: #6f8bff;
+  --color-success: #00e887;
+  --color-danger: #e05a5a;
+  --color-panel-border: #c82222;
+  --color-panel-surface: rgba(6, 9, 20, 0.92);
+  --color-panel-header: rgba(0, 20, 10, 0.5);
+  --color-input-surface: rgba(0, 0, 0, 0.4);
+  /* Fully opaque, unlike --color-panel-surface: the top bar and footer
+     are fixed chrome over scrolling content, not a floating panel — any
+     transparency here lets scrolled-past text show through and read as
+     a rendering glitch rather than an intentional glass effect. */
+  --color-bar-surface: #0a0e1f;
+
+  --font-heading: 'Orbitron', sans-serif;
+  --font-mono: 'Share Tech Mono', 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+
+  /* Type scale — every font-size in this file resolves to one of these
+     steps instead of a one-off rem value, so sizes stay comparable across
+     components. Each step is fluid (clamp between a floor and the values
+     above as a ceiling) so text and button labels shrink automatically on
+     narrow screens instead of overflowing, and grow back on wide ones —
+     no per-component breakpoint tuning needed. */
+  --text-2xs: clamp(0.58rem, 0.54rem + 0.2vw, 0.65rem);
+  --text-xs: clamp(0.64rem, 0.59rem + 0.25vw, 0.72rem);
+  --text-sm: clamp(0.7rem, 0.64rem + 0.3vw, 0.78rem);
+  --text-base: clamp(0.76rem, 0.69rem + 0.35vw, 0.85rem);
+  --text-md: clamp(0.8rem, 0.73rem + 0.35vw, 0.9rem);
+  --text-lg: clamp(0.88rem, 0.8rem + 0.4vw, 1rem);
+  --text-xl: clamp(0.95rem, 0.86rem + 0.45vw, 1.1rem);
+  --text-2xl: clamp(1.02rem, 0.92rem + 0.5vw, 1.2rem);
+  --text-display: clamp(1.5rem, 6vw, 2.4rem);
+
+  /* Letter-spacing scale — same idea, for tracking values. */
+  --tracking-tight: 0.02em;
+  --tracking-snug: 0.03em;
+  --tracking-normal: 0.05em;
+  --tracking-wide: 0.08em;
+  --tracking-wider: 0.12em;
+  --tracking-widest: 0.18em;
+
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --color-bg: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-border: #d5dae6;
+  --color-text: #12151b;
+  --color-text-muted: #5b6472;
+  --color-accent: #2563eb;
+  --color-accent-strong: #1d4ed8;
+  --color-success: #16a34a;
+  --color-danger: #dc2626;
+  --color-panel-border: #dc2626;
+  --color-panel-surface: rgba(255, 255, 255, 0.96);
+  --color-panel-header: rgba(226, 232, 240, 0.9);
+  --color-input-surface: rgba(0, 0, 0, 0.04);
+  --color-bar-surface: #ffffff;
+
+  color-scheme: light;
+}

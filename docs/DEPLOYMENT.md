@@ -73,3 +73,72 @@ frontend, connected to Postgres via `DATABASE_URL`).
 ## Environment variables
 
 See `docs/ENVIRONMENT.md` and `.env.example`.
+
+## Backups
+
+There is no automated backup job in this repository or in `render.yaml` —
+this section documents the manual procedure until one exists. Treat it as
+operational guidance, not a guarantee that backups are currently running;
+verify with whoever manages the Render account.
+
+### What needs backing up
+
+The entire application data set lives in one place: the `anatolia_bis`
+schema of the shared Postgres instance described above under "Target:
+Render" (or the local `postgres` container in Docker Compose). That
+includes, among other tables: `users` (accounts, roles, and — until
+item 32 of `docs/HARDENING_CHECKLIST.md` adds encryption-at-rest —
+plaintext `national_id`), `sessions`, `approval_tokens`, `searches` /
+`search_candidates`, `verification_events`, and the append-only
+`audit_events` trail. There is no separate object store, file volume, or
+secondary database to account for.
+
+**Not currently applicable:** biometric templates/embeddings. No
+`biometric_templates` table or equivalent exists yet (see item 21 in
+`docs/HARDENING_CHECKLIST.md` — this is deferred along with the real
+biometric provider, item 20). Probe images uploaded to `POST
+/api/v1/search/face` are never persisted (see
+`docs/SECURITY_ARCHITECTURE.md`); only their derived similarity scores
+are. Once template storage is added, this section must be revisited —
+templates are sensitive biometric data and would need their own backup
+and encryption treatment, not just "whatever the users table gets".
+
+### Backing up
+
+Because the schema is isolated (see "Target: Render" above), a schema-scoped
+`pg_dump` is enough — it does not require (and should not use) superuser
+access to the whole shared instance:
+
+```bash
+pg_dump "$DATABASE_URL" --schema=anatolia_bis --format=custom --file=anatolia_bis_$(date +%Y%m%d).dump
+```
+
+Encrypt the resulting file before it leaves the machine that produced it
+(e.g. `age` or `gpg`) and store it somewhere other than the database host
+itself — a backup that lives next to what it backs up doesn't survive the
+same outage. Since the dump contains account records, national IDs, and
+the audit trail, treat it with the same handling rules as production
+credentials under CLAUDE.md/SECURITY.md: never committed to the
+repository, never left in a general-purpose shared drive unencrypted.
+
+### Restoring
+
+```bash
+pg_restore --clean --if-exists --schema=anatolia_bis -d "$DATABASE_URL" anatolia_bis_YYYYMMDD.dump
+```
+
+After restoring: confirm `GET /api/health/ready` returns `200`, spot-check
+row counts against what the dump was expected to contain, and confirm at
+least one active `SYSTEM_ADMIN` account exists (`db::count_active_system_admins`)
+— if a restore lands with zero, `BOOTSTRAP_ENABLED=true` plus
+`POST /api/v1/admin/seed-admin` is the recovery path (see
+`docs/SECURITY_ARCHITECTURE.md`'s self-disabling admin bootstrap).
+
+### Frequency and retention
+
+Not yet decided by the repository owner — pick a schedule and retention
+window appropriate to how the platform is actually being used
+(institutional biometric matching data implies stricter retention/deletion
+obligations than a typical CRUD app) and record the decision here once
+made. Until then, assume backups are ad hoc and manual rather than on any
+fixed cadence.

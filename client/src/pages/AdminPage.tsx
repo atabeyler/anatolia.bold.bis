@@ -10,11 +10,23 @@ const NATIONAL_ID_PATTERN = /^[0-9]{11}$/;
 interface EditForm {
   nickname: string;
   nationalId: string;
+  // The backend now returns a masked national ID (see
+  // permission::mask_national_id) — the input is pre-filled with that
+  // masked value purely for display, so submitting it unchanged must
+  // never overwrite the real stored value with masked characters. Only
+  // an explicit edit sets this and is included in the update payload.
+  nationalIdTouched: boolean;
   email: string;
   password: string;
 }
 
-const EMPTY_EDIT_FORM: EditForm = { nickname: '', nationalId: '', email: '', password: '' };
+const EMPTY_EDIT_FORM: EditForm = {
+  nickname: '',
+  nationalId: '',
+  nationalIdTouched: false,
+  email: '',
+  password: '',
+};
 
 export function AdminPage() {
   const { t } = useTranslation();
@@ -98,6 +110,7 @@ export function AdminPage() {
     setEditForm({
       nickname: user.firstName,
       nationalId: user.nationalId ?? '',
+      nationalIdTouched: false,
       email: user.email ?? '',
       password: '',
     });
@@ -116,7 +129,7 @@ export function AdminPage() {
     try {
       await adminClient.updateUser(id, {
         nickname: editForm.nickname.trim() || undefined,
-        nationalId: editForm.nationalId.trim() || undefined,
+        nationalId: editForm.nationalIdTouched ? editForm.nationalId.trim() || undefined : undefined,
         email: editForm.email.trim() || undefined,
         password: editForm.password || undefined,
       });
@@ -319,7 +332,11 @@ export function AdminPage() {
                       placeholder={t('admin.addUser.nationalId') ?? ''}
                       value={editForm.nationalId}
                       onChange={(event) =>
-                        setEditForm((form) => ({ ...form, nationalId: event.target.value.replace(/[^0-9]/g, '') }))
+                        setEditForm((form) => ({
+                          ...form,
+                          nationalId: event.target.value.replace(/[^0-9]/g, ''),
+                          nationalIdTouched: true,
+                        }))
                       }
                       maxLength={11}
                     />
