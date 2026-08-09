@@ -159,6 +159,8 @@
     "empty": "No searches yet.",
     "requestedBy": "Requested by {{name}}",
     "createError": "Failed to start search.",
-    "location": "Operator location at time of search: {{lat}} · {{lon}}"
+    "location": "Operator location at time of search: {{lat}} · {{lon}}",
+    "mockNotice": "Demo mode: this deployment uses a mock matching engine — scores are simulated, not derived from real biometric matching.",
+    "viewOnlyNotice": "Your role allows viewing searches and candidates only. Starting a new search requires the OPERATOR, REVIEWER, SECURITY_ADMIN, or SYSTEM_ADMIN role."
   }
 }

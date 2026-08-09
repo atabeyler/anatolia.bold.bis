@@ -159,6 +159,8 @@
     "empty": "Aucune recherche pour le moment.",
     "requestedBy": "Demandé par {{name}}",
     "createError": "Échec du démarrage de la recherche.",
-    "location": "Position de l'opérateur au moment de la recherche : {{lat}} · {{lon}}"
+    "location": "Position de l'opérateur au moment de la recherche : {{lat}} · {{lon}}",
+    "mockNotice": "Mode démo : ce déploiement utilise un moteur de correspondance simulé — les scores sont simulés, pas issus d'une correspondance biométrique réelle.",
+    "viewOnlyNotice": "Votre rôle permet uniquement de consulter les recherches et les candidats. Démarrer une nouvelle recherche requiert le rôle OPERATOR, REVIEWER, SECURITY_ADMIN ou SYSTEM_ADMIN."
   }
 }

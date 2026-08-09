@@ -159,6 +159,8 @@
     "empty": "Noch keine Suchen.",
     "requestedBy": "Angefragt von {{name}}",
     "createError": "Suche konnte nicht gestartet werden.",
-    "location": "Standort des Operators bei der Suche: {{lat}} · {{lon}}"
+    "location": "Standort des Operators bei der Suche: {{lat}} · {{lon}}",
+    "mockNotice": "Demo-Modus: Diese Instanz verwendet eine simulierte Abgleich-Engine — die Werte sind simuliert, nicht aus echtem biometrischem Abgleich abgeleitet.",
+    "viewOnlyNotice": "Ihre Rolle erlaubt nur das Ansehen von Suchen und Kandidaten. Für eine neue Suche ist die Rolle OPERATOR, REVIEWER, SECURITY_ADMIN oder SYSTEM_ADMIN erforderlich."
   }
 }

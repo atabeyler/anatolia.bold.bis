@@ -9,6 +9,9 @@
   --color-success: #00e887;
   --color-danger: #e05a5a;
   --color-panel-border: #cc4444;
+  --color-panel-surface: rgba(6, 9, 20, 0.92);
+  --color-panel-header: rgba(0, 20, 10, 0.5);
+  --color-input-surface: rgba(0, 0, 0, 0.4);
 
   --font-heading: 'Orbitron', sans-serif;
   --font-mono: 'Share Tech Mono', 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
@@ -33,6 +36,9 @@
   --color-success: #16a34a;
   --color-danger: #dc2626;
   --color-panel-border: #dc2626;
+  --color-panel-surface: rgba(255, 255, 255, 0.96);
+  --color-panel-header: rgba(226, 232, 240, 0.9);
+  --color-input-surface: rgba(0, 0, 0, 0.04);
 
   color-scheme: light;
 }
@@ -160,7 +166,7 @@ body::before {
   width: 100%;
   max-width: 440px;
   max-height: 80vh;
-  background: rgba(2, 4, 10, 0.98);
+  background: var(--color-panel-surface);
   border: 1px solid var(--color-panel-border);
   clip-path: var(--cut-lg);
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(204, 68, 68, 0.18);
@@ -177,7 +183,7 @@ body::before {
   justify-content: space-between;
   padding: 0.6rem 0.9rem;
   border-bottom: 1px solid var(--color-panel-border);
-  background: rgba(0, 20, 10, 0.5);
+  background: var(--color-panel-header);
 }
 
 .overlay-header__title {
@@ -229,7 +235,7 @@ body::before {
   background: transparent;
   border: none;
   border-bottom: 1px solid rgba(79, 110, 247, 0.15);
-  color: #a0c8b0;
+  color: var(--color-text);
   padding: 0.65rem 0.25rem;
   font-family: var(--font-mono);
   font-size: 0.88rem;
@@ -253,7 +259,7 @@ body::before {
 .overlay-content p {
   margin: 0 0 0.6rem;
   font-size: 0.85rem;
-  color: #7aaa90;
+  color: var(--color-text-muted);
   line-height: 1.6;
   letter-spacing: 0.02em;
 }
@@ -542,7 +548,7 @@ body::before {
 .auth-panel {
   width: 100%;
   max-width: 420px;
-  background: rgba(6, 9, 20, 0.9);
+  background: var(--color-panel-surface);
   border: 1px solid var(--color-panel-border);
   clip-path: var(--cut-lg);
   box-shadow: 0 0 22px rgba(204, 68, 68, 0.16), inset 0 0 32px rgba(204, 68, 68, 0.04);
@@ -600,7 +606,7 @@ body::before {
 
 .auth-field input {
   min-width: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--color-input-surface);
   color: var(--color-text);
   border: 1px solid transparent;
   border-bottom: 1px solid rgba(204, 68, 68, 0.5);

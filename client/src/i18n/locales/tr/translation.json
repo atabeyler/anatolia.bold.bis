@@ -159,6 +159,8 @@
     "empty": "Henüz arama yapılmadı.",
     "requestedBy": "Talep eden: {{name}}",
     "createError": "Arama başlatılamadı.",
-    "location": "Arama sırasında operatör konumu: {{lat}} · {{lon}}"
+    "location": "Arama sırasında operatör konumu: {{lat}} · {{lon}}",
+    "mockNotice": "Demo modu: bu dağıtım simüle bir eşleştirme motoru kullanıyor — skorlar gerçek biyometrik eşleştirmeden değil, simülasyondan türetilmiştir.",
+    "viewOnlyNotice": "Rolünüz yalnızca aramaları ve adayları görüntülemenize izin veriyor. Yeni arama başlatmak için OPERATOR, REVIEWER, SECURITY_ADMIN veya SYSTEM_ADMIN rolü gerekir."
   }
 }

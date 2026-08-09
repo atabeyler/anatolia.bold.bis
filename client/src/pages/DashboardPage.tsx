@@ -11,6 +11,7 @@ import { apiErrorMessageKey } from '../services/apiClient';
 
 const ADMIN_ROLES = ['SYSTEM_ADMIN', 'SECURITY_ADMIN'];
 const REVIEW_ROLES = ['REVIEWER', 'SECURITY_ADMIN', 'SYSTEM_ADMIN'];
+const SEARCH_ROLES = ['OPERATOR', 'REVIEWER', 'SECURITY_ADMIN', 'SYSTEM_ADMIN'];
 
 interface DashboardPageProps {
   onOpenAdmin?: () => void;
@@ -21,6 +22,7 @@ export function DashboardPage({ onOpenAdmin }: DashboardPageProps) {
   const { user, logout } = useAuth();
   const isAdmin = !!user && ADMIN_ROLES.includes(user.role);
   const canReview = !!user && REVIEW_ROLES.includes(user.role);
+  const canSearch = !!user && SEARCH_ROLES.includes(user.role);
 
   const [caseReference, setCaseReference] = useState('');
   const [purpose, setPurpose] = useState('');
@@ -120,42 +122,49 @@ export function DashboardPage({ onOpenAdmin }: DashboardPageProps) {
         <span className="admin-tabs__tab admin-tabs__tab--active">{t('search.tabSearch')}</span>
       </nav>
 
-      <section className="admin-panel">
-        <h2 className="admin-panel__heading">{t('search.newSearchHeading')}</h2>
-        <form onSubmit={handleCreateSearch} className="admin-form">
-          <div className="admin-form-row">
-            <input
-              type="text"
-              placeholder={t('search.caseReference') ?? ''}
-              value={caseReference}
-              onChange={(event) => setCaseReference(event.target.value)}
-              required
-            />
-            <input
-              type="text"
-              placeholder={t('search.purpose') ?? ''}
-              value={purpose}
-              onChange={(event) => setPurpose(event.target.value)}
-              required
-            />
-          </div>
-          <label className="admin-field-file">
-            <span>{t('search.image')}</span>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              capture="user"
-              onChange={(event) => setImage(event.target.files?.[0] ?? null)}
-              required
-            />
-          </label>
-          {formErrorKey && <p className="auth-message auth-message--error">{t(formErrorKey)}</p>}
-          <button type="submit" className="admin-submit" disabled={submitting}>
-            {submitting ? t('search.searching') : t('search.submit')}
-          </button>
-        </form>
-      </section>
+      {canSearch ? (
+        <section className="admin-panel">
+          <h2 className="admin-panel__heading">{t('search.newSearchHeading')}</h2>
+          <form onSubmit={handleCreateSearch} className="admin-form">
+            <div className="admin-form-row">
+              <input
+                type="text"
+                placeholder={t('search.caseReference') ?? ''}
+                value={caseReference}
+                onChange={(event) => setCaseReference(event.target.value)}
+                required
+              />
+              <input
+                type="text"
+                placeholder={t('search.purpose') ?? ''}
+                value={purpose}
+                onChange={(event) => setPurpose(event.target.value)}
+                required
+              />
+            </div>
+            <label className="admin-field-file">
+              <span>{t('search.image')}</span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="user"
+                onChange={(event) => setImage(event.target.files?.[0] ?? null)}
+                required
+              />
+            </label>
+            <p className="admin-hint">{t('search.mockNotice')}</p>
+            {formErrorKey && <p className="auth-message auth-message--error">{t(formErrorKey)}</p>}
+            <button type="submit" className="admin-submit" disabled={submitting}>
+              {submitting ? t('search.searching') : t('search.submit')}
+            </button>
+          </form>
+        </section>
+      ) : (
+        <section className="admin-panel">
+          <p className="admin-hint">{t('search.viewOnlyNotice')}</p>
+        </section>
+      )}
 
       {activeSearch && (
         <section className="admin-panel">
@@ -234,7 +243,19 @@ export function DashboardPage({ onOpenAdmin }: DashboardPageProps) {
         {pastSearchesError && <p className="status-card__line status-card__line--offline">{t('search.loadError')}</p>}
         {pastSearches !== null && pastSearches.length === 0 && <p className="status-card__line">{t('search.empty')}</p>}
         {pastSearches?.map((search) => (
-          <article key={search.id} className="admin-user-card admin-user-card--clickable" onClick={() => openSearch(search)}>
+          <article
+            key={search.id}
+            className="admin-user-card admin-user-card--clickable"
+            role="button"
+            tabIndex={0}
+            onClick={() => openSearch(search)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openSearch(search);
+              }
+            }}
+          >
             <div className="admin-user-card__row">
               <div className="admin-user-card__info">
                 <div className="admin-user-card__name">

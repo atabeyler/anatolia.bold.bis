@@ -175,20 +175,24 @@ similarity value in `[0, 1]` — never a match/no-match verdict; see
 
 #### `GET /api/v1/search`
 
-Lists every search (any authenticated, approved user).
+Lists every search. Requires `OPERATOR`, `REVIEWER`, `SECURITY_ADMIN`,
+`SYSTEM_ADMIN`, or `AUDITOR` (the latter is read-only oversight — see
+docs/SECURITY_ARCHITECTURE.md).
 
 #### `GET /api/v1/search/{search_id}`
 
 Returns one search's metadata (same shape as the `search` object above).
+Same role requirement as `GET /api/v1/search`.
 
 #### `GET /api/v1/search/{search_id}/candidates`
 
 Returns that search's ranked candidates (same shape as the `candidates`
-array above).
+array above). Same role requirement as `GET /api/v1/search`.
 
 #### `GET /api/v1/candidates/{candidate_id}`
 
 Returns `{ "id": "...", "referenceCode": "...", "fullName": "...", "notes": "..." }`.
+Same role requirement as `GET /api/v1/search`.
 
 #### `POST /api/v1/candidates/{candidate_id}/verify`
 

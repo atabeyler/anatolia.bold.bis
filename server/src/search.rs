@@ -16,6 +16,16 @@ use crate::roles;
 
 const SEARCH_ROLES: &[&str] = &[roles::OPERATOR, roles::REVIEWER, roles::SECURITY_ADMIN, roles::SYSTEM_ADMIN];
 const REVIEW_ROLES: &[&str] = &[roles::REVIEWER, roles::SECURITY_ADMIN, roles::SYSTEM_ADMIN];
+// Everyone who may see search/candidate records: the search/review roles
+// above, plus AUDITOR — whose entire purpose is read-only oversight of
+// exactly this data, per docs/SECURITY_ARCHITECTURE.md.
+const VIEW_ROLES: &[&str] = &[
+    roles::OPERATOR,
+    roles::REVIEWER,
+    roles::SECURITY_ADMIN,
+    roles::SYSTEM_ADMIN,
+    roles::AUDITOR,
+];
 const TOP_K: usize = 5;
 
 fn request_id(headers: &HeaderMap) -> String {
@@ -141,6 +151,9 @@ pub async fn list_searches_route(State(state): State<AppState>, headers: HeaderM
     if auth_user_from_headers(&headers).is_none() {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
     }
+    if !require_role(&headers, VIEW_ROLES) {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
     match list_searches(&state.backend).await {
         Ok(rows) => Json(rows.iter().map(search_json).collect::<Vec<_>>()).into_response(),
         Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
@@ -151,6 +164,9 @@ pub async fn get_search_route(State(state): State<AppState>, Path(id): Path<Stri
     let rid = request_id(&headers);
     if auth_user_from_headers(&headers).is_none() {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
+    }
+    if !require_role(&headers, VIEW_ROLES) {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
     match load_search_by_id(&state.backend, &id).await {
         Ok(Some(search)) => Json(search_json(&search)).into_response(),
@@ -164,6 +180,9 @@ pub async fn get_search_candidates_route(State(state): State<AppState>, Path(id)
     if auth_user_from_headers(&headers).is_none() {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
     }
+    if !require_role(&headers, VIEW_ROLES) {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
     match list_search_candidates(&state.backend, &id).await {
         Ok(rows) => Json(rows.iter().map(search_candidate_json).collect::<Vec<_>>()).into_response(),
         Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
@@ -174,6 +193,9 @@ pub async fn get_candidate_route(State(state): State<AppState>, Path(id): Path<S
     let rid = request_id(&headers);
     if auth_user_from_headers(&headers).is_none() {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
+    }
+    if !require_role(&headers, VIEW_ROLES) {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
     match load_candidate_by_id(&state.backend, &id).await {
         Ok(Some(candidate)) => Json(candidate_json(&candidate)).into_response(),
