@@ -157,6 +157,17 @@ Implemented controls:
   every other open tab of the same origin via `BroadcastChannel`, so a
   stale access token doesn't linger in another tab after logout. See
   `docs/SECURITY_ARCHITECTURE.md`.
+- **Rate limiter provider abstraction**: `RateLimiterBackend` trait around
+  the existing in-memory limiter (unchanged behavior), so a future
+  distributed backend is a drop-in swap. See `docs/SECURITY_ARCHITECTURE.md`.
+- **Expired session/token retention job**: `sessions`/`approval_tokens`
+  rows past their expiry are purged on a fixed interval instead of
+  accumulating forever. See `docs/SECURITY_ARCHITECTURE.md`.
+- **Paginated admin user list**: `GET /api/v1/admin/users` is now
+  server-side paginated, matching search history and the audit trail.
+- **OpenAPI drift guard**: `docs/openapi.json` plus
+  `server/tests/openapi_drift.rs`, which fails if a documented route stops
+  matching a real one.
 
 ## Planned (see `docs/ROADMAP.md` and `docs/SECURITY_ARCHITECTURE.md`)
 

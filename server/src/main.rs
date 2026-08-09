@@ -1,4 +1,4 @@
-use anatolia_bis_server::{config::Config, db::AppState, middleware, routes};
+use anatolia_bis_server::{config::Config, db, db::AppState, middleware, routes};
 use axum::http::{HeaderName, Method};
 use axum::middleware::from_fn;
 use tokio::net::TcpListener;
@@ -66,6 +66,8 @@ async fn main() {
     let index_file = format!("{static_dir}/index.html");
     let serve_frontend = ServeDir::new(&static_dir).not_found_service(ServeFile::new(index_file));
 
+    spawn_retention_job(state.clone());
+
     let app = routes::router(state)
         .fallback_service(serve_frontend)
         .layer(from_fn(middleware::security_headers))
@@ -107,6 +109,51 @@ async fn shutdown_signal() {
 // deployments that would rather let the service sleep (e.g. to avoid
 // masking real idle-shutdown behavior, or on a plan without the cold-start
 // penalty).
+// Deletes expired `sessions`/`approval_tokens` rows on a fixed interval so
+// they don't accumulate forever — neither table is ever read for anything
+// once its `expires_at` has passed (see `db::purge_expired_auth_records`).
+// Runs an initial pass shortly after startup rather than only after the
+// first full interval, so a long-running deployment doesn't carry a large
+// startup backlog for an hour before it's first cleaned up. Configurable
+// via `RETENTION_JOB_INTERVAL_SECS` (default 3600); `RETENTION_JOB_ENABLED
+// =false` disables it entirely, e.g. for a read-only replica or a test
+// environment that doesn't want a background writer.
+fn spawn_retention_job(state: AppState) {
+    if std::env::var("RETENTION_JOB_ENABLED").as_deref() == Ok("false") {
+        tracing::info!("retention job disabled via RETENTION_JOB_ENABLED=false");
+        return;
+    }
+    let interval_secs: u64 = std::env::var("RETENTION_JOB_INTERVAL_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3600);
+    tokio::spawn(async move {
+        let mut first_run = true;
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(if first_run {
+                30
+            } else {
+                interval_secs
+            }))
+            .await;
+            first_run = false;
+            match db::purge_expired_auth_records(&state.backend).await {
+                Ok((sessions, approval_tokens)) if sessions > 0 || approval_tokens > 0 => {
+                    tracing::info!(
+                        sessions,
+                        approval_tokens,
+                        "retention job purged expired rows"
+                    );
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    tracing::warn!(error = %err, "retention job failed");
+                }
+            }
+        }
+    });
+}
+
 fn spawn_self_ping() {
     if std::env::var("ENABLE_SELF_PING").as_deref() == Ok("false") {
         tracing::info!("self-ping disabled via ENABLE_SELF_PING=false");

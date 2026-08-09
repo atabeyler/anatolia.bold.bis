@@ -152,7 +152,12 @@
     "empty": "Noch keine Benutzer.",
     "loadError": "Benutzer konnten nicht geladen werden.",
     "createSuccess": "Benutzer erstellt.",
-    "createError": "Benutzer konnte nicht erstellt werden."
+    "createError": "Benutzer konnte nicht erstellt werden.",
+    "pagination": {
+      "previous": "Zurück",
+      "next": "Weiter",
+      "pageOf": "Seite {{page}} von {{totalPages}}"
+    }
   },
   "search": {
     "subtitle": "BIOMETRISCHE SUCHE",
@@ -165,6 +170,8 @@
     "searching": "Suche läuft…",
     "resultsHint": "Kandidaten in Rangfolge zur menschlichen Prüfung — keiner gilt als bestätigte Identität, bis ein autorisierter Prüfer dies ausdrücklich bestätigt.",
     "noCandidates": "Keine Kandidaten gefunden.",
+    "candidatesLoading": "Kandidaten werden geladen…",
+    "candidatesLoadError": "Kandidaten für diese Suche konnten nicht geladen werden.",
     "status": {
       "pending": "Ausstehend",
       "confirmed": "Identität bestätigt",

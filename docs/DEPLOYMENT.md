@@ -35,7 +35,7 @@ and this account already runs one for another project. `anatolia-bis`
 instead points `DATABASE_URL` at that existing instance (set manually in
 the dashboard — its "Internal Database URL", from that database's own
 Render page) and creates its own `anatolia_bis` schema there, isolated
-from the other project's tables (see `server/src/db.rs`'s `PG_SCHEMA` and
+from the other project's tables (see `server/src/db/mod.rs`'s `PG_SCHEMA` and
 its connection-pool `after_connect` hook, which is what makes every pooled
 connection resolve queries against that schema consistently). If a
 dedicated database is provisioned later instead, just point `DATABASE_URL`
@@ -73,6 +73,42 @@ frontend, connected to Postgres via `DATABASE_URL`).
 ## Environment variables
 
 See `docs/ENVIRONMENT.md` and `.env.example`.
+
+## Migrations
+
+There is no separate migration tool or a directory of numbered `.sql`
+files. `db::migrate` (run once at startup, before the server accepts any
+request — see `AppState::new`) issues `CREATE TABLE IF NOT EXISTS` for
+every table and `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for every
+column added after a table's initial creation, for both the Postgres and
+SQLite code paths. This is intentionally forward-only and idempotent:
+running it against an already-current database is a no-op, and there is
+no `down`/rollback migration mechanism — the schema only ever grows.
+
+**What "rollback" means here:** because there is no down-migration to run,
+recovering from a bad deploy that changed the schema has two paths,
+depending on what actually went wrong:
+
+- **The new code is the problem, not the schema change itself** (the
+  additive `ALTER TABLE` succeeded and is harmless on its own): roll back
+  by deploying the previous commit. The old code never reads the new
+  column, so its presence is inert.
+- **The schema change itself needs to be undone** (e.g. a column was
+  added with the wrong type, or a bug wrote bad data into it before being
+  caught): there is no automated path. Either restore from a pre-deploy
+  backup (see "Backups" below — take one before any deploy that changes
+  `db::migrate`) or manually reverse the specific statement (e.g.
+  `ALTER TABLE ... DROP COLUMN ...`) against the schema-scoped connection,
+  by hand, after confirming nothing else depends on it.
+
+Because of this, treat every change to `db::migrate` with the same care as
+a one-way door: review new `ALTER TABLE` statements for correctness before
+merging (data type, nullability, default value) rather than planning to
+fix them via a later migration, and prefer additive changes (new nullable
+column, new table) over changes that could destroy data (dropping or
+narrowing a column) — the latter should only ever happen after a backup
+and, for anything touching a column already in production use, the
+repository owner's explicit go-ahead.
 
 ## Backups
 

@@ -72,7 +72,7 @@ async fn find_user_id(app: &axum::Router, admin_token: &str, user_code: &str) ->
         .await
         .unwrap();
     let users = body_json(response).await;
-    users
+    users["items"]
         .as_array()
         .unwrap()
         .iter()
@@ -342,7 +342,7 @@ async fn deleting_a_user_soft_deletes_and_they_disappear_from_login_and_listing(
         .await
         .unwrap();
     let users = body_json(response).await;
-    assert!(!users
+    assert!(!users["items"]
         .as_array()
         .unwrap()
         .iter()

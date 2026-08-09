@@ -40,8 +40,17 @@ anatolia.bold.bis/
 - **Framework**: Axum, single binary, no separate process per concern.
 - **Persistence**: SQLx — PostgreSQL in production (in its own
   `anatolia_bis` schema, so the database can safely be shared with another
-  project — see `server/src/db.rs`'s `PG_SCHEMA`), SQLite as a local
-  development fallback.
+  project — see `server/src/db/mod.rs`'s `PG_SCHEMA`), SQLite as a local
+  development fallback. `server/src/db/` is split by domain where the
+  boundary is clean (`db/audit.rs` for the append-only audit trail);
+  connection setup, schema migration, and the identity/session/search
+  tables that are more interdependent still live in `db/mod.rs` — see
+  item 31 in `docs/HARDENING_CHECKLIST.md` for the rest of this split.
+- **Background jobs**: a retention task (`main.rs::spawn_retention_job`)
+  purges expired `sessions`/`approval_tokens` rows on a fixed interval
+  (`db::purge_expired_auth_records`); configurable via
+  `RETENTION_JOB_INTERVAL_SECS`/`RETENTION_JOB_ENABLED`, same pattern as
+  the existing self-ping job.
 - **Authentication**: JWT access tokens (15 min, returned in the response
   body) plus an `HttpOnly` refresh cookie (30 days), bcrypt password
   hashing, an admin-approval gate on new registrations, and RBAC

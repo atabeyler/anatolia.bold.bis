@@ -41,10 +41,14 @@ eşleşme bu dosyanın sonunda listelidir.
 
 ## P1 — Auth ve Hesap Güvenliği
 
-7. [~] Login rate limiting'i geliştir — per-account + per-IP + burst
-   pencereleri eklendi (Milestone A). Ayrı bir **rate limiter provider
-   interface'i** (ileride Redis/DB-backed limiter takılabilecek soyutlama)
-   **oluşturulmadı** — hâlâ tek in-memory `RateLimiter` var.
+7. [x] Login rate limiting'i geliştir — per-account + per-IP + burst
+   pencereleri eklendi (Milestone A). Rate limiter provider interface'i
+   eklendi: `server/src/ratelimit.rs`'te `RateLimiterBackend` trait'i,
+   mevcut in-memory implementasyon `InMemoryRateLimiter` olarak yeniden
+   adlandırıldı ve trait'i implemente ediyor. `AppState.rate_limiter`
+   artık `Arc<dyn RateLimiterBackend>` — davranış değişmedi (hâlâ tek
+   in-memory, distributed değil), ama ileride Redis/DB-backed bir limiter
+   eklemek call site'ları değiştirmeden mümkün.
 8. [x] User enumeration açığını kapat — `registrationTrackingToken` +
    `registration-status/:token`. (Milestone A)
 9. [x] Password reset akışını tamamla — e-postası kayıtlı hesaplar için gerçek
@@ -61,7 +65,13 @@ eşleşme bu dosyanın sonunda listelidir.
 10. [ ] MFA altyapısı ekle — TOTP altyapısı **yapılmadı**.
 11. [~] Role değişiminde JWT stale yetki sorunu — ban anında session revoke
     var (Milestone A). Role **downgrade** anında session revoke / auth_version
-    increment **yapılmadı**.
+    increment **yapılmadı**. Bu oturumda tekrar değerlendirildi ve
+    bilinçli olarak ertelendi: backend'de zaten bir rol değiştirme
+    endpoint'i yok, bu maddeyi tamamlamak önce böyle bir endpoint'i
+    sıfırdan eklemeyi gerektiriyor — hangi rolün kime hangi rolü
+    atayabileceği, kendi kendine rol değiştirmenin engellenmesi gibi
+    tasarım kararları içeren gerçek bir özellik (madde 37'nin four-eyes
+    policy'si gibi), basit bir hardening düzeltmesi değil.
 
 ## P1 — Authorization ve Organizasyon
 
@@ -88,7 +98,14 @@ eşleşme bu dosyanın sonunda listelidir.
     (Milestone C)
 17. [ ] Face quality pipeline (`FaceDetector`/`FaceAligner`/
     `FaceQualityEvaluator`/`EmbeddingProvider` interface'leri) — **yapılmadı**.
-18. [ ] Raw image retention (config + retention job) — **yapılmadı**.
+18. [x] Raw image retention — probe görüntüleri zaten hiçbir zaman
+    diskte/veritabanında saklanmıyor (`search.rs`, `image_validation.rs`);
+    yalnızca türetilen skorlar kalıcı hale geliyor. Bu, mümkün olan en
+    sıkı retention politikası (sıfır retention) ve bilinçli bir tasarım
+    kararı — ayrıca bir "job" gerektirmiyor çünkü silinecek bir şey yok.
+    `docs/DEPLOYMENT.md`'nin Backups bölümünde bu açıkça belgelendi.
+    Gerçek biyometrik motor (madde 20-23) eklendiğinde ham görüntü/
+    template saklama ihtiyacı doğarsa bu madde yeniden ele alınmalı.
 
 ## P1 — Gerçek Biyometrik Motor
 
@@ -125,15 +142,29 @@ eşleşme bu dosyanın sonunda listelidir.
     milestone'una bağlı). (Milestone C)
 29. [x] TOP_K config — `SEARCH_DEFAULT_TOP_K`/`SEARCH_MAX_TOP_K`, requested
     top-k search kaydında saklanıyor. (Milestone C)
-30. [~] Pagination — search history (`GET /api/v1/search`) ve audit logs
+30. [x] Pagination — search history (`GET /api/v1/search`) ve audit logs
     paginated (Milestone B/C). **Users listesi** (`GET /api/v1/admin/users`)
-    bilinçli olarak ertelendi (küçük/sınırlı veri seti). Tek bir search'ün
-    candidate listesi zaten top-k ile sınırlı, ayrı pagination gerekmedi.
+    de artık aynı desenle (`page`/`pageSize`/`items`/`total`)
+    server-side paginated — `db::list_users_page` eklendi, frontend
+    `AdminPage`'e sayfa ileri/geri navigasyonu eklendi (6 dilde
+    `admin.pagination.*` çevirileri). Tek bir search'ün candidate listesi
+    zaten top-k ile sınırlı, ayrı pagination gerekmedi.
 
 ## P1 — Data Privacy
 
-31. [ ] Data domain ayrımı (Identity/Biometric/Search/Audit domain'lerinin
-    repository/service katmanlarında ayrılması) — **yapılmadı**.
+31. [~] Data domain ayrımı — `server/src/db.rs` (2600+ satır) artık
+    `server/src/db/` dizini: `db/mod.rs` (bağlantı kurulumu, schema
+    migration, `AppState` — her domain'in ortak altyapısı) ve `db/audit.rs`
+    (append-only audit trail — diğer domain'lere en az bağımlı olduğu için
+    ilk ayrılan). `crate::db::X` importları hiçbir çağıran dosyada
+    değişmedi (`pub use audit::*` ile re-export edildi). **Eksik kalan:**
+    identity (users), session/approval-token ve search/candidate/
+    verification domain'leri hâlâ `db/mod.rs` içinde birlikte —
+    bunları ayrı dosyalara taşımak (2000+ satırlık, production'da
+    Postgres'e karşı test edilemeyen bir kod tabanının geri kalanını)
+    tek bir oturumda riske atmak yerine bilinçli olarak ertelendi;
+    audit örneği deseni kanıtladı, geri kalanı ayrı bir batch'te
+    yapılmalı.
 32. [~] National ID hassasiyeti — `GET`/`PATCH /api/v1/admin/users`
     yanıtlarında `nationalId` artık son iki hane dışında maskeleniyor
     (`admin::mask_national_id`); admin panelindeki düzenleme formu da
@@ -192,8 +223,16 @@ eşleşme bu dosyanın sonunda listelidir.
     izin verilmeyen karakter) sessizce üretilen bir UUID ile değiştiriliyor.
     Doğrulama `server/src/error.rs::request_id`'de merkezi hale getirildi
     (admin/audit/auth/search'teki 4 ayrı kopya kaldırıldı).
-40. [ ] OpenAPI (machine-readable spec, CI'da docs drift kontrolü) —
-    **yapılmadı**, API.md hâlâ elle yazılan markdown.
+40. [x] OpenAPI — `docs/openapi.json` eklendi (33 path/method, tüm
+    router route'larını kapsıyor). `server/tests/openapi_drift.rs` her
+    dokümante edilmiş path'i gerçek router'a karşı deniyor ve route
+    eksikse (axum'un imzası: boş body ile 404) testi kırıyor — bilerek
+    bozulmuş bir path ile doğrulandı. `.github/workflows/ci.yml` zaten
+    `cargo test` çalıştırdığı için bu drift kontrolü ek bir CI adımı
+    gerektirmeden otomatik olarak CI'ın parçası. API.md hâlâ ana kaynak
+    (request/response şekilleri, rate limit'ler, hata kodları için);
+    openapi.json kasıtlı olarak hafif tutuldu, eksiksiz şema
+    tanımlamıyor.
 
 ## P2 — Admin
 
@@ -225,8 +264,15 @@ eşleşme bu dosyanın sonunda listelidir.
     `@import` ediyor. `index.css`'in geri kalanı (layout/component
     kuralları) bilinçli olarak tek dosyada bırakıldı — bileşen bazlı tam
     parçalama daha büyük, ayrı bir refactor.
-45. [~] Error/empty/loading state — Audit Logs ekranında eklendi. Diğer
-    sayfalarda sistematik olarak gözden geçirilmedi.
+45. [x] Error/empty/loading state — Audit Logs ekranında zaten vardı. Bu
+    oturumda tüm sayfalar tek tek gözden geçirildi:
+    LoginPage/ResetPasswordPage/AdminPage zaten submitting/error/success
+    state'lerini doğru yönetiyordu. Tek gerçek eksik DashboardPage'de
+    bulundu ve düzeltildi: bir search'ün adayları yüklenirken hata olursa
+    (`getSearchCandidates` reddedilirse) önceden bu, sessizce boş bir
+    diziye düşüyordu — "hiç aday yok" ile "yükleme başarısız oldu"
+    ayırt edilemiyordu. Artık ayrı bir loading/error state'i var
+    (`search.candidatesLoading`/`search.candidatesLoadError`, 6 dilde).
 46. [ ] Accessibility denetimi (keyboard nav, focus trap, aria, contrast,
     RTL, reduced-motion) — **yapılmadı**.
 47. [~] Search result UX (rank/score/source/review status/reviewer/
@@ -245,10 +291,23 @@ eşleşme bu dosyanın sonunda listelidir.
 
 50. [x] 6 dil korunuyor (en/tr/de/fr/ar/ru), Arabic RTL bozulmadı.
 51. [x] Locale parity test — zaten vardı, her yeni key eklemesinde korundu.
-52. [~] Status translations — mevcut durumlar çevrildi; sistematik bir
-    `status.*` haritalama denetimi yapılmadı.
+52. [x] Status translations — sistematik denetim yapıldı: tüm
+    `.tsx`/`.ts` dosyalarında "Pending"/"Confirmed"/"Rejected" gibi
+    hardcode edilmiş İngilizce status metni aranmadı (grep ile
+    doğrulandı), tüm durum rozetleri (`search.status.*`,
+    `admin.badge.*`) i18n üzerinden geçiyor. Locale parity testi
+    (`client/src/i18n/locales.test.ts`, CI'da `npm run test` ile
+    çalışıyor) 6 dilin aynı key setine sahip olduğunu zaten yapısal
+    olarak garanti ediyor.
 53. [~] Date/number formatting (Intl API) — Audit Logs ekranında
-    `Intl.DateTimeFormat` kullanıldı; diğer ekranlarda sistematik değil.
+    `Intl.DateTimeFormat` kullanıldı. Bu oturumda diğer ekranlar
+    denetlendi: Dashboard/Admin sayfalarında şu an başka hiçbir ham
+    tarih/sayı gösterimi yok (search/candidate kartları timestamp
+    göstermiyor, yalnızca isim/durum) — yani düzeltilecek gerçek bir
+    eksik bulunamadı. `GET /api/v1/search/{id}/candidates/{id}/history`
+    endpoint'i (verification event timestamp'leri) henüz frontend'de hiç
+    tüketilmiyor; o ekran eklendiğinde `Intl.DateTimeFormat` ile
+    başlaması gerekiyor.
 
 ## P2 — Logging ve Observability
 
@@ -263,9 +322,25 @@ eşleşme bu dosyanın sonunda listelidir.
 
 57. [ ] Async search hazırlığı (queue-ready `SearchService` tasarımı, 202 +
     polling/SSE) — **yapılmadı** (hâlâ senkron; state machine kavramsal
-    olarak queue-ready ama gerçek async akış yok).
-58. [ ] Retention job'ları (expired sessions/approval tokens/reset tokens/
-    probe images) — **yapılmadı**.
+    olarak queue-ready ama gerçek async akış yok). Bu oturumda tekrar
+    değerlendirildi ve bilinçli olarak ertelendi: sahte bir queue
+    soyutlaması eklemek (davranışı değiştirmeyen) CLAUDE.md'nin
+    "no half-finished implementations" kuralına aykırı olurdu; gerçek
+    async akış `POST /api/v1/search/face`'in response contract'ını
+    (`200` yerine `202` + polling/SSE) değiştiriyor — bu, frontend'i de
+    kapsayan ve polling/SSE kararını gerektiren ayrı bir özellik.
+58. [x] Retention job'ları — `db::purge_expired_auth_records` eklendi:
+    süresi dolmuş `sessions` ve `approval_tokens` satırlarını siliyor.
+    `main.rs::spawn_retention_job` bunu sabit aralıklarla (varsayılan
+    saatte bir, ilk çalıştırma başlangıçtan 30sn sonra) çağırıyor;
+    `RETENTION_JOB_ENABLED=false` ile kapatılabiliyor,
+    `RETENTION_JOB_INTERVAL_SECS` ile aralık ayarlanabiliyor
+    (self-ping job'ıyla aynı desen). `server/tests/retention.rs` ile
+    doğrulandı: süresi dolmuş satırlar siliniyor, dolmamışlar
+    korunuyor. "Probe images" bu maddenin kapsamına dahil değil —
+    madde 18'de açıklandığı gibi zaten hiç saklanmıyor, "reset tokens"
+    ayrı bir tablo değil, `approval_tokens` tablosunun bir `purpose`
+    değeri (zaten kapsandı).
 
 ## P2 — Connector / OSINT Katmanı (P2 eki, 40 madde)
 
@@ -289,16 +364,31 @@ eşleşme bu dosyanın sonunda listelidir.
     `REVIEWER`/`AUDITOR`) her biriyle tek tek deneniyor ve sonuç
     `permission.rs`'teki policy ile karşılaştırılıyor (izinli roller asla
     `403` görmemeli, izinsiz roller her zaman `403` görmeli).
-64. [ ] Frontend test genişletme (dil değişimi, RTL, login/logout, session
-    expiry, search validation, review/audit/admin permission, error state) —
-    **yapılmadı**, mevcut 8 test korunuyor ama yeni özellikler için test
-    eklenmedi.
+64. [~] Frontend test genişletme — 6 test dosyası, 15 test (önceki
+    oturumlardan: dil değişimi/RTL zaten `App.test.tsx`'te; bu oturumda
+    eklenenler: multi-tab logout — `AuthContext.test.tsx`,
+    `authBroadcast.test.ts` — 4 test; `LoginPage.test.tsx` — sign-in/
+    sign-up mod geçişi ve başarısız login'de çevrilmiş hata mesajı — 2
+    test; `DashboardPage.test.tsx` — bir search'ün adaylarını
+    yüklerken hata durumu ("no candidates" ile karıştırılmıyor) — 1
+    test). **Kapsanmayan:** session expiry (refresh-fail → signed-out)
+    ve review/audit/admin permission'ın component seviyesinde ayrı
+    testleri — bunlar zaten backend'de (`role_matrix.rs` dahil) sıkı
+    şekilde test ediliyor; frontend tarafında component-seviyeli bir
+    permission testi hâlâ eksik.
 
 ## P2 — CI
 
 65. [ ] CI genişletme (dependency vuln scan, secret scan, locale parity CI
     testi, docs/API consistency testi) — **yapılmadı**, `.github/workflows/
-    ci.yml` bu oturumlarda değiştirilmedi.
+    ci.yml` bu oturumlarda değiştirilmedi. Not: "docs/API consistency
+    testi" parçası artık dolaylı olarak karşılanıyor — madde 40'taki
+    `server/tests/openapi_drift.rs` zaten `cargo test` üzerinden çalışıyor;
+    burada eksik kalan yalnızca dependency/secret scan ve ayrı bir locale
+    parity CI adımı (locale parity'nin kendisi zaten
+    `client/src/i18n/locales.test.ts` ile test ediliyor ve `npm run test`
+    CI'da çalışıyorsa örtük olarak kapsanıyor — bu maddenin asıl eksiği
+    dependency/secret taramaları).
 66. [x] Lockfile (`Cargo.lock`, `package-lock.json`) commitli ve reproducible
     — zaten öyleydi, korundu.
 

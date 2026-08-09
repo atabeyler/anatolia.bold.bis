@@ -112,7 +112,7 @@ async fn full_registration_and_admin_approval_flow() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let users = body_json(response).await;
-    let pending_user = users
+    let pending_user = users["items"]
         .as_array()
         .unwrap()
         .iter()

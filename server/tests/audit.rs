@@ -114,7 +114,7 @@ async fn audit_endpoint_requires_a_privileged_role() {
         .await
         .unwrap();
     let users = body_json(response).await;
-    let operator_id = users
+    let operator_id = users["items"]
         .as_array()
         .unwrap()
         .iter()

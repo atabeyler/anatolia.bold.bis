@@ -94,7 +94,7 @@ async fn approve_and_login(
         .await
         .unwrap();
     let users = body_json(response).await;
-    let user_id = users
+    let user_id = users["items"]
         .as_array()
         .unwrap()
         .iter()
