@@ -15,25 +15,8 @@ use crate::db::{
     SearchRow, VerificationEventRow,
 };
 use crate::error::{request_id, ApiError};
-use crate::roles;
+use crate::permission;
 
-const SEARCH_ROLES: &[&str] = &[
-    roles::OPERATOR,
-    roles::REVIEWER,
-    roles::SECURITY_ADMIN,
-    roles::SYSTEM_ADMIN,
-];
-const REVIEW_ROLES: &[&str] = &[roles::REVIEWER, roles::SECURITY_ADMIN, roles::SYSTEM_ADMIN];
-// Everyone who may see search/candidate records: the search/review roles
-// above, plus AUDITOR — whose entire purpose is read-only oversight of
-// exactly this data, per docs/SECURITY_ARCHITECTURE.md.
-const VIEW_ROLES: &[&str] = &[
-    roles::OPERATOR,
-    roles::REVIEWER,
-    roles::SECURITY_ADMIN,
-    roles::SYSTEM_ADMIN,
-    roles::AUDITOR,
-];
 const DEFAULT_PAGE_SIZE: i64 = 50;
 
 fn search_json(search: &SearchRow) -> serde_json::Value {
@@ -105,7 +88,7 @@ pub async fn create_search_route(
     let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
     };
-    if !SEARCH_ROLES.contains(&claims.role.as_str()) {
+    if !permission::can_create_search(&claims.role) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
 
@@ -140,8 +123,9 @@ pub async fn create_search_route(
     let Some(image_bytes) = image_bytes.filter(|b| !b.is_empty()) else {
         return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
     };
-    let image_bytes = match crate::image_validation::validate_probe_image(&image_bytes) {
-        Ok(()) => image_bytes,
+    let image_bytes = match crate::image_validation::validate_and_sanitize_probe_image(&image_bytes)
+    {
+        Ok(sanitized) => sanitized,
         Err(code) => return ApiError::new(code, code_message_key(code), rid).into_response(),
     };
     if case_reference.is_empty() || purpose.is_empty() {
@@ -284,7 +268,7 @@ pub async fn list_searches_route(
     if auth_user_from_headers(&headers, &state.secrets.jwt_secret).is_none() {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
     }
-    if !require_role(&state, &headers, VIEW_ROLES) {
+    if !require_role(&state, &headers, permission::can_view_search) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
     let page = query.page.unwrap_or(1).max(1);
@@ -310,7 +294,7 @@ pub async fn get_search_route(
     if auth_user_from_headers(&headers, &state.secrets.jwt_secret).is_none() {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
     }
-    if !require_role(&state, &headers, VIEW_ROLES) {
+    if !require_role(&state, &headers, permission::can_view_search) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
     match load_search_by_id(&state.backend, &id).await {
@@ -329,7 +313,7 @@ pub async fn get_search_candidates_route(
     if auth_user_from_headers(&headers, &state.secrets.jwt_secret).is_none() {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
     }
-    if !require_role(&state, &headers, VIEW_ROLES) {
+    if !require_role(&state, &headers, permission::can_view_search) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
     match list_search_candidates(&state.backend, &id).await {
@@ -353,7 +337,7 @@ pub async fn get_candidate_history_route(
     if auth_user_from_headers(&headers, &state.secrets.jwt_secret).is_none() {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
     }
-    if !require_role(&state, &headers, VIEW_ROLES) {
+    if !require_role(&state, &headers, permission::can_view_search) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
     let candidates = match list_search_candidates(&state.backend, &search_id).await {
@@ -387,7 +371,7 @@ pub async fn get_candidate_route(
     if auth_user_from_headers(&headers, &state.secrets.jwt_secret).is_none() {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
     }
-    if !require_role(&state, &headers, VIEW_ROLES) {
+    if !require_role(&state, &headers, permission::can_view_search) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
     match load_candidate_by_id(&state.backend, &id).await {
@@ -421,7 +405,7 @@ async fn review(
     let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
     };
-    if !require_role(&state, &headers, REVIEW_ROLES) {
+    if !require_role(&state, &headers, permission::can_review_candidate) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
 

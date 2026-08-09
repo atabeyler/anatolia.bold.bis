@@ -67,16 +67,23 @@ eşleşme bu dosyanın sonunda listelidir.
 
 12. [ ] Organization / Unit modeli ekle — **bilinçli olarak ertelendi**, ayrı
     büyük mimari iş (docs/ROADMAP.md'de not edildi).
-13. [ ] Merkezi permission policy (`can_create_search` vb. fonksiyonlar) —
-    **yapılmadı**, rol kontrolleri hâlâ handler'larda dağınık
-    (`require_role(..., ROLES)` çağrıları).
+13. [x] Merkezi permission policy — `server/src/permission.rs` eklendi:
+    `can_create_search`/`can_view_search`/`can_review_candidate`/
+    `can_view_audit_log`/`can_administer_users`. `auth::require_role`
+    artık bir rol dizisi değil, bu fonksiyonlardan birini alıyor;
+    `admin.rs`/`audit.rs`/`search.rs` içindeki dağınık `*_ROLES` sabitleri
+    kaldırılıp bu fonksiyonlara yönlendirildi.
 
 ## P1 — Image Upload
 
 14. [x] Gerçek image validation — magic-byte + gerçek decode, JPEG/PNG/WEBP,
     10MB limit, boyut/piksel limitleri, decompression-bomb koruması.
     (Milestone C)
-15. [ ] EXIF metadata temizle — **yapılmadı**.
+15. [x] EXIF metadata temizle — `image_validation::validate_and_sanitize_probe_image`
+    artık doğrulamanın yanında karar verilen görüntüyü decode edilmiş
+    piksel verisinden (her zaman PNG olarak) yeniden encode edip
+    döndürüyor; `image` crate'in encoder'ları EXIF/XMP chunk'larını asla
+    geri yazmadığından bu tek başına yeterli bir temizleme adımı.
 16. [x] Latitude/longitude validation — aralık + eşleşen çift zorunluluğu.
     (Milestone C)
 17. [ ] Face quality pipeline (`FaceDetector`/`FaceAligner`/
@@ -217,7 +224,12 @@ eşleşme bu dosyanın sonunda listelidir.
     katmanına bağlı, henüz yok.
 48. [x] Session expired UX — refresh fail → signed-out + login route (zaten
     mevcuttu).
-49. [ ] Multi-tab logout (BroadcastChannel) — **yapılmadı**.
+49. [x] Multi-tab logout (BroadcastChannel) — `client/src/services/authBroadcast.ts`
+    eklendi: `logout`/`logoutAll` artık aynı origin'deki diğer sekmelere
+    `BroadcastChannel` üzerinden bir "signed-out" mesajı yayınlıyor,
+    `AuthContext` bu mesajı dinleyip kendi state'ini anında signed-out'a
+    çeviriyor (`BroadcastChannel` desteklemeyen ortamda sessizce devre
+    dışı kalıyor, çökmüyor).
 
 ## P2 — I18n
 

@@ -19,6 +19,7 @@ use crate::db::{
 };
 use crate::email::escape_html;
 use crate::error::{request_id, ApiError};
+use crate::permission;
 use crate::roles;
 
 #[derive(Debug, Deserialize)]
@@ -76,10 +77,8 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
         == 0
 }
 
-const ADMIN_ROLES: &[&str] = &[roles::SYSTEM_ADMIN, roles::SECURITY_ADMIN];
-
 fn require_admin(state: &AppState, headers: &HeaderMap) -> Option<Response> {
-    if require_role(state, headers, ADMIN_ROLES) {
+    if require_role(state, headers, permission::can_administer_users) {
         None
     } else {
         Some(ApiError::new("FORBIDDEN", "errors.forbidden", request_id(headers)).into_response())

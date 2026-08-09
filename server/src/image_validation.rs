@@ -3,6 +3,11 @@
 //! image-upload hardening requirement. Only ever called on the raw bytes
 //! before anything derives a face embedding from them; the raw bytes
 //! themselves are never persisted or logged (see `search.rs`).
+//!
+//! Validation also sanitizes: the returned bytes are a fresh re-encode of
+//! the decoded pixel data, not the original upload, which strips any
+//! EXIF/XMP metadata (GPS coordinates, device make/model, timestamps) a
+//! phone camera embeds before the image is used anywhere downstream.
 
 /// 10 MB — comfortably above a real phone-camera JPEG, well below
 /// anything that should ever hit this endpoint.
@@ -15,10 +20,11 @@ const MAX_DIMENSION: u32 = 8000;
 /// above (a very wide, very short image could pass those individually).
 const MAX_PIXELS: u64 = 40_000_000;
 
-/// Validates `bytes` as a genuine, decodable JPEG/PNG/WEBP probe image.
-/// Returns the stable error code to surface to the client on failure —
-/// never a raw decode-library error message.
-pub fn validate_probe_image(bytes: &[u8]) -> Result<(), &'static str> {
+/// Validates `bytes` as a genuine, decodable JPEG/PNG/WEBP probe image and
+/// returns a sanitized re-encode of it (see module docs — this strips EXIF
+/// metadata). Returns the stable error code to surface to the client on
+/// failure — never a raw decode-library error message.
+pub fn validate_and_sanitize_probe_image(bytes: &[u8]) -> Result<Vec<u8>, &'static str> {
     if bytes.len() > MAX_IMAGE_BYTES {
         return Err("IMAGE_TOO_LARGE");
     }
@@ -39,7 +45,18 @@ pub fn validate_probe_image(bytes: &[u8]) -> Result<(), &'static str> {
         return Err("IMAGE_DIMENSIONS_INVALID");
     }
 
-    Ok(())
+    // `image`'s encoders don't carry EXIF/XMP chunks over from the
+    // decoded representation, so re-encoding (always to PNG, regardless
+    // of the original container format) is sufficient sanitization on
+    // its own — no separate metadata-stripping step is needed.
+    let mut sanitized = Vec::new();
+    decoded
+        .write_to(
+            &mut std::io::Cursor::new(&mut sanitized),
+            image::ImageFormat::Png,
+        )
+        .map_err(|_| "IMAGE_DECODE_FAILED")?;
+    Ok(sanitized)
 }
 
 /// Magic-byte sniff for the three formats this endpoint accepts. Checked
@@ -64,13 +81,16 @@ mod tests {
 
     #[test]
     fn empty_bytes_are_rejected_as_unsupported() {
-        assert_eq!(validate_probe_image(&[]), Err("UNSUPPORTED_IMAGE_TYPE"));
+        assert_eq!(
+            validate_and_sanitize_probe_image(&[]),
+            Err("UNSUPPORTED_IMAGE_TYPE")
+        );
     }
 
     #[test]
     fn random_bytes_are_rejected_as_unsupported() {
         assert_eq!(
-            validate_probe_image(b"not an image at all"),
+            validate_and_sanitize_probe_image(b"not an image at all"),
             Err("UNSUPPORTED_IMAGE_TYPE")
         );
     }
@@ -79,13 +99,19 @@ mod tests {
     fn oversized_payload_is_rejected_before_decoding() {
         let mut fake_jpeg = vec![0xFF, 0xD8, 0xFF];
         fake_jpeg.resize(MAX_IMAGE_BYTES + 1, 0);
-        assert_eq!(validate_probe_image(&fake_jpeg), Err("IMAGE_TOO_LARGE"));
+        assert_eq!(
+            validate_and_sanitize_probe_image(&fake_jpeg),
+            Err("IMAGE_TOO_LARGE")
+        );
     }
 
     #[test]
     fn truncated_jpeg_with_valid_magic_bytes_fails_to_decode() {
         let truncated = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
-        assert_eq!(validate_probe_image(&truncated), Err("IMAGE_DECODE_FAILED"));
+        assert_eq!(
+            validate_and_sanitize_probe_image(&truncated),
+            Err("IMAGE_DECODE_FAILED")
+        );
     }
 
     #[test]
@@ -99,7 +125,7 @@ mod tests {
             0xB0, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
         ];
         assert_eq!(
-            validate_probe_image(png_1x1),
+            validate_and_sanitize_probe_image(png_1x1),
             Err("IMAGE_DIMENSIONS_INVALID")
         );
     }
@@ -111,6 +137,43 @@ mod tests {
         image::DynamicImage::ImageRgb8(img)
             .write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Png)
             .unwrap();
-        assert_eq!(validate_probe_image(&buf), Ok(()));
+        let sanitized = validate_and_sanitize_probe_image(&buf).expect("valid image");
+        let redecoded = image::load_from_memory(&sanitized).expect("sanitized output decodes");
+        assert_eq!((redecoded.width(), redecoded.height()), (64, 64));
+    }
+
+    #[test]
+    fn exif_metadata_is_not_present_in_sanitized_output() {
+        // A JPEG carrying an APP1/EXIF segment with a GPS marker string.
+        // The sanitized re-encode must not contain the marker bytes.
+        let mut jpeg = Vec::new();
+        let img = image::RgbImage::from_pixel(64, 64, image::Rgb([10, 20, 30]));
+        image::DynamicImage::ImageRgb8(img)
+            .write_to(
+                &mut std::io::Cursor::new(&mut jpeg),
+                image::ImageFormat::Jpeg,
+            )
+            .unwrap();
+
+        let marker = b"GPSLatitudeMarker12345";
+        let mut exif_payload = Vec::new();
+        exif_payload.extend_from_slice(b"Exif\x00\x00");
+        exif_payload.extend_from_slice(marker);
+        let mut segment = Vec::new();
+        segment.push(0xFF);
+        segment.push(0xE1); // APP1
+        let len = (exif_payload.len() + 2) as u16;
+        segment.extend_from_slice(&len.to_be_bytes());
+        segment.extend_from_slice(&exif_payload);
+
+        // Splice the fake APP1 segment right after the JPEG SOI marker.
+        let mut with_exif = jpeg[0..2].to_vec();
+        with_exif.extend_from_slice(&segment);
+        with_exif.extend_from_slice(&jpeg[2..]);
+
+        let sanitized = validate_and_sanitize_probe_image(&with_exif).expect("valid image");
+        assert!(!sanitized
+            .windows(marker.len())
+            .any(|window| window == marker));
     }
 }

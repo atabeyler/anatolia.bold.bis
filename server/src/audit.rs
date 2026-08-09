@@ -17,7 +17,7 @@ use crate::db::{
     insert_audit_event, list_audit_events, AppState, AuditEventFilter, AuditEventRow, NewAuditEvent,
 };
 use crate::error::{request_id, ApiError};
-use crate::roles;
+use crate::permission;
 
 pub mod action {
     // Auth
@@ -192,7 +192,6 @@ impl AuditRecorder {
     }
 }
 
-const VIEW_ROLES: &[&str] = &[roles::AUDITOR, roles::SECURITY_ADMIN, roles::SYSTEM_ADMIN];
 const DEFAULT_PAGE_SIZE: i64 = 50;
 const MAX_PAGE_SIZE: i64 = 200;
 
@@ -246,7 +245,7 @@ pub async fn list_audit_events_route(
     Query(query): Query<AuditQuery>,
 ) -> Response {
     let rid = request_id(&headers);
-    if !require_role(&state, &headers, VIEW_ROLES) {
+    if !require_role(&state, &headers, permission::can_view_audit_log) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
 
