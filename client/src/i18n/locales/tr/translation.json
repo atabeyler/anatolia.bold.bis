@@ -38,6 +38,9 @@
     "registrationPendingMessage": "Talebiniz alındı. Kullanıcı kodu: {{code}} — yönetici onayı bekleniyor…",
     "accountApproved": "Hesabınız onaylandı. Artık giriş yapabilirsiniz.",
     "logout": "Çıkış yap",
+    "logoutAll": "Tüm cihazlardan çıkış yap",
+    "logoutAllConfirm": "Bu işlem sizi tüm cihazlardan çıkış yaptıracaktır. Devam edilsin mi?",
+    "loggedOutAll": "Tüm cihazlardan çıkış yapıldı.",
     "welcomeBack": "{{name}} olarak giriş yapıldı",
     "forgotPassword": "Şifremi unuttum",
     "forgotPasswordIdentifier": "Kullanıcı kodu veya e-posta",
@@ -162,5 +165,39 @@
     "location": "Arama sırasında operatör konumu: {{lat}} · {{lon}}",
     "mockNotice": "Demo modu: bu dağıtım simüle bir eşleştirme motoru kullanıyor — skorlar gerçek biyometrik eşleştirmeden değil, simülasyondan türetilmiştir.",
     "viewOnlyNotice": "Rolünüz yalnızca aramaları ve adayları görüntülemenize izin veriyor. Yeni arama başlatmak için OPERATOR, REVIEWER, SECURITY_ADMIN veya SYSTEM_ADMIN rolü gerekir."
+  },
+  "audit": {
+    "panelTitle": "DENETİM KAYDI",
+    "openLabel": "Denetim kaydı",
+    "tabTitle": "DENETİM KAYDI",
+    "loading": "Denetim olayları yükleniyor…",
+    "loadError": "Denetim olayları yüklenemedi.",
+    "empty": "Bu filtrelerle eşleşen denetim olayı yok.",
+    "unknownActor": "Sistem",
+    "hideDetail": "Ayrıntıyı gizle",
+    "showDetail": "Ayrıntıyı göster",
+    "filters": {
+      "heading": "Filtreler",
+      "dateFrom": "Başlangıç",
+      "dateTo": "Bitiş",
+      "action": "Eylem",
+      "result": "Sonuç",
+      "caseReference": "Vaka referansı",
+      "resourceType": "Kaynak türü",
+      "hint": "Filtreler sunucu tarafında uygulanır. Kullanmayacağınız alanı boş bırakın.",
+      "apply": "Filtreleri uygula",
+      "clear": "Temizle"
+    },
+    "detail": {
+      "requestId": "İstek kimliği",
+      "ipAddress": "IP adresi",
+      "userAgent": "Kullanıcı aracısı",
+      "metadata": "Meta veri"
+    },
+    "pagination": {
+      "previous": "Önceki",
+      "next": "Sonraki",
+      "pageOf": "Sayfa {{page}} / {{totalPages}}"
+    }
   }
 }

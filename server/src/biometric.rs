@@ -18,7 +18,12 @@ pub struct ScoredCandidate {
 pub trait BiometricProvider: Send + Sync {
     /// Ranks every given candidate against the probe image bytes,
     /// highest similarity first, capped at `top_k`.
-    fn search(&self, probe: &[u8], candidates: Vec<CandidateRow>, top_k: usize) -> Vec<ScoredCandidate>;
+    fn search(
+        &self,
+        probe: &[u8],
+        candidates: Vec<CandidateRow>,
+        top_k: usize,
+    ) -> Vec<ScoredCandidate>;
 }
 
 /// Deterministic, content-seeded mock: the same probe image always scores
@@ -30,7 +35,12 @@ pub trait BiometricProvider: Send + Sync {
 pub struct MockBiometricProvider;
 
 impl BiometricProvider for MockBiometricProvider {
-    fn search(&self, probe: &[u8], candidates: Vec<CandidateRow>, top_k: usize) -> Vec<ScoredCandidate> {
+    fn search(
+        &self,
+        probe: &[u8],
+        candidates: Vec<CandidateRow>,
+        top_k: usize,
+    ) -> Vec<ScoredCandidate> {
         let mut scored: Vec<ScoredCandidate> = candidates
             .into_iter()
             .map(|candidate| {

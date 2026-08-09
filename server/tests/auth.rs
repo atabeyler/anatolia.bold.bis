@@ -112,7 +112,12 @@ async fn full_registration_and_admin_approval_flow() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let users = body_json(response).await;
-    let pending_user = users.as_array().unwrap().iter().find(|u| u["userCode"] == "OPER01").unwrap();
+    let pending_user = users
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|u| u["userCode"] == "OPER01")
+        .unwrap();
     let operator_id = pending_user["id"].as_str().unwrap().to_string();
 
     let response = app
@@ -163,7 +168,12 @@ async fn full_registration_and_admin_approval_flow() {
     // 6. An unauthenticated request is rejected with the stable error shape.
     let response = app
         .clone()
-        .oneshot(Request::builder().uri("/api/v1/users/me").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/users/me")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);

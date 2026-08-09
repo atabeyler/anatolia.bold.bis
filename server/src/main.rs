@@ -34,7 +34,13 @@ async fn main() {
             .collect();
         CorsLayer::new()
             .allow_origin(AllowOrigin::list(origins))
-            .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+            .allow_methods([
+                Method::GET,
+                Method::POST,
+                Method::PUT,
+                Method::PATCH,
+                Method::DELETE,
+            ])
             .allow_headers([
                 HeaderName::from_static("content-type"),
                 HeaderName::from_static("authorization"),
@@ -43,7 +49,9 @@ async fn main() {
             .allow_credentials(true)
     };
 
-    let state = AppState::new().await.expect("failed to initialize application state");
+    let state = AppState::new(&config)
+        .await
+        .expect("failed to initialize application state");
 
     // Serves the built frontend from the same process/origin as the API —
     // one deployed service, one URL, no separate static-site resource.

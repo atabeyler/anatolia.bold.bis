@@ -38,6 +38,9 @@
     "registrationPendingMessage": "تم استلام الطلب. رمز المستخدم: {{code}} — بانتظار موافقة الإدارة…",
     "accountApproved": "تمت الموافقة على حسابك. يمكنك الآن تسجيل الدخول.",
     "logout": "تسجيل الخروج",
+    "logoutAll": "تسجيل الخروج من كل مكان",
+    "logoutAllConfirm": "سيؤدي هذا إلى تسجيل خروجك من جميع الأجهزة. هل تريد المتابعة؟",
+    "loggedOutAll": "لقد تم تسجيل خروجك من جميع الأجهزة.",
     "welcomeBack": "تم تسجيل الدخول باسم {{name}}",
     "forgotPassword": "هل نسيت كلمة المرور؟",
     "forgotPasswordIdentifier": "رمز المستخدم أو البريد الإلكتروني",
@@ -162,5 +165,39 @@
     "location": "موقع المشغّل وقت البحث: {{lat}} · {{lon}}",
     "mockNotice": "وضع تجريبي: يستخدم هذا النشر محرك مطابقة وهمي — النتائج محاكاة وليست مستمدة من مطابقة بيومترية حقيقية.",
     "viewOnlyNotice": "يسمح دورك بعرض عمليات البحث والمرشحين فقط. يتطلب بدء بحث جديد دور OPERATOR أو REVIEWER أو SECURITY_ADMIN أو SYSTEM_ADMIN."
+  },
+  "audit": {
+    "panelTitle": "سجل التدقيق",
+    "openLabel": "سجل التدقيق",
+    "tabTitle": "سجل التدقيق",
+    "loading": "جارٍ تحميل أحداث التدقيق…",
+    "loadError": "فشل تحميل أحداث التدقيق.",
+    "empty": "لا توجد أحداث تدقيق مطابقة لهذه المرشحات.",
+    "unknownActor": "النظام",
+    "hideDetail": "إخفاء التفاصيل",
+    "showDetail": "عرض التفاصيل",
+    "filters": {
+      "heading": "المرشحات",
+      "dateFrom": "من",
+      "dateTo": "إلى",
+      "action": "الإجراء",
+      "result": "النتيجة",
+      "caseReference": "مرجع الحالة",
+      "resourceType": "نوع المورد",
+      "hint": "تُطبَّق المرشحات من جانب الخادم. اترك الحقل فارغًا لتجاهله.",
+      "apply": "تطبيق المرشحات",
+      "clear": "مسح"
+    },
+    "detail": {
+      "requestId": "معرِّف الطلب",
+      "ipAddress": "عنوان IP",
+      "userAgent": "وكيل المستخدم",
+      "metadata": "بيانات وصفية"
+    },
+    "pagination": {
+      "previous": "السابق",
+      "next": "التالي",
+      "pageOf": "صفحة {{page}} من {{totalPages}}"
+    }
   }
 }

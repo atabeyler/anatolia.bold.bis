@@ -38,6 +38,9 @@
     "registrationPendingMessage": "Anfrage erhalten. Benutzercode: {{code}} — wartet auf Genehmigung durch den Administrator…",
     "accountApproved": "Ihr Konto wurde genehmigt. Sie können sich jetzt anmelden.",
     "logout": "Abmelden",
+    "logoutAll": "Überall abmelden",
+    "logoutAllConfirm": "Dadurch werden Sie auf allen Geräten abgemeldet. Fortfahren?",
+    "loggedOutAll": "Sie wurden auf allen Geräten abgemeldet.",
     "welcomeBack": "Angemeldet als {{name}}",
     "forgotPassword": "Passwort vergessen?",
     "forgotPasswordIdentifier": "Benutzercode oder E-Mail",
@@ -162,5 +165,39 @@
     "location": "Standort des Operators bei der Suche: {{lat}} · {{lon}}",
     "mockNotice": "Demo-Modus: Diese Instanz verwendet eine simulierte Abgleich-Engine — die Werte sind simuliert, nicht aus echtem biometrischem Abgleich abgeleitet.",
     "viewOnlyNotice": "Ihre Rolle erlaubt nur das Ansehen von Suchen und Kandidaten. Für eine neue Suche ist die Rolle OPERATOR, REVIEWER, SECURITY_ADMIN oder SYSTEM_ADMIN erforderlich."
+  },
+  "audit": {
+    "panelTitle": "AUDIT-PROTOKOLL",
+    "openLabel": "Audit-Protokoll",
+    "tabTitle": "AUDIT-PROTOKOLL",
+    "loading": "Audit-Ereignisse werden geladen…",
+    "loadError": "Audit-Ereignisse konnten nicht geladen werden.",
+    "empty": "Keine Audit-Ereignisse entsprechen diesen Filtern.",
+    "unknownActor": "System",
+    "hideDetail": "Details ausblenden",
+    "showDetail": "Details anzeigen",
+    "filters": {
+      "heading": "Filter",
+      "dateFrom": "Von",
+      "dateTo": "Bis",
+      "action": "Aktion",
+      "result": "Ergebnis",
+      "caseReference": "Fallreferenz",
+      "resourceType": "Ressourcentyp",
+      "hint": "Filter werden serverseitig angewendet. Lassen Sie ein Feld leer, um es zu ignorieren.",
+      "apply": "Filter anwenden",
+      "clear": "Zurücksetzen"
+    },
+    "detail": {
+      "requestId": "Anfrage-ID",
+      "ipAddress": "IP-Adresse",
+      "userAgent": "User-Agent",
+      "metadata": "Metadaten"
+    },
+    "pagination": {
+      "previous": "Zurück",
+      "next": "Weiter",
+      "pageOf": "Seite {{page}} von {{totalPages}}"
+    }
   }
 }

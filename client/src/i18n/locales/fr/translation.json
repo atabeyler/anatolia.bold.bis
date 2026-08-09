@@ -38,6 +38,9 @@
     "registrationPendingMessage": "Demande reçue. Code utilisateur : {{code}} — en attente d'approbation par l'administrateur…",
     "accountApproved": "Votre compte a été approuvé. Vous pouvez maintenant vous connecter.",
     "logout": "Se déconnecter",
+    "logoutAll": "Se déconnecter partout",
+    "logoutAllConfirm": "Cela vous déconnectera de tous les appareils. Continuer ?",
+    "loggedOutAll": "Vous avez été déconnecté de tous les appareils.",
     "welcomeBack": "Connecté en tant que {{name}}",
     "forgotPassword": "Mot de passe oublié ?",
     "forgotPasswordIdentifier": "Code utilisateur ou e-mail",
@@ -162,5 +165,39 @@
     "location": "Position de l'opérateur au moment de la recherche : {{lat}} · {{lon}}",
     "mockNotice": "Mode démo : ce déploiement utilise un moteur de correspondance simulé — les scores sont simulés, pas issus d'une correspondance biométrique réelle.",
     "viewOnlyNotice": "Votre rôle permet uniquement de consulter les recherches et les candidats. Démarrer une nouvelle recherche requiert le rôle OPERATOR, REVIEWER, SECURITY_ADMIN ou SYSTEM_ADMIN."
+  },
+  "audit": {
+    "panelTitle": "JOURNAL D'AUDIT",
+    "openLabel": "Journal d'audit",
+    "tabTitle": "JOURNAL D'AUDIT",
+    "loading": "Chargement des événements d'audit…",
+    "loadError": "Échec du chargement des événements d'audit.",
+    "empty": "Aucun événement d'audit ne correspond à ces filtres.",
+    "unknownActor": "Système",
+    "hideDetail": "Masquer le détail",
+    "showDetail": "Afficher le détail",
+    "filters": {
+      "heading": "Filtres",
+      "dateFrom": "Du",
+      "dateTo": "Au",
+      "action": "Action",
+      "result": "Résultat",
+      "caseReference": "Référence du dossier",
+      "resourceType": "Type de ressource",
+      "hint": "Les filtres sont appliqués côté serveur. Laissez un champ vide pour l'ignorer.",
+      "apply": "Appliquer les filtres",
+      "clear": "Effacer"
+    },
+    "detail": {
+      "requestId": "ID de la requête",
+      "ipAddress": "Adresse IP",
+      "userAgent": "Agent utilisateur",
+      "metadata": "Métadonnées"
+    },
+    "pagination": {
+      "previous": "Précédent",
+      "next": "Suivant",
+      "pageOf": "Page {{page}} sur {{totalPages}}"
+    }
   }
 }

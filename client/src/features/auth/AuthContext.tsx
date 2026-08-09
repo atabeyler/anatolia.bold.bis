@@ -11,8 +11,9 @@ interface AuthContextValue {
   status: 'loading' | 'signed-out' | 'signed-in';
   rememberedUserCode: string;
   login: (userCode: string, password: string, rememberMe: boolean) => Promise<void>;
-  register: (payload: RegisterPayload) => Promise<void>;
+  register: (payload: RegisterPayload) => Promise<string>;
   logout: () => Promise<void>;
+  logoutAll: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -55,9 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const register = useCallback(async (payload: RegisterPayload) => {
-    await authClient.register(payload);
-  }, []);
+  const register = useCallback(async (payload: RegisterPayload) => authClient.register(payload), []);
 
   const logout = useCallback(async () => {
     await authClient.logout().catch(() => {});
@@ -66,9 +65,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('signed-out');
   }, []);
 
+  const logoutAll = useCallback(async () => {
+    await authClient.logoutAll().catch(() => {});
+    setAccessToken(null);
+    setUser(null);
+    setStatus('signed-out');
+  }, []);
+
   const value = useMemo(
-    () => ({ user, status, rememberedUserCode, login, register, logout }),
-    [user, status, rememberedUserCode, login, register, logout],
+    () => ({ user, status, rememberedUserCode, login, register, logout, logoutAll }),
+    [user, status, rememberedUserCode, login, register, logout, logoutAll],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

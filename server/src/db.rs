@@ -6,6 +6,7 @@ use sqlx::{postgres::PgPoolOptions, FromRow, PgPool, SqlitePool};
 use std::str::FromStr;
 use uuid::Uuid;
 
+use crate::config::Config;
 use crate::ratelimit::RateLimiter;
 
 #[derive(Clone)]
@@ -14,10 +15,21 @@ pub enum DbBackend {
     Sqlite(SqlitePool),
 }
 
+/// Secrets resolved once at startup by `Config::from_env` (see
+/// config.rs). Token code reads these from `AppState` rather than
+/// re-reading the environment on every request.
+#[derive(Clone)]
+pub struct Secrets {
+    pub jwt_secret: String,
+    pub jwt_refresh_secret: String,
+    pub approval_token_secret: String,
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub backend: DbBackend,
     pub rate_limiter: Arc<RateLimiter>,
+    pub secrets: Arc<Secrets>,
 }
 
 impl AppState {
@@ -28,11 +40,14 @@ impl AppState {
     /// look healthy while holding no real users — a Postgres outage should
     /// be a visible deploy failure, not confusing, unrequested data loss.
     /// Locally, an unset `DATABASE_URL` just falls back to a SQLite file.
-    pub async fn new() -> Result<Self, sqlx::Error> {
+    pub async fn new(config: &Config) -> Result<Self, sqlx::Error> {
         let backend = match std::env::var("DATABASE_URL") {
             Ok(url) if !url.trim().is_empty() => DbBackend::Postgres(connect_postgres(&url).await?),
             _ if std::env::var("RENDER_EXTERNAL_URL").is_ok() => {
                 panic!("DATABASE_URL is required on the web deploy (RENDER_EXTERNAL_URL is set) — refusing to fall back to a throwaway SQLite database");
+            }
+            _ if crate::config::is_production() => {
+                panic!("Production must not fall back to SQLite — set DATABASE_URL");
             }
             _ => sqlite_backend().await?,
         };
@@ -40,6 +55,11 @@ impl AppState {
         Ok(Self {
             backend,
             rate_limiter: Arc::new(RateLimiter::new()),
+            secrets: Arc::new(Secrets {
+                jwt_secret: config.jwt_secret.clone(),
+                jwt_refresh_secret: config.jwt_refresh_secret.clone(),
+                approval_token_secret: config.approval_token_secret.clone(),
+            }),
         })
     }
 
@@ -58,6 +78,11 @@ impl AppState {
         Self {
             backend,
             rate_limiter: Arc::new(RateLimiter::new()),
+            secrets: Arc::new(Secrets {
+                jwt_secret: "test-access-secret-not-for-prod-use-only".to_string(),
+                jwt_refresh_secret: "test-refresh-secret-not-for-prod-use-only".to_string(),
+                approval_token_secret: "test-approval-secret-not-for-prod-use-only".to_string(),
+            }),
         }
     }
 }
@@ -87,7 +112,11 @@ async fn connect_postgres(database_url: &str) -> Result<PgPool, sqlx::Error> {
             // connection handles it.
             .after_connect(|conn, _meta| {
                 Box::pin(async move {
-                    sqlx::Executor::execute(conn, format!("SET search_path TO {PG_SCHEMA}, public").as_str()).await?;
+                    sqlx::Executor::execute(
+                        conn,
+                        format!("SET search_path TO {PG_SCHEMA}, public").as_str(),
+                    )
+                    .await?;
                     Ok(())
                 })
             })
@@ -184,6 +213,16 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             sqlx::query("ALTER TABLE users ALTER COLUMN email DROP NOT NULL")
                 .execute(pool)
                 .await?;
+            // Unguessable pointer a pending applicant polls with instead of
+            // their own (guessable) user code — see
+            // auth::registration_status and the enumeration-protection note
+            // on the old pending_status endpoint it replaced.
+            sqlx::query("ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_tracking_token VARCHAR(64) UNIQUE")
+                .execute(pool)
+                .await?;
+            sqlx::query("ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_tracking_expires_at TIMESTAMPTZ")
+                .execute(pool)
+                .await?;
 
             sqlx::query(
                 r#"
@@ -241,6 +280,106 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             sqlx::query("ALTER TABLE searches ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION")
                 .execute(pool)
                 .await?;
+
+            // Server-side session records backing refresh-token rotation
+            // (see auth.rs). The raw refresh token is never stored — only
+            // its hash — so a database read alone can never yield a usable
+            // token.
+            sqlx::query(
+                r#"
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id UUID NOT NULL,
+                    refresh_token_hash TEXT NOT NULL,
+                    token_family_id UUID NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    expires_at TIMESTAMPTZ NOT NULL,
+                    last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    revoked_at TIMESTAMPTZ,
+                    user_agent TEXT,
+                    ip_address TEXT,
+                    rotation_counter INTEGER NOT NULL DEFAULT 0,
+                    created_by TEXT
+                )
+                "#,
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id)")
+                .execute(pool)
+                .await?;
+            sqlx::query("CREATE INDEX IF NOT EXISTS idx_sessions_token_family_id ON sessions (token_family_id)")
+                .execute(pool)
+                .await?;
+
+            // Single-use, short-lived tokens for the registration
+            // approve/reject email flow — deliberately separate from
+            // `sessions` (a different purpose, a different secret; see
+            // auth::sign_approval_token).
+            sqlx::query(
+                r#"
+                CREATE TABLE IF NOT EXISTS approval_tokens (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id UUID NOT NULL,
+                    token_hash TEXT NOT NULL,
+                    purpose TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    expires_at TIMESTAMPTZ NOT NULL,
+                    consumed_at TIMESTAMPTZ,
+                    result TEXT
+                )
+                "#,
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query("CREATE INDEX IF NOT EXISTS idx_approval_tokens_user_id ON approval_tokens (user_id)")
+                .execute(pool)
+                .await?;
+
+            // Append-only. No handler ever UPDATEs or DELETEs a row here —
+            // see audit.rs. `metadata` holds anything action-specific that
+            // doesn't warrant its own column (never raw biometric data,
+            // passwords, or tokens — see AuditService::record).
+            sqlx::query(
+                r#"
+                CREATE TABLE IF NOT EXISTS audit_events (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    "timestamp" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    actor_user_id UUID,
+                    actor_user_code TEXT,
+                    actor_role TEXT,
+                    action TEXT NOT NULL,
+                    request_id TEXT NOT NULL,
+                    case_reference TEXT,
+                    resource_type TEXT,
+                    resource_id TEXT,
+                    result TEXT NOT NULL,
+                    source TEXT,
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    metadata JSONB,
+                    organization_id UUID,
+                    organization_unit_id UUID
+                )
+                "#,
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query("CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp ON audit_events (\"timestamp\")")
+                .execute(pool)
+                .await?;
+            sqlx::query(
+                "CREATE INDEX IF NOT EXISTS idx_audit_events_action ON audit_events (action)",
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query("CREATE INDEX IF NOT EXISTS idx_audit_events_actor_user_id ON audit_events (actor_user_id)")
+                .execute(pool)
+                .await?;
+            sqlx::query("CREATE INDEX IF NOT EXISTS idx_audit_events_case_reference ON audit_events (case_reference)")
+                .execute(pool)
+                .await?;
+
             seed_mock_candidates_pg(pool).await?;
         }
         DbBackend::Sqlite(pool) => {
@@ -258,6 +397,8 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                     is_approved INTEGER NOT NULL DEFAULT 0,
                     is_banned INTEGER NOT NULL DEFAULT 0,
                     ban_reason TEXT,
+                    registration_tracking_token TEXT UNIQUE,
+                    registration_tracking_expires_at TEXT,
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
                     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 )
@@ -265,6 +406,18 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             )
             .execute(pool)
             .await?;
+            // Best-effort patch for a dev.db predating these columns — the
+            // CREATE TABLE IF NOT EXISTS above is a no-op against an
+            // existing file. Errors (column already exists) are expected
+            // and ignored, same pattern as the Postgres ADD COLUMN IF NOT
+            // EXISTS branch above.
+            let _ = sqlx::query("ALTER TABLE users ADD COLUMN registration_tracking_token TEXT")
+                .execute(pool)
+                .await;
+            let _ =
+                sqlx::query("ALTER TABLE users ADD COLUMN registration_tracking_expires_at TEXT")
+                    .execute(pool)
+                    .await;
 
             sqlx::query(
                 r#"
@@ -313,6 +466,96 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             )
             .execute(pool)
             .await?;
+
+            sqlx::query(
+                r#"
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    refresh_token_hash TEXT NOT NULL,
+                    token_family_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    expires_at TEXT NOT NULL,
+                    last_used_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    revoked_at TEXT,
+                    user_agent TEXT,
+                    ip_address TEXT,
+                    rotation_counter INTEGER NOT NULL DEFAULT 0,
+                    created_by TEXT
+                )
+                "#,
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id)")
+                .execute(pool)
+                .await?;
+            sqlx::query("CREATE INDEX IF NOT EXISTS idx_sessions_token_family_id ON sessions (token_family_id)")
+                .execute(pool)
+                .await?;
+
+            sqlx::query(
+                r#"
+                CREATE TABLE IF NOT EXISTS approval_tokens (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    token_hash TEXT NOT NULL,
+                    purpose TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    expires_at TEXT NOT NULL,
+                    consumed_at TEXT,
+                    result TEXT
+                )
+                "#,
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query("CREATE INDEX IF NOT EXISTS idx_approval_tokens_user_id ON approval_tokens (user_id)")
+                .execute(pool)
+                .await?;
+
+            sqlx::query(
+                r#"
+                CREATE TABLE IF NOT EXISTS audit_events (
+                    id TEXT PRIMARY KEY,
+                    timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    actor_user_id TEXT,
+                    actor_user_code TEXT,
+                    actor_role TEXT,
+                    action TEXT NOT NULL,
+                    request_id TEXT NOT NULL,
+                    case_reference TEXT,
+                    resource_type TEXT,
+                    resource_id TEXT,
+                    result TEXT NOT NULL,
+                    source TEXT,
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    metadata TEXT,
+                    organization_id TEXT,
+                    organization_unit_id TEXT
+                )
+                "#,
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query(
+                "CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp ON audit_events (timestamp)",
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query(
+                "CREATE INDEX IF NOT EXISTS idx_audit_events_action ON audit_events (action)",
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query("CREATE INDEX IF NOT EXISTS idx_audit_events_actor_user_id ON audit_events (actor_user_id)")
+                .execute(pool)
+                .await?;
+            sqlx::query("CREATE INDEX IF NOT EXISTS idx_audit_events_case_reference ON audit_events (case_reference)")
+                .execute(pool)
+                .await?;
+
             seed_mock_candidates_sqlite(pool).await?;
         }
     }
@@ -334,37 +577,45 @@ const MOCK_CANDIDATE_NAMES: &[&str] = &[
 ];
 
 async fn seed_mock_candidates_pg(pool: &PgPool) -> Result<(), sqlx::Error> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM candidates").fetch_one(pool).await?;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM candidates")
+        .fetch_one(pool)
+        .await?;
     if count > 0 {
         return Ok(());
     }
     for (i, name) in MOCK_CANDIDATE_NAMES.iter().enumerate() {
         let reference_code = format!("CAND-{:04}", i + 1);
-        sqlx::query("INSERT INTO candidates (reference_code, full_name, notes) VALUES ($1, $2, $3)")
-            .bind(&reference_code)
-            .bind(name)
-            .bind("Synthetic seed record for the mock biometric provider — not a real person.")
-            .execute(pool)
-            .await?;
+        sqlx::query(
+            "INSERT INTO candidates (reference_code, full_name, notes) VALUES ($1, $2, $3)",
+        )
+        .bind(&reference_code)
+        .bind(name)
+        .bind("Synthetic seed record for the mock biometric provider — not a real person.")
+        .execute(pool)
+        .await?;
     }
     Ok(())
 }
 
 async fn seed_mock_candidates_sqlite(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM candidates").fetch_one(pool).await?;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM candidates")
+        .fetch_one(pool)
+        .await?;
     if count > 0 {
         return Ok(());
     }
     for (i, name) in MOCK_CANDIDATE_NAMES.iter().enumerate() {
         let id = Uuid::new_v4().to_string();
         let reference_code = format!("CAND-{:04}", i + 1);
-        sqlx::query("INSERT INTO candidates (id, reference_code, full_name, notes) VALUES (?1, ?2, ?3, ?4)")
-            .bind(&id)
-            .bind(&reference_code)
-            .bind(name)
-            .bind("Synthetic seed record for the mock biometric provider — not a real person.")
-            .execute(pool)
-            .await?;
+        sqlx::query(
+            "INSERT INTO candidates (id, reference_code, full_name, notes) VALUES (?1, ?2, ?3, ?4)",
+        )
+        .bind(&id)
+        .bind(&reference_code)
+        .bind(name)
+        .bind("Synthetic seed record for the mock biometric provider — not a real person.")
+        .execute(pool)
+        .await?;
     }
     Ok(())
 }
@@ -453,7 +704,10 @@ impl From<SqliteUserRow> for UserRow {
 const USER_COLUMNS: &str =
     "id, user_code, first_name, last_name, national_id, email, password_hash, role, is_approved, is_banned, ban_reason";
 
-pub async fn load_user_by_code(backend: &DbBackend, user_code: &str) -> Result<Option<UserRow>, sqlx::Error> {
+pub async fn load_user_by_code(
+    backend: &DbBackend,
+    user_code: &str,
+) -> Result<Option<UserRow>, sqlx::Error> {
     let code = user_code.trim().to_uppercase();
     match backend {
         DbBackend::Postgres(pool) => {
@@ -477,7 +731,10 @@ pub async fn load_user_by_code(backend: &DbBackend, user_code: &str) -> Result<O
     }
 }
 
-pub async fn load_user_by_id(backend: &DbBackend, id: &str) -> Result<Option<UserRow>, sqlx::Error> {
+pub async fn load_user_by_id(
+    backend: &DbBackend,
+    id: &str,
+) -> Result<Option<UserRow>, sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
             let Ok(uuid) = Uuid::parse_str(id) else {
@@ -579,6 +836,98 @@ pub async fn create_user(
     }
 }
 
+/// Stores the unguessable pointer a pending applicant polls with instead
+/// of their own (guessable) user code — see `auth::registration_status`.
+pub async fn set_registration_tracking_token(
+    backend: &DbBackend,
+    user_id: &str,
+    token: &str,
+    expires_at: chrono::DateTime<chrono::Utc>,
+) -> Result<(), sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(uuid) = Uuid::parse_str(user_id) else {
+                return Ok(());
+            };
+            sqlx::query("UPDATE users SET registration_tracking_token = $1, registration_tracking_expires_at = $2 WHERE id = $3")
+                .bind(token)
+                .bind(expires_at)
+                .bind(uuid)
+                .execute(pool)
+                .await?;
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query("UPDATE users SET registration_tracking_token = ?1, registration_tracking_expires_at = ?2 WHERE id = ?3")
+                .bind(token)
+                .bind(expires_at.to_rfc3339())
+                .bind(user_id)
+                .execute(pool)
+                .await?;
+        }
+    }
+    Ok(())
+}
+
+pub struct RegistrationTrackingStatus {
+    pub is_approved: bool,
+    pub is_banned: bool,
+    pub expires_at: String,
+}
+
+/// Looks a pending registration's status up by its unguessable tracking
+/// token instead of the (guessable, four-to-twenty-character) user code —
+/// the enumeration protection `auth::registration_status` relies on.
+pub async fn load_registration_tracking_status(
+    backend: &DbBackend,
+    token: &str,
+) -> Result<Option<RegistrationTrackingStatus>, sqlx::Error> {
+    use sqlx::Row;
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let row = sqlx::query(
+                "SELECT is_approved, is_banned, registration_tracking_expires_at::text AS expires_at \
+                 FROM users WHERE registration_tracking_token = $1",
+            )
+            .bind(token)
+            .fetch_optional(pool)
+            .await?;
+            Ok(row.map(|r| RegistrationTrackingStatus {
+                is_approved: r.try_get("is_approved").unwrap_or(false),
+                is_banned: r.try_get("is_banned").unwrap_or(false),
+                expires_at: r
+                    .try_get::<Option<String>, _>("expires_at")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default(),
+            }))
+        }
+        DbBackend::Sqlite(pool) => {
+            let row = sqlx::query(
+                "SELECT is_approved, is_banned, registration_tracking_expires_at AS expires_at \
+                 FROM users WHERE registration_tracking_token = ?1",
+            )
+            .bind(token)
+            .fetch_optional(pool)
+            .await?;
+            Ok(row.map(|r| RegistrationTrackingStatus {
+                is_approved: r
+                    .try_get::<i64, _>("is_approved")
+                    .map(|v| v != 0)
+                    .unwrap_or(false),
+                is_banned: r
+                    .try_get::<i64, _>("is_banned")
+                    .map(|v| v != 0)
+                    .unwrap_or(false),
+                expires_at: r
+                    .try_get::<Option<String>, _>("expires_at")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default(),
+            }))
+        }
+    }
+}
+
 /// Sets any subset of the moderation flags on a user; pass `None` to leave
 /// a field unchanged. Returns the updated row, or `None` if no user with
 /// this id exists.
@@ -675,21 +1024,28 @@ pub async fn update_user_profile(
     load_user_by_id(backend, id).await
 }
 
-pub async fn load_user_by_email(backend: &DbBackend, email: &str) -> Result<Option<UserRow>, sqlx::Error> {
+pub async fn load_user_by_email(
+    backend: &DbBackend,
+    email: &str,
+) -> Result<Option<UserRow>, sqlx::Error> {
     let email = email.trim().to_lowercase();
     match backend {
         DbBackend::Postgres(pool) => {
-            let row = sqlx::query_as::<_, PgUserRow>(&format!("SELECT {USER_COLUMNS} FROM users WHERE email = $1"))
-                .bind(&email)
-                .fetch_optional(pool)
-                .await?;
+            let row = sqlx::query_as::<_, PgUserRow>(&format!(
+                "SELECT {USER_COLUMNS} FROM users WHERE email = $1"
+            ))
+            .bind(&email)
+            .fetch_optional(pool)
+            .await?;
             Ok(row.map(UserRow::from))
         }
         DbBackend::Sqlite(pool) => {
-            let row = sqlx::query_as::<_, SqliteUserRow>(&format!("SELECT {USER_COLUMNS} FROM users WHERE email = ?1"))
-                .bind(&email)
-                .fetch_optional(pool)
-                .await?;
+            let row = sqlx::query_as::<_, SqliteUserRow>(&format!(
+                "SELECT {USER_COLUMNS} FROM users WHERE email = ?1"
+            ))
+            .bind(&email)
+            .fetch_optional(pool)
+            .await?;
             Ok(row.map(UserRow::from))
         }
     }
@@ -707,13 +1063,11 @@ pub async fn delete_user(backend: &DbBackend, id: &str) -> Result<bool, sqlx::Er
                 .await?
                 .rows_affected()
         }
-        DbBackend::Sqlite(pool) => {
-            sqlx::query("DELETE FROM users WHERE id = ?1")
-                .bind(id)
-                .execute(pool)
-                .await?
-                .rows_affected()
-        }
+        DbBackend::Sqlite(pool) => sqlx::query("DELETE FROM users WHERE id = ?1")
+            .bind(id)
+            .execute(pool)
+            .await?
+            .rows_affected(),
     };
     Ok(affected > 0)
 }
@@ -750,22 +1104,29 @@ pub async fn list_candidates(backend: &DbBackend) -> Result<Vec<CandidateRow>, s
     }
 }
 
-pub async fn load_candidate_by_id(backend: &DbBackend, id: &str) -> Result<Option<CandidateRow>, sqlx::Error> {
+pub async fn load_candidate_by_id(
+    backend: &DbBackend,
+    id: &str,
+) -> Result<Option<CandidateRow>, sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
             let Ok(uuid) = Uuid::parse_str(id) else {
                 return Ok(None);
             };
-            sqlx::query_as::<_, CandidateRow>("SELECT id::text, reference_code, full_name, notes FROM candidates WHERE id = $1")
-                .bind(uuid)
-                .fetch_optional(pool)
-                .await
+            sqlx::query_as::<_, CandidateRow>(
+                "SELECT id::text, reference_code, full_name, notes FROM candidates WHERE id = $1",
+            )
+            .bind(uuid)
+            .fetch_optional(pool)
+            .await
         }
         DbBackend::Sqlite(pool) => {
-            sqlx::query_as::<_, CandidateRow>("SELECT id, reference_code, full_name, notes FROM candidates WHERE id = ?1")
-                .bind(id)
-                .fetch_optional(pool)
-                .await
+            sqlx::query_as::<_, CandidateRow>(
+                "SELECT id, reference_code, full_name, notes FROM candidates WHERE id = ?1",
+            )
+            .bind(id)
+            .fetch_optional(pool)
+            .await
         }
     }
 }
@@ -837,22 +1198,29 @@ pub async fn create_search(
     }
 }
 
-pub async fn load_search_by_id(backend: &DbBackend, id: &str) -> Result<Option<SearchRow>, sqlx::Error> {
+pub async fn load_search_by_id(
+    backend: &DbBackend,
+    id: &str,
+) -> Result<Option<SearchRow>, sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
             let Ok(uuid) = Uuid::parse_str(id) else {
                 return Ok(None);
             };
-            sqlx::query_as::<_, SearchRow>(&format!("SELECT {SEARCH_COLUMNS_PG} FROM searches WHERE id = $1"))
-                .bind(uuid)
-                .fetch_optional(pool)
-                .await
+            sqlx::query_as::<_, SearchRow>(&format!(
+                "SELECT {SEARCH_COLUMNS_PG} FROM searches WHERE id = $1"
+            ))
+            .bind(uuid)
+            .fetch_optional(pool)
+            .await
         }
         DbBackend::Sqlite(pool) => {
-            sqlx::query_as::<_, SearchRow>(&format!("SELECT {SEARCH_COLUMNS_SQLITE} FROM searches WHERE id = ?1"))
-                .bind(id)
-                .fetch_optional(pool)
-                .await
+            sqlx::query_as::<_, SearchRow>(&format!(
+                "SELECT {SEARCH_COLUMNS_SQLITE} FROM searches WHERE id = ?1"
+            ))
+            .bind(id)
+            .fetch_optional(pool)
+            .await
         }
     }
 }
@@ -860,14 +1228,18 @@ pub async fn load_search_by_id(backend: &DbBackend, id: &str) -> Result<Option<S
 pub async fn list_searches(backend: &DbBackend) -> Result<Vec<SearchRow>, sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
-            sqlx::query_as::<_, SearchRow>(&format!("SELECT {SEARCH_COLUMNS_PG} FROM searches ORDER BY created_at DESC"))
-                .fetch_all(pool)
-                .await
+            sqlx::query_as::<_, SearchRow>(&format!(
+                "SELECT {SEARCH_COLUMNS_PG} FROM searches ORDER BY created_at DESC"
+            ))
+            .fetch_all(pool)
+            .await
         }
         DbBackend::Sqlite(pool) => {
-            sqlx::query_as::<_, SearchRow>(&format!("SELECT {SEARCH_COLUMNS_SQLITE} FROM searches ORDER BY created_at DESC"))
-                .fetch_all(pool)
-                .await
+            sqlx::query_as::<_, SearchRow>(&format!(
+                "SELECT {SEARCH_COLUMNS_SQLITE} FROM searches ORDER BY created_at DESC"
+            ))
+            .fetch_all(pool)
+            .await
         }
     }
 }
@@ -913,7 +1285,9 @@ pub async fn insert_search_candidate(
 ) -> Result<(), sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
-            let (Ok(search_uuid), Ok(candidate_uuid)) = (Uuid::parse_str(search_id), Uuid::parse_str(candidate_id)) else {
+            let (Ok(search_uuid), Ok(candidate_uuid)) =
+                (Uuid::parse_str(search_id), Uuid::parse_str(candidate_id))
+            else {
                 return Ok(());
             };
             sqlx::query("INSERT INTO search_candidates (search_id, candidate_id, score) VALUES ($1, $2, $3)")
@@ -937,16 +1311,21 @@ pub async fn insert_search_candidate(
     Ok(())
 }
 
-pub async fn list_search_candidates(backend: &DbBackend, search_id: &str) -> Result<Vec<SearchCandidateRow>, sqlx::Error> {
+pub async fn list_search_candidates(
+    backend: &DbBackend,
+    search_id: &str,
+) -> Result<Vec<SearchCandidateRow>, sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
             let Ok(uuid) = Uuid::parse_str(search_id) else {
                 return Ok(vec![]);
             };
-            sqlx::query_as::<_, SearchCandidateRow>(&format!("{SEARCH_CANDIDATE_SELECT_PG} WHERE sc.search_id = $1 ORDER BY sc.score DESC"))
-                .bind(uuid)
-                .fetch_all(pool)
-                .await
+            sqlx::query_as::<_, SearchCandidateRow>(&format!(
+                "{SEARCH_CANDIDATE_SELECT_PG} WHERE sc.search_id = $1 ORDER BY sc.score DESC"
+            ))
+            .bind(uuid)
+            .fetch_all(pool)
+            .await
         }
         DbBackend::Sqlite(pool) => {
             sqlx::query_as::<_, SearchCandidateRow>(&format!(
@@ -972,9 +1351,11 @@ pub async fn set_search_candidate_status(
 ) -> Result<Option<SearchCandidateRow>, sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
-            let (Ok(search_uuid), Ok(candidate_uuid), Ok(reviewer_uuid)) =
-                (Uuid::parse_str(search_id), Uuid::parse_str(candidate_id), Uuid::parse_str(reviewed_by))
-            else {
+            let (Ok(search_uuid), Ok(candidate_uuid), Ok(reviewer_uuid)) = (
+                Uuid::parse_str(search_id),
+                Uuid::parse_str(candidate_id),
+                Uuid::parse_str(reviewed_by),
+            ) else {
                 return Ok(None);
             };
             sqlx::query(
@@ -1006,5 +1387,655 @@ pub async fn set_search_candidate_status(
     }
     list_search_candidates(backend, search_id)
         .await
-        .map(|rows| rows.into_iter().find(|row| row.candidate_id == candidate_id))
+        .map(|rows| {
+            rows.into_iter()
+                .find(|row| row.candidate_id == candidate_id)
+        })
+}
+
+// ── Sessions (refresh-token rotation) ───────────────────────────────
+//
+// One row per logical session/token family. Rotation updates the same
+// row in place (new hash, new expiry, incremented counter) rather than
+// inserting a fresh row per refresh — the row *is* the family's current
+// state. The raw refresh token is never persisted, only its hash.
+
+#[derive(Debug, Clone, FromRow)]
+pub struct SessionRow {
+    pub id: String,
+    pub user_id: String,
+    pub refresh_token_hash: String,
+    pub token_family_id: String,
+    pub created_at: String,
+    pub expires_at: String,
+    pub last_used_at: String,
+    pub revoked_at: Option<String>,
+    pub user_agent: Option<String>,
+    pub ip_address: Option<String>,
+    pub rotation_counter: i64,
+    pub created_by: Option<String>,
+}
+
+const SESSION_COLUMNS_PG: &str = "id::text, user_id::text, refresh_token_hash, token_family_id::text, created_at::text, \
+     expires_at::text, last_used_at::text, revoked_at::text, user_agent, ip_address, rotation_counter, created_by";
+const SESSION_COLUMNS_SQLITE: &str =
+    "id, user_id, refresh_token_hash, token_family_id, created_at, \
+     expires_at, last_used_at, revoked_at, user_agent, ip_address, rotation_counter, created_by";
+
+#[allow(clippy::too_many_arguments)]
+pub async fn create_session(
+    backend: &DbBackend,
+    user_id: &str,
+    refresh_token_hash: &str,
+    token_family_id: &str,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    user_agent: Option<&str>,
+    ip_address: Option<&str>,
+    created_by: &str,
+) -> Result<Option<SessionRow>, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let (Ok(user_uuid), Ok(family_uuid)) =
+                (Uuid::parse_str(user_id), Uuid::parse_str(token_family_id))
+            else {
+                return Ok(None);
+            };
+            sqlx::query_as::<_, SessionRow>(&format!(
+                "INSERT INTO sessions (user_id, refresh_token_hash, token_family_id, expires_at, user_agent, ip_address, created_by)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING {SESSION_COLUMNS_PG}"
+            ))
+            .bind(user_uuid)
+            .bind(refresh_token_hash)
+            .bind(family_uuid)
+            .bind(expires_at)
+            .bind(user_agent)
+            .bind(ip_address)
+            .bind(created_by)
+            .fetch_one(pool)
+            .await
+            .map(Some)
+        }
+        DbBackend::Sqlite(pool) => {
+            let id = Uuid::new_v4().to_string();
+            sqlx::query(
+                "INSERT INTO sessions (id, user_id, refresh_token_hash, token_family_id, expires_at, user_agent, ip_address, created_by)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            )
+            .bind(&id)
+            .bind(user_id)
+            .bind(refresh_token_hash)
+            .bind(token_family_id)
+            .bind(expires_at.to_rfc3339())
+            .bind(user_agent)
+            .bind(ip_address)
+            .bind(created_by)
+            .execute(pool)
+            .await?;
+            find_session_by_id(backend, &id).await
+        }
+    }
+}
+
+pub async fn find_session_by_id(
+    backend: &DbBackend,
+    id: &str,
+) -> Result<Option<SessionRow>, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(uuid) = Uuid::parse_str(id) else {
+                return Ok(None);
+            };
+            sqlx::query_as::<_, SessionRow>(&format!(
+                "SELECT {SESSION_COLUMNS_PG} FROM sessions WHERE id = $1"
+            ))
+            .bind(uuid)
+            .fetch_optional(pool)
+            .await
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query_as::<_, SessionRow>(&format!(
+                "SELECT {SESSION_COLUMNS_SQLITE} FROM sessions WHERE id = ?1"
+            ))
+            .bind(id)
+            .fetch_optional(pool)
+            .await
+        }
+    }
+}
+
+/// Looks a session up by its token family — the value carried in the
+/// refresh JWT's claims, stable across rotations. Returns the row even if
+/// already revoked, so callers can distinguish "unknown family" from
+/// "known family, already revoked" (the latter is a reuse signal).
+pub async fn find_session_by_family(
+    backend: &DbBackend,
+    token_family_id: &str,
+) -> Result<Option<SessionRow>, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(uuid) = Uuid::parse_str(token_family_id) else {
+                return Ok(None);
+            };
+            sqlx::query_as::<_, SessionRow>(&format!(
+                "SELECT {SESSION_COLUMNS_PG} FROM sessions WHERE token_family_id = $1"
+            ))
+            .bind(uuid)
+            .fetch_optional(pool)
+            .await
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query_as::<_, SessionRow>(&format!(
+                "SELECT {SESSION_COLUMNS_SQLITE} FROM sessions WHERE token_family_id = ?1"
+            ))
+            .bind(token_family_id)
+            .fetch_optional(pool)
+            .await
+        }
+    }
+}
+
+/// Applies token rotation to an existing, not-yet-revoked session: new
+/// refresh-token hash, new expiry, `last_used_at` touched, rotation
+/// counter incremented.
+pub async fn rotate_session(
+    backend: &DbBackend,
+    session_id: &str,
+    new_refresh_token_hash: &str,
+    new_expires_at: chrono::DateTime<chrono::Utc>,
+) -> Result<(), sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(uuid) = Uuid::parse_str(session_id) else {
+                return Ok(());
+            };
+            sqlx::query(
+                "UPDATE sessions SET refresh_token_hash = $1, expires_at = $2, last_used_at = NOW(),
+                 rotation_counter = rotation_counter + 1 WHERE id = $3 AND revoked_at IS NULL",
+            )
+            .bind(new_refresh_token_hash)
+            .bind(new_expires_at)
+            .bind(uuid)
+            .execute(pool)
+            .await?;
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query(
+                "UPDATE sessions SET refresh_token_hash = ?1, expires_at = ?2, last_used_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                 rotation_counter = rotation_counter + 1 WHERE id = ?3 AND revoked_at IS NULL",
+            )
+            .bind(new_refresh_token_hash)
+            .bind(new_expires_at.to_rfc3339())
+            .bind(session_id)
+            .execute(pool)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+pub async fn revoke_session(backend: &DbBackend, session_id: &str) -> Result<(), sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(uuid) = Uuid::parse_str(session_id) else {
+                return Ok(());
+            };
+            sqlx::query(
+                "UPDATE sessions SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL",
+            )
+            .bind(uuid)
+            .execute(pool)
+            .await?;
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query("UPDATE sessions SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1 AND revoked_at IS NULL")
+                .bind(session_id)
+                .execute(pool)
+                .await?;
+        }
+    }
+    Ok(())
+}
+
+/// Revokes every session sharing this token family — used on refresh-token
+/// reuse detection, where the whole family is considered compromised.
+pub async fn revoke_session_family(
+    backend: &DbBackend,
+    token_family_id: &str,
+) -> Result<(), sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(uuid) = Uuid::parse_str(token_family_id) else {
+                return Ok(());
+            };
+            sqlx::query("UPDATE sessions SET revoked_at = NOW() WHERE token_family_id = $1 AND revoked_at IS NULL")
+                .bind(uuid)
+                .execute(pool)
+                .await?;
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query(
+                "UPDATE sessions SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE token_family_id = ?1 AND revoked_at IS NULL",
+            )
+            .bind(token_family_id)
+            .execute(pool)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+/// Revokes every active session belonging to a user — used by logout-all,
+/// by ban, and (later) by role downgrade.
+pub async fn revoke_all_sessions_for_user(
+    backend: &DbBackend,
+    user_id: &str,
+) -> Result<(), sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(uuid) = Uuid::parse_str(user_id) else {
+                return Ok(());
+            };
+            sqlx::query(
+                "UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL",
+            )
+            .bind(uuid)
+            .execute(pool)
+            .await?;
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query("UPDATE sessions SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE user_id = ?1 AND revoked_at IS NULL")
+                .bind(user_id)
+                .execute(pool)
+                .await?;
+        }
+    }
+    Ok(())
+}
+
+// ── Approval tokens (registration approve/reject links) ────────────
+
+#[derive(Debug, Clone, FromRow)]
+pub struct ApprovalTokenRow {
+    pub id: String,
+    pub user_id: String,
+    pub token_hash: String,
+    pub purpose: String,
+    pub created_at: String,
+    pub expires_at: String,
+    pub consumed_at: Option<String>,
+    pub result: Option<String>,
+}
+
+const APPROVAL_TOKEN_COLUMNS_PG: &str =
+    "id::text, user_id::text, token_hash, purpose, created_at::text, expires_at::text, consumed_at::text, result";
+const APPROVAL_TOKEN_COLUMNS_SQLITE: &str =
+    "id, user_id, token_hash, purpose, created_at, expires_at, consumed_at, result";
+
+pub async fn create_approval_token(
+    backend: &DbBackend,
+    user_id: &str,
+    token_hash: &str,
+    purpose: &str,
+    expires_at: chrono::DateTime<chrono::Utc>,
+) -> Result<Option<ApprovalTokenRow>, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(user_uuid) = Uuid::parse_str(user_id) else {
+                return Ok(None);
+            };
+            sqlx::query_as::<_, ApprovalTokenRow>(&format!(
+                "INSERT INTO approval_tokens (user_id, token_hash, purpose, expires_at)
+                 VALUES ($1, $2, $3, $4) RETURNING {APPROVAL_TOKEN_COLUMNS_PG}"
+            ))
+            .bind(user_uuid)
+            .bind(token_hash)
+            .bind(purpose)
+            .bind(expires_at)
+            .fetch_one(pool)
+            .await
+            .map(Some)
+        }
+        DbBackend::Sqlite(pool) => {
+            let id = Uuid::new_v4().to_string();
+            sqlx::query(
+                "INSERT INTO approval_tokens (id, user_id, token_hash, purpose, expires_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            )
+            .bind(&id)
+            .bind(user_id)
+            .bind(token_hash)
+            .bind(purpose)
+            .bind(expires_at.to_rfc3339())
+            .execute(pool)
+            .await?;
+            find_approval_token_by_hash(backend, token_hash).await
+        }
+    }
+}
+
+pub async fn find_approval_token_by_hash(
+    backend: &DbBackend,
+    token_hash: &str,
+) -> Result<Option<ApprovalTokenRow>, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            sqlx::query_as::<_, ApprovalTokenRow>(&format!(
+                "SELECT {APPROVAL_TOKEN_COLUMNS_PG} FROM approval_tokens WHERE token_hash = $1"
+            ))
+            .bind(token_hash)
+            .fetch_optional(pool)
+            .await
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query_as::<_, ApprovalTokenRow>(&format!(
+                "SELECT {APPROVAL_TOKEN_COLUMNS_SQLITE} FROM approval_tokens WHERE token_hash = ?1"
+            ))
+            .bind(token_hash)
+            .fetch_optional(pool)
+            .await
+        }
+    }
+}
+
+/// Marks a not-yet-consumed approval token as consumed with the given
+/// outcome (`"approved"`/`"rejected"`). Returns `false` (no rows changed)
+/// if the token was already consumed or does not exist — the caller must
+/// treat that as "this link no longer works", never re-apply the action.
+pub async fn consume_approval_token(
+    backend: &DbBackend,
+    id: &str,
+    result: &str,
+) -> Result<bool, sqlx::Error> {
+    let affected = match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(uuid) = Uuid::parse_str(id) else {
+                return Ok(false);
+            };
+            sqlx::query("UPDATE approval_tokens SET consumed_at = NOW(), result = $1 WHERE id = $2 AND consumed_at IS NULL")
+                .bind(result)
+                .bind(uuid)
+                .execute(pool)
+                .await?
+                .rows_affected()
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query(
+                "UPDATE approval_tokens SET consumed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), result = ?1 WHERE id = ?2 AND consumed_at IS NULL",
+            )
+            .bind(result)
+            .bind(id)
+            .execute(pool)
+            .await?
+            .rows_affected()
+        }
+    };
+    Ok(affected > 0)
+}
+
+// ── Audit events ──────────────────────────────────────────────────
+//
+// Append-only: no function here ever UPDATEs or DELETEs a row. See
+// audit.rs for the AuditService wrapper every handler goes through
+// instead of writing ad-hoc INSERTs, and CLAUDE.md's audit-event list.
+
+/// Input to `insert_audit_event`. Deliberately borrows almost everything —
+/// callers already hold the strings (from claims, headers, DB rows) for
+/// the duration of the call, so this avoids cloning them just to hand
+/// them to a query builder for a few microseconds.
+#[allow(clippy::too_many_arguments)]
+pub struct NewAuditEvent<'a> {
+    pub actor_user_id: Option<&'a str>,
+    pub actor_user_code: Option<&'a str>,
+    pub actor_role: Option<&'a str>,
+    pub action: &'a str,
+    pub request_id: &'a str,
+    pub case_reference: Option<&'a str>,
+    pub resource_type: Option<&'a str>,
+    pub resource_id: Option<&'a str>,
+    pub result: &'a str,
+    pub source: Option<&'a str>,
+    pub ip_address: Option<&'a str>,
+    pub user_agent: Option<&'a str>,
+    /// Pre-serialized JSON text, never raw sensitive payloads (passwords,
+    /// tokens, national IDs, biometric data) — see AuditService::record.
+    pub metadata: Option<String>,
+    pub organization_id: Option<&'a str>,
+    pub organization_unit_id: Option<&'a str>,
+}
+
+pub async fn insert_audit_event(
+    backend: &DbBackend,
+    event: NewAuditEvent<'_>,
+) -> Result<(), sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let actor_user_id = event.actor_user_id.and_then(|v| Uuid::parse_str(v).ok());
+            let organization_id = event.organization_id.and_then(|v| Uuid::parse_str(v).ok());
+            let organization_unit_id = event
+                .organization_unit_id
+                .and_then(|v| Uuid::parse_str(v).ok());
+            sqlx::query(
+                "INSERT INTO audit_events (
+                    actor_user_id, actor_user_code, actor_role, action, request_id, case_reference,
+                    resource_type, resource_id, result, source, ip_address, user_agent, metadata,
+                    organization_id, organization_unit_id
+                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15)",
+            )
+            .bind(actor_user_id)
+            .bind(event.actor_user_code)
+            .bind(event.actor_role)
+            .bind(event.action)
+            .bind(event.request_id)
+            .bind(event.case_reference)
+            .bind(event.resource_type)
+            .bind(event.resource_id)
+            .bind(event.result)
+            .bind(event.source)
+            .bind(event.ip_address)
+            .bind(event.user_agent)
+            .bind(event.metadata)
+            .bind(organization_id)
+            .bind(organization_unit_id)
+            .execute(pool)
+            .await?;
+        }
+        DbBackend::Sqlite(pool) => {
+            let id = Uuid::new_v4().to_string();
+            sqlx::query(
+                "INSERT INTO audit_events (
+                    id, actor_user_id, actor_user_code, actor_role, action, request_id, case_reference,
+                    resource_type, resource_id, result, source, ip_address, user_agent, metadata,
+                    organization_id, organization_unit_id
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            )
+            .bind(&id)
+            .bind(event.actor_user_id)
+            .bind(event.actor_user_code)
+            .bind(event.actor_role)
+            .bind(event.action)
+            .bind(event.request_id)
+            .bind(event.case_reference)
+            .bind(event.resource_type)
+            .bind(event.resource_id)
+            .bind(event.result)
+            .bind(event.source)
+            .bind(event.ip_address)
+            .bind(event.user_agent)
+            .bind(event.metadata)
+            .bind(event.organization_id)
+            .bind(event.organization_unit_id)
+            .execute(pool)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AuditEventFilter {
+    pub date_from: Option<chrono::DateTime<chrono::Utc>>,
+    pub date_to: Option<chrono::DateTime<chrono::Utc>>,
+    pub actor_user_id: Option<String>,
+    pub action: Option<String>,
+    pub case_reference: Option<String>,
+    pub resource_type: Option<String>,
+    pub result: Option<String>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct AuditEventRow {
+    pub id: String,
+    pub timestamp: String,
+    pub actor_user_id: Option<String>,
+    pub actor_user_code: Option<String>,
+    pub actor_role: Option<String>,
+    pub action: String,
+    pub request_id: String,
+    pub case_reference: Option<String>,
+    pub resource_type: Option<String>,
+    pub resource_id: Option<String>,
+    pub result: String,
+    pub source: Option<String>,
+    pub ip_address: Option<String>,
+    pub user_agent: Option<String>,
+    pub metadata: Option<String>,
+    pub organization_id: Option<String>,
+    pub organization_unit_id: Option<String>,
+}
+
+const AUDIT_EVENT_COLUMNS_PG: &str = "id::text, \"timestamp\"::text, actor_user_id::text, actor_user_code, actor_role, \
+     action, request_id, case_reference, resource_type, resource_id, result, source, ip_address, user_agent, \
+     metadata::text, organization_id::text, organization_unit_id::text";
+const AUDIT_EVENT_COLUMNS_SQLITE: &str = "id, timestamp, actor_user_id, actor_user_code, actor_role, action, \
+     request_id, case_reference, resource_type, resource_id, result, source, ip_address, user_agent, metadata, \
+     organization_id, organization_unit_id";
+
+/// Server-side paginated, filtered audit query — the backing query for
+/// `GET /api/v1/audit`. `page` is 1-indexed; `page_size` is clamped by the
+/// caller (see routes::audit) to a sane maximum before it ever reaches
+/// here. Returns `(rows, total_matching_count)` so the frontend can render
+/// page controls without a second round trip.
+pub async fn list_audit_events(
+    backend: &DbBackend,
+    filter: &AuditEventFilter,
+    page: i64,
+    page_size: i64,
+) -> Result<(Vec<AuditEventRow>, i64), sqlx::Error> {
+    let page = page.max(1);
+    let page_size = page_size.clamp(1, 200);
+    let offset = (page - 1) * page_size;
+
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let mut count_builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+                "SELECT COUNT(*) FROM audit_events WHERE 1 = 1",
+            );
+            push_audit_filter_pg(&mut count_builder, filter);
+            let total: i64 = count_builder.build_query_scalar().fetch_one(pool).await?;
+
+            let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(format!(
+                "SELECT {AUDIT_EVENT_COLUMNS_PG} FROM audit_events WHERE 1 = 1"
+            ));
+            push_audit_filter_pg(&mut builder, filter);
+            builder.push(" ORDER BY \"timestamp\" DESC LIMIT ");
+            builder.push_bind(page_size);
+            builder.push(" OFFSET ");
+            builder.push_bind(offset);
+            let rows = builder
+                .build_query_as::<AuditEventRow>()
+                .fetch_all(pool)
+                .await?;
+            Ok((rows, total))
+        }
+        DbBackend::Sqlite(pool) => {
+            let mut count_builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+                "SELECT COUNT(*) FROM audit_events WHERE 1 = 1",
+            );
+            push_audit_filter_sqlite(&mut count_builder, filter);
+            let total: i64 = count_builder.build_query_scalar().fetch_one(pool).await?;
+
+            let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
+                "SELECT {AUDIT_EVENT_COLUMNS_SQLITE} FROM audit_events WHERE 1 = 1"
+            ));
+            push_audit_filter_sqlite(&mut builder, filter);
+            builder.push(" ORDER BY timestamp DESC LIMIT ");
+            builder.push_bind(page_size);
+            builder.push(" OFFSET ");
+            builder.push_bind(offset);
+            let rows = builder
+                .build_query_as::<AuditEventRow>()
+                .fetch_all(pool)
+                .await?;
+            Ok((rows, total))
+        }
+    }
+}
+
+fn push_audit_filter_pg<'a>(
+    builder: &mut sqlx::QueryBuilder<'a, sqlx::Postgres>,
+    filter: &'a AuditEventFilter,
+) {
+    if let Some(from) = filter.date_from {
+        builder.push(" AND \"timestamp\" >= ").push_bind(from);
+    }
+    if let Some(to) = filter.date_to {
+        builder.push(" AND \"timestamp\" <= ").push_bind(to);
+    }
+    if let Some(actor) = filter
+        .actor_user_id
+        .as_deref()
+        .and_then(|v| Uuid::parse_str(v).ok())
+    {
+        builder.push(" AND actor_user_id = ").push_bind(actor);
+    }
+    if let Some(action) = filter.action.as_deref() {
+        builder.push(" AND action = ").push_bind(action);
+    }
+    if let Some(case_reference) = filter.case_reference.as_deref() {
+        builder
+            .push(" AND case_reference = ")
+            .push_bind(case_reference);
+    }
+    if let Some(resource_type) = filter.resource_type.as_deref() {
+        builder
+            .push(" AND resource_type = ")
+            .push_bind(resource_type);
+    }
+    if let Some(result) = filter.result.as_deref() {
+        builder.push(" AND result = ").push_bind(result);
+    }
+}
+
+fn push_audit_filter_sqlite<'a>(
+    builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    filter: &'a AuditEventFilter,
+) {
+    if let Some(from) = filter.date_from {
+        builder
+            .push(" AND timestamp >= ")
+            .push_bind(from.to_rfc3339());
+    }
+    if let Some(to) = filter.date_to {
+        builder
+            .push(" AND timestamp <= ")
+            .push_bind(to.to_rfc3339());
+    }
+    if let Some(actor) = filter.actor_user_id.as_deref() {
+        builder.push(" AND actor_user_id = ").push_bind(actor);
+    }
+    if let Some(action) = filter.action.as_deref() {
+        builder.push(" AND action = ").push_bind(action);
+    }
+    if let Some(case_reference) = filter.case_reference.as_deref() {
+        builder
+            .push(" AND case_reference = ")
+            .push_bind(case_reference);
+    }
+    if let Some(resource_type) = filter.resource_type.as_deref() {
+        builder
+            .push(" AND resource_type = ")
+            .push_bind(resource_type);
+    }
+    if let Some(result) = filter.result.as_deref() {
+        builder.push(" AND result = ").push_bind(result);
+    }
 }

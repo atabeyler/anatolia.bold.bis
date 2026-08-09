@@ -6,12 +6,14 @@ import { MenuOverlay } from './components/MenuOverlay';
 import { useAuth } from './features/auth/AuthContext';
 import { brandMark } from './lib/brand';
 import { AdminPage } from './pages/AdminPage';
+import { AuditPage } from './pages/AuditPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 
 const ADMIN_ROLES = ['SYSTEM_ADMIN', 'SECURITY_ADMIN'];
+const AUDIT_ROLES = ['SYSTEM_ADMIN', 'SECURITY_ADMIN', 'AUDITOR'];
 
-type View = 'dashboard' | 'admin';
+type View = 'dashboard' | 'admin' | 'audit';
 
 function App() {
   const { t, i18n } = useTranslation();
@@ -19,6 +21,7 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [view, setView] = useState<View | null>(null);
   const isAdmin = !!user && ADMIN_ROLES.includes(user.role);
+  const canViewAudit = !!user && AUDIT_ROLES.includes(user.role);
   const signedIn = status === 'signed-in';
 
   const topbarRef = useRef<HTMLElement | null>(null);
@@ -90,12 +93,12 @@ function App() {
             <div>
               <div className="app-topbar__title">{brandMark(i18n.resolvedLanguage)}</div>
               <div className="app-topbar__subtitle">
-                {view === 'admin' ? t('admin.panelTitle') : t('search.subtitle')}
+                {view === 'admin' ? t('admin.panelTitle') : view === 'audit' ? t('audit.panelTitle') : t('search.subtitle')}
               </div>
             </div>
           </div>
           <div className="app-topbar__actions">
-            {view === 'admin' ? (
+            {view === 'admin' || view === 'audit' ? (
               <div className="app-header__session">
                 <button
                   type="button"
@@ -115,6 +118,11 @@ function App() {
                   {isAdmin && (
                     <button type="button" onClick={() => setView('admin')} aria-label={t('admin.openLabel')}>
                       <span aria-hidden="true">⚙</span> <span className="topbar-label">{t('admin.openLabel')}</span>
+                    </button>
+                  )}
+                  {canViewAudit && (
+                    <button type="button" onClick={() => setView('audit')} aria-label={t('audit.openLabel')}>
+                      <span aria-hidden="true">▤</span> <span className="topbar-label">{t('audit.openLabel')}</span>
                     </button>
                   )}
                   <button type="button" onClick={() => void logout()} aria-label={t('auth.logout')}>
@@ -143,7 +151,7 @@ function App() {
 
       <div className={signedIn ? 'app-main app-main--with-topbar' : 'app-main'}>
         {status === 'loading' ? null : signedIn ? (
-          view === 'admin' ? <AdminPage /> : <DashboardPage />
+          view === 'admin' ? <AdminPage /> : view === 'audit' ? <AuditPage /> : <DashboardPage />
         ) : (
           <LoginPage />
         )}

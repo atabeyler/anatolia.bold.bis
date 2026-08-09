@@ -1234,3 +1234,40 @@ body::before {
     grid-template-columns: 1fr;
   }
 }
+
+.audit-detail {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 0.85rem;
+  margin: 0.85rem 0 0;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+}
+
+.audit-detail dt {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.audit-detail dd {
+  margin: 0;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.audit-detail__metadata {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+}
+
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
