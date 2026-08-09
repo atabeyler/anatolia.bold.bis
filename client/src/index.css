@@ -146,7 +146,15 @@ body::before {
   width: 100%;
   max-width: 1100px;
   margin: 0 auto;
-  padding: 3.5rem 1.5rem 1.5rem;
+  /* Bottom padding clears the fixed footer on every screen (see
+     .app-footer); top padding clears whichever fixed element sits above
+     the content — the corner Menu button pre-auth, or the taller
+     .app-topbar once signed in (see .app-main--with-topbar). */
+  padding: 3.5rem 1.5rem 4.5rem;
+}
+
+.app-main--with-topbar {
+  padding-top: 5.5rem;
 }
 
 /* ── Menu / Settings overlays: terminal panel look ────────────── */
@@ -422,6 +430,36 @@ body::before {
   align-items: center;
   justify-content: center;
   margin-bottom: 0.5rem;
+}
+
+/* Same mark, scaled down for the fixed top bar — proportions below are
+   the full-size values above multiplied by 40/112. */
+.brand-logo--compact {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 0;
+}
+
+.brand-logo--compact .brand-logo__ping {
+  inset: 6px;
+}
+
+.brand-logo--compact .brand-logo__ring {
+  inset: 3px;
+}
+
+.brand-logo--compact .brand-logo__sweep {
+  inset: 6px;
+}
+
+.brand-logo--compact .brand-logo__badge {
+  width: 20px;
+  height: 20px;
+}
+
+.brand-logo--compact .brand-logo__badge svg {
+  width: 12px;
+  height: 12px;
 }
 
 .brand-logo__ping {
@@ -700,19 +738,23 @@ body::before {
   cursor: default;
 }
 
-/* ── Footer (present on every screen) ─────────────────────────── */
+/* ── Footer (present on every screen, pinned to the viewport) ─── */
 
 .app-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 25;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  border-top: 1px solid var(--color-border);
-  margin: 1.5rem auto 0;
-  padding: 1rem 1.5rem;
-  width: 100%;
-  max-width: 1100px;
+  border-top: 1px solid var(--color-panel-border);
+  box-shadow: 0 0 16px rgba(204, 68, 68, 0.25);
+  padding: 0.7rem 1.5rem;
+  background: var(--color-panel-surface);
   color: var(--color-text-muted);
   font-size: 0.72rem;
   letter-spacing: 0.03em;
@@ -721,6 +763,56 @@ body::before {
 
 .app-footer__separator {
   color: var(--color-border);
+}
+
+/* ── Top bar (signed-in screens only, pinned to the viewport) ──
+   Logo, brand, contextual subtitle, session actions, and the Menu
+   button stay in place while the page content underneath scrolls —
+   mirrors the footer's fixed treatment above. */
+
+.app-topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0.6rem 1.5rem;
+  background: var(--color-panel-surface);
+  border-bottom: 1px solid var(--color-panel-border);
+  box-shadow: 0 0 16px rgba(204, 68, 68, 0.15);
+}
+
+.app-topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.app-topbar__title {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: 0.1em;
+  color: var(--color-text);
+}
+
+.app-topbar__subtitle {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  color: var(--color-panel-border);
+}
+
+.app-topbar__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
 }
 
 /* ── HUD corner accents ───────────────────────────────────────────
@@ -845,37 +937,6 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-}
-
-.admin-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 1rem;
-  border-bottom: 1px solid var(--color-panel-border);
-  padding-bottom: 1rem;
-}
-
-.admin-header__brand {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.admin-header__title {
-  font-family: var(--font-heading);
-  font-weight: 800;
-  font-size: 1.1rem;
-  letter-spacing: 0.1em;
-  color: var(--color-text);
-}
-
-.admin-header__subtitle {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  color: var(--color-panel-border);
 }
 
 .admin-tabs {

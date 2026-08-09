@@ -1,26 +1,18 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { Logo } from '../components/Logo';
 import { useAuth } from '../features/auth/AuthContext';
 import { formatLatitude, formatLongitude, getLastKnownLocation } from '../hooks/useGeolocation';
-import { brandMark } from '../lib/brand';
 import * as searchClient from '../services/searchClient';
 import type { SearchCandidate, SearchSummary } from '../services/searchClient';
 import { apiErrorMessageKey } from '../services/apiClient';
 
-const ADMIN_ROLES = ['SYSTEM_ADMIN', 'SECURITY_ADMIN'];
 const REVIEW_ROLES = ['REVIEWER', 'SECURITY_ADMIN', 'SYSTEM_ADMIN'];
 const SEARCH_ROLES = ['OPERATOR', 'REVIEWER', 'SECURITY_ADMIN', 'SYSTEM_ADMIN'];
 
-interface DashboardPageProps {
-  onOpenAdmin?: () => void;
-}
-
-export function DashboardPage({ onOpenAdmin }: DashboardPageProps) {
-  const { t, i18n } = useTranslation();
-  const { user, logout } = useAuth();
-  const isAdmin = !!user && ADMIN_ROLES.includes(user.role);
+export function DashboardPage() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
   const canReview = !!user && REVIEW_ROLES.includes(user.role);
   const canSearch = !!user && SEARCH_ROLES.includes(user.role);
 
@@ -95,29 +87,6 @@ export function DashboardPage({ onOpenAdmin }: DashboardPageProps) {
 
   return (
     <main className="admin-page">
-      <header className="admin-header">
-        <div className="admin-header__brand">
-          <Logo />
-          <div>
-            <div className="admin-header__title">{brandMark(i18n.resolvedLanguage)}</div>
-            <div className="admin-header__subtitle">{t('search.subtitle')}</div>
-          </div>
-        </div>
-        {user && (
-          <div className="app-header__session">
-            <span>{t('auth.welcomeBack', { name: `${user.firstName} ${user.lastName}` })}</span>
-            {isAdmin && onOpenAdmin && (
-              <button type="button" onClick={onOpenAdmin}>
-                {t('admin.openLabel')}
-              </button>
-            )}
-            <button type="button" onClick={() => void logout()}>
-              {t('auth.logout')}
-            </button>
-          </div>
-        )}
-      </header>
-
       <nav className="admin-tabs">
         <span className="admin-tabs__tab admin-tabs__tab--active">{t('search.tabSearch')}</span>
       </nav>

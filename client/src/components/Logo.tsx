@@ -1,6 +1,12 @@
-export function Logo() {
+interface LogoProps {
+  /** Smaller footprint for the fixed top bar, where the full hero-sized
+   * mark would be too tall for a persistent, always-visible row. */
+  compact?: boolean;
+}
+
+export function Logo({ compact = false }: LogoProps) {
   return (
-    <div className="brand-logo">
+    <div className={compact ? 'brand-logo brand-logo--compact' : 'brand-logo'}>
       <div className="brand-logo__ping" />
       <div className="brand-logo__ping brand-logo__ping--delay1" />
       <div className="brand-logo__ping brand-logo__ping--delay2" />

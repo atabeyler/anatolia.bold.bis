@@ -1,17 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { Logo } from '../components/Logo';
-import { brandMark } from '../lib/brand';
 import * as adminClient from '../services/adminClient';
 import type { AdminUser } from '../services/adminClient';
 import { apiErrorMessageKey } from '../services/apiClient';
 
 const NATIONAL_ID_PATTERN = /^[0-9]{11}$/;
-
-interface AdminPageProps {
-  onGoHome: () => void;
-}
 
 interface EditForm {
   nickname: string;
@@ -22,8 +16,8 @@ interface EditForm {
 
 const EMPTY_EDIT_FORM: EditForm = { nickname: '', nationalId: '', email: '', password: '' };
 
-export function AdminPage({ onGoHome }: AdminPageProps) {
-  const { t, i18n } = useTranslation();
+export function AdminPage() {
+  const { t } = useTranslation();
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -134,19 +128,6 @@ export function AdminPage({ onGoHome }: AdminPageProps) {
 
   return (
     <main className="admin-page">
-      <header className="admin-header">
-        <div className="admin-header__brand">
-          <Logo />
-          <div>
-            <div className="admin-header__title">{brandMark(i18n.resolvedLanguage)}</div>
-            <div className="admin-header__subtitle">{t('admin.panelTitle')}</div>
-          </div>
-        </div>
-        <button type="button" className="app-header__nav-button" onClick={onGoHome}>
-          {t('admin.goHome')}
-        </button>
-      </header>
-
       <nav className="admin-tabs">
         <span className="admin-tabs__tab admin-tabs__tab--active">{t('admin.tabUsers')}</span>
       </nav>
