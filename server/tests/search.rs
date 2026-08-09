@@ -376,6 +376,97 @@ async fn review_decisions_are_recorded_as_immutable_history() {
 }
 
 #[tokio::test]
+async fn marking_a_candidate_inconclusive_leaves_it_open_for_further_review() {
+    let _guard = ENV_GUARD.lock().await;
+    let state = AppState::for_tests().await;
+    let app = routes::router(state);
+    let token = seed_admin_and_login(&app, "SEARCHADM8").await;
+
+    let (content_type, body) = MultipartRequest::new()
+        .text_field("caseReference", "CASE-008")
+        .text_field("purpose", "Identity verification")
+        .image_field("image", "probe.png", "image/png", &valid_png_bytes(64, 64))
+        .finish();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/search/face")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", content_type)
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let payload = body_json(response).await;
+    let search_id = payload["search"]["id"].as_str().unwrap().to_string();
+    let candidate_id = payload["candidates"][0]["candidateId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/candidates/{candidate_id}/inconclusive"))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({ "searchId": search_id, "reason": "image too low quality" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let candidate = body_json(response).await;
+    assert_eq!(candidate["status"], "inconclusive");
+
+    // Unlike confirmed/rejected, inconclusive still allows a later, more
+    // confident decision on the same candidate.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/candidates/{candidate_id}/verify"))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "searchId": search_id }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let candidate = body_json(response).await;
+    assert_eq!(candidate["status"], "confirmed");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/api/v1/search/{search_id}/candidates/{candidate_id}/history"
+                ))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let history = body_json(response).await;
+    let events = history.as_array().unwrap();
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0]["decision"], "inconclusive");
+    assert_eq!(events[1]["decision"], "confirmed");
+}
+
+#[tokio::test]
 async fn search_history_is_paginated_server_side() {
     let _guard = ENV_GUARD.lock().await;
     let state = AppState::for_tests().await;

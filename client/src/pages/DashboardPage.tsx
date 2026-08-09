@@ -71,14 +71,16 @@ export function DashboardPage() {
     }
   };
 
-  const runReview = async (candidateId: string, action: 'confirm' | 'reject') => {
+  const runReview = async (candidateId: string, action: 'confirm' | 'reject' | 'inconclusive') => {
     if (!activeSearch) return;
     setReviewBusyId(candidateId);
     try {
       const updated =
         action === 'confirm'
           ? await searchClient.verifyCandidate(candidateId, activeSearch.id)
-          : await searchClient.rejectCandidate(candidateId, activeSearch.id);
+          : action === 'reject'
+            ? await searchClient.rejectCandidate(candidateId, activeSearch.id)
+            : await searchClient.markCandidateInconclusive(candidateId, activeSearch.id);
       setActiveCandidates((rows) => rows.map((row) => (row.candidateId === candidateId ? updated : row)));
     } finally {
       setReviewBusyId(null);
@@ -171,6 +173,9 @@ export function DashboardPage() {
                         {candidate.status === 'pending' && (
                           <span className="admin-badge admin-badge--pending">{t('search.status.pending')}</span>
                         )}
+                        {candidate.status === 'inconclusive' && (
+                          <span className="admin-badge admin-badge--pending">{t('search.status.inconclusive')}</span>
+                        )}
                       </div>
                       {candidate.reviewedByName && (
                         <p className="admin-user-card__note">
@@ -178,7 +183,7 @@ export function DashboardPage() {
                         </p>
                       )}
                     </div>
-                    {canReview && candidate.status === 'pending' && (
+                    {canReview && (candidate.status === 'pending' || candidate.status === 'inconclusive') && (
                       <div className="admin-user-card__actions">
                         <button
                           type="button"
@@ -195,6 +200,14 @@ export function DashboardPage() {
                           onClick={() => runReview(candidate.candidateId, 'reject')}
                         >
                           {t('search.rejectCandidate')}
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-icon-button"
+                          disabled={isBusy}
+                          onClick={() => runReview(candidate.candidateId, 'inconclusive')}
+                        >
+                          {t('search.markInconclusive')}
                         </button>
                       </div>
                     )}

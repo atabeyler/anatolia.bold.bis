@@ -136,18 +136,37 @@ eşleşme bu dosyanın sonunda listelidir.
     veritabanı tarafından zorlanıyor) ve `searches (created_at,
     case_reference, requested_by)` indexleri (arama geçmişi bu kolonlara
     göre filtreleniyor/sıralanıyor).
-34. [ ] Soft delete (users için `disabled_at`/`deleted_at`) — **yapılmadı**,
-    `delete_user` hâlâ hard delete.
+34. [x] Soft delete — `users.deleted_at` eklendi. Admin panelinden bir
+    hesabın silinmesi (`DELETE /api/v1/admin/users/{id}`) artık satırı
+    fiziksel olarak kaldırmıyor, `deleted_at` işaretliyor + tüm oturumları
+    iptal ediyor; bu sayede `searches`/`verification_events`/`audit_events`
+    tablolarındaki geçmiş referanslar (requested_by, reviewer_user_id,
+    actor_user_id) sahipsiz kalmıyor. `deleted_at IS NOT NULL` olan
+    hesaplar login, session/token doğrulama ve admin listesinde tamamen
+    yok gibi davranıyor. **Not:** bekleyen (henüz onaylanmamış) bir kaydı
+    reddetmek (`admin::reject_user`/`quick_reject`) hâlâ hard delete — o
+    noktada hesabın hiçbir gerçek geçmişi olmadığı için bu bilinçli bir
+    ayrım.
 
 ## P1 — Review Sistemi
 
 35. [x] Immutable review history — `verification_events` tablosu, her
     confirm/reject yeni bir event olarak ekleniyor,
     `GET /api/v1/search/{id}/candidates/{id}/history`. (Milestone C)
-36. [~] Review decisions — sadece `confirmed`/`rejected` var. `inconclusive`
-    ve `needs_second_review` decision tipleri **eklenmedi**.
+36. [x] Review decisions — `inconclusive` karar tipi eklendi
+    (`POST /api/v1/candidates/{id}/inconclusive`): `confirmed`/`rejected`'ın
+    aksine adayı kapatmıyor, sonraki bir inceleme için açık bırakıyor.
+    `needs_second_review` ayrı bir decision tipi olarak **eklenmedi** —
+    bu, madde 37'nin (four-eyes policy) parçası; o özellik netleşmeden
+    ayrı bir decision tipi eklemek anlamsız olurdu.
 37. [ ] Second review / four-eyes policy (`REQUIRE_SECOND_REVIEW`) —
-    **yapılmadı**.
+    **yapılmadı**. Bu, basit bir hardening düzeltmesinden çok gerçek bir
+    özellik: "bir adayın kimliği için en az iki farklı REVIEWER'ın onayı
+    gerekir" davranışı search_candidates durum makinesine yeni bir ara
+    durum (`needs_second_review`) eklemeyi, ilk reviewer'ın kendi kararını
+    ikinci onay olarak sayamamasını (aynı kullanıcı iki kez onaylayamaz)
+    ve frontend'de bunu görünür kılmayı gerektiriyor — repo sahibinin bu
+    akışı nasıl istediğine dair bir tasarım kararı bekliyor.
 
 ## P1 — API Kalitesi
 

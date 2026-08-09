@@ -29,7 +29,7 @@ export interface SearchCandidate {
   referenceCode: string;
   fullName: string;
   score: number;
-  status: 'pending' | 'confirmed' | 'rejected';
+  status: 'pending' | 'confirmed' | 'rejected' | 'inconclusive';
   reviewedByName: string | null;
   reviewedAt: string | null;
 }
@@ -76,5 +76,10 @@ export async function verifyCandidate(candidateId: string, searchId: string): Pr
 
 export async function rejectCandidate(candidateId: string, searchId: string): Promise<SearchCandidate> {
   const { data } = await apiClient.post<SearchCandidate>(`/v1/candidates/${candidateId}/reject`, { searchId });
+  return data;
+}
+
+export async function markCandidateInconclusive(candidateId: string, searchId: string): Promise<SearchCandidate> {
+  const { data } = await apiClient.post<SearchCandidate>(`/v1/candidates/${candidateId}/inconclusive`, { searchId });
   return data;
 }

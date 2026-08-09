@@ -256,3 +256,126 @@ async fn readiness_endpoint_reports_ready_when_the_database_is_reachable() {
     let body = body_json(response).await;
     assert_eq!(body["status"], "ready");
 }
+
+#[tokio::test]
+async fn deleting_a_user_soft_deletes_and_they_disappear_from_login_and_listing() {
+    let _guard = ENV_GUARD.lock().await;
+    std::env::remove_var("BOOTSTRAP_ENABLED");
+    std::env::set_var("ADMIN_SEED_TOKEN", "soft-delete-seed-token");
+    std::env::set_var("ADMIN_USER_CODE", "SOFTADM1");
+    std::env::set_var("ADMIN_PASSWORD", "AdminPass1!");
+    std::env::set_var("ADMIN_EMAIL", "soft-delete-admin@example.test");
+
+    let state = AppState::for_tests().await;
+    let app = routes::router(state);
+    assert_eq!(
+        seed_admin(&app, "soft-delete-seed-token").await,
+        StatusCode::OK
+    );
+    let admin_token = login(&app, "SOFTADM1", "AdminPass1!").await;
+
+    // A second, non-admin user to delete.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/admin/users")
+                .header("authorization", format!("Bearer {admin_token}"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "userCode": "SOFTUSR1",
+                        "password": "UserPass1!",
+                        "nationalId": "98765432109",
+                        "email": "soft-delete-user@example.test",
+                        "isAdmin": false,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let target_id = find_user_id(&app, &admin_token, "SOFTUSR1").await;
+
+    login(&app, "SOFTUSR1", "UserPass1!").await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/admin/users/{target_id}"))
+                .header("authorization", format!("Bearer {admin_token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Deleted user can no longer log in.
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/login",
+            json!({ "userCode": "SOFTUSR1", "password": "UserPass1!" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // Deleted user no longer appears in the admin listing.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/admin/users")
+                .header("authorization", format!("Bearer {admin_token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let users = body_json(response).await;
+    assert!(!users
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|u| u["userCode"] == "SOFTUSR1"));
+
+    // Deleting the same (already-deleted) user again is a harmless no-op,
+    // not a 404 — it is still, correctly, no longer a live account.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/admin/users/{target_id}"))
+                .header("authorization", format!("Bearer {admin_token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // A genuinely unknown id still 404s.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/v1/admin/users/00000000-0000-0000-0000-000000000000")
+                .header("authorization", format!("Bearer {admin_token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}

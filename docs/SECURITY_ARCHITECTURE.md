@@ -122,6 +122,25 @@ reporting.
   correcting the first — adds another event rather than overwriting the
   first; `GET /api/v1/search/{id}/candidates/{id}/history` returns the
   full, ordered trail.
+- **Inconclusive review decision** (`POST
+  /api/v1/candidates/{id}/inconclusive`): a third outcome alongside
+  confirm/reject, for when a reviewer can reach neither a positive nor a
+  negative identification. Unlike confirm/reject, it does not close the
+  candidate out — it remains open for a later, more confident decision.
+- **Soft-deleted user accounts** (`users.deleted_at`,
+  `db::soft_delete_user`): `DELETE /api/v1/admin/users/{id}` marks the
+  row deleted and revokes all of its sessions instead of physically
+  removing it, since `searches.requested_by`,
+  `verification_events.reviewer_user_id`, and `audit_events.actor_user_id`
+  can all point at that user's id — a hard delete would orphan those
+  references. Every read that should treat a deleted account as gone
+  (`load_user_by_code`/`load_user_by_id`/`load_user_by_email`/
+  `list_users`) filters on `deleted_at IS NULL`, so a deleted account
+  cannot log in, cannot be found by any token-validation path, and does
+  not appear in the admin listing — while its past actions stay
+  attributable. Rejecting a pending (never-approved) registration
+  (`admin::reject_user`/`quick_reject`) is still a hard delete, since
+  nothing can reference an unapproved account's id yet.
 - **Real probe-image validation** (`server/src/image_validation.rs`):
   magic-byte sniff plus an actual decode (JPEG/PNG/WEBP only, via the
   `image` crate), a 10 MB size cap, minimum/maximum pixel dimensions, and

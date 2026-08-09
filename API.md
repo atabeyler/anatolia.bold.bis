@@ -205,12 +205,20 @@ links require a `SYSTEM_ADMIN` or `SECURITY_ADMIN` bearer token.
   Immediately revokes all of the user's active sessions, not just future
   logins.
 - `POST /api/v1/admin/users/{id}/unban`
-- `DELETE /api/v1/admin/users/{id}`
+- `DELETE /api/v1/admin/users/{id}` — **soft delete**: marks the account
+  `deleted_at` and revokes all of its active sessions rather than removing
+  the row, so past `searches`/`verification_events`/`audit_events` rows
+  that reference this user's id stay attributable. A deleted account
+  behaves as fully gone everywhere it matters (cannot log in, does not
+  appear in `GET /api/v1/admin/users`). Calling it again on an
+  already-deleted account is a harmless no-op (`200 OK`); a genuinely
+  unknown id still returns `404 Not Found`.
 
 Both `ban` and `DELETE` refuse to act on the last active `SYSTEM_ADMIN`
 account: **`409 Conflict`** (`LAST_ADMIN_PROTECTED`,
 `errors.lastAdminProtected`) instead of taking effect, so the platform can
 never lock itself out of its own administration.
+
 - `GET /api/v1/admin/review/{token}` — HTML approve/reject page linked from
   the admin's registration-notification email (valid 3 days, single-use;
   signed with `APPROVAL_TOKEN_SECRET`, independent of the JWT secrets —
@@ -338,6 +346,15 @@ full trail).
 #### `POST /api/v1/candidates/{candidate_id}/reject`
 
 Same shape and role requirement as `verify`, sets status to `rejected`.
+
+#### `POST /api/v1/candidates/{candidate_id}/inconclusive`
+
+Same shape and role requirement as `verify`, sets status to `inconclusive`.
+Neither a positive nor a negative identification — unlike `confirmed`/
+`rejected`, an `inconclusive` candidate is not closed out: it still
+appears wherever "needs review" candidates are surfaced, so a later
+decision (by the same or a different reviewer) can still confirm or
+reject it.
 
 ### Audit trail
 
