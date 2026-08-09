@@ -854,10 +854,12 @@ body::before {
 
 /* ── HUD corner accents ───────────────────────────────────────────
    sim's panels are plain rectangles (no clip-path) whose corners are
-   picked out by small L-shaped brackets that blink independently —
-   not a cut edge. Matched here: top-right and bottom-left brackets,
-   each a 2-sided border on a transparent square, glowing via
-   drop-shadow and blinking out of phase with each other. */
+   picked out on all four sides by small L-shaped brackets that blink
+   independently — not a cut edge. Each element only has two pseudo-
+   elements to work with, so ::before draws the top-left + bottom-right
+   pair and ::after draws the top-right + bottom-left pair (each corner
+   is two background-image line segments, so no extra DOM is needed);
+   the two pairs blink out of phase with each other, same as sim. */
 
 .auth-panel,
 .admin-panel,
@@ -882,9 +884,7 @@ body::before {
 .status-card::after {
   content: '';
   position: absolute;
-  width: 16px;
-  height: 16px;
-  border: 2px solid transparent;
+  inset: -1px;
   filter: drop-shadow(0 0 4px var(--accent-color));
   pointer-events: none;
   animation: corner-blink 4s ease-in-out infinite;
@@ -894,20 +894,22 @@ body::before {
 .admin-panel::before,
 .overlay-panel::before,
 .status-card::before {
-  top: -1px;
-  right: -1px;
-  border-top-color: var(--accent-color);
-  border-right-color: var(--accent-color);
+  background:
+    linear-gradient(var(--accent-color), var(--accent-color)) top left / 16px 2px no-repeat,
+    linear-gradient(var(--accent-color), var(--accent-color)) top left / 2px 16px no-repeat,
+    linear-gradient(var(--accent-color), var(--accent-color)) bottom right / 16px 2px no-repeat,
+    linear-gradient(var(--accent-color), var(--accent-color)) bottom right / 2px 16px no-repeat;
 }
 
 .auth-panel::after,
 .admin-panel::after,
 .overlay-panel::after,
 .status-card::after {
-  bottom: -1px;
-  left: -1px;
-  border-bottom-color: var(--accent-color);
-  border-left-color: var(--accent-color);
+  background:
+    linear-gradient(var(--accent-color), var(--accent-color)) top right / 16px 2px no-repeat,
+    linear-gradient(var(--accent-color), var(--accent-color)) top right / 2px 16px no-repeat,
+    linear-gradient(var(--accent-color), var(--accent-color)) bottom left / 16px 2px no-repeat,
+    linear-gradient(var(--accent-color), var(--accent-color)) bottom left / 2px 16px no-repeat;
   animation-delay: 2s;
 }
 
@@ -945,9 +947,7 @@ body::before {
 .overlay-secondary-button::after {
   content: '';
   position: absolute;
-  width: 8px;
-  height: 8px;
-  border: 2px solid transparent;
+  inset: 0;
   pointer-events: none;
 }
 
@@ -959,10 +959,11 @@ body::before {
 .app-header__nav-button::before,
 .app-header__session button::before,
 .overlay-secondary-button::before {
-  top: -1px;
-  right: -1px;
-  border-top-color: currentColor;
-  border-right-color: currentColor;
+  background:
+    linear-gradient(currentColor, currentColor) top left / 8px 2px no-repeat,
+    linear-gradient(currentColor, currentColor) top left / 2px 8px no-repeat,
+    linear-gradient(currentColor, currentColor) bottom right / 8px 2px no-repeat,
+    linear-gradient(currentColor, currentColor) bottom right / 2px 8px no-repeat;
 }
 
 .auth-submit::after,
@@ -973,10 +974,11 @@ body::before {
 .app-header__nav-button::after,
 .app-header__session button::after,
 .overlay-secondary-button::after {
-  bottom: -1px;
-  left: -1px;
-  border-bottom-color: currentColor;
-  border-left-color: currentColor;
+  background:
+    linear-gradient(currentColor, currentColor) top right / 8px 2px no-repeat,
+    linear-gradient(currentColor, currentColor) top right / 2px 8px no-repeat,
+    linear-gradient(currentColor, currentColor) bottom left / 8px 2px no-repeat,
+    linear-gradient(currentColor, currentColor) bottom left / 2px 8px no-repeat;
 }
 
 /* ── Admin management panel ───────────────────────────────────── */
