@@ -3,7 +3,7 @@
   --color-surface: #0a0e1f;
   --color-border: rgba(79, 110, 247, 0.35);
   --color-text: #c0c8e8;
-  --color-text-muted: #6a7a9a;
+  --color-text-muted: #e8ecf9;
   --color-accent: #4f6ef7;
   --color-accent-strong: #6f8bff;
   --color-success: #00e887;
@@ -296,7 +296,7 @@ body::before {
   margin: 0 0 0.6rem;
   font-size: var(--text-base);
   color: var(--color-text-muted);
-  line-height: 1.6;
+  line-height: 1.35;
   letter-spacing: var(--tracking-tight);
 }
 
@@ -786,7 +786,8 @@ body::before {
   box-shadow: 0 0 16px rgba(200, 34, 34, 0.25);
   padding: 0.7rem 1.5rem;
   background: var(--color-bar-surface);
-  color: var(--color-text-muted);
+  color: var(--color-success);
+  text-shadow: 0 0 6px var(--color-success), 0 0 16px rgba(0, 232, 135, 0.6);
   font-size: var(--text-xs);
   letter-spacing: var(--tracking-snug);
   text-align: center;
@@ -1014,7 +1015,7 @@ body::before {
 .admin-hint {
   margin: 0;
   font-size: var(--text-xs);
-  line-height: 1.4;
+  line-height: 1.25;
   color: var(--color-accent-strong);
   opacity: 0.85;
 }
