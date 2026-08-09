@@ -47,9 +47,17 @@ eşleşme bu dosyanın sonunda listelidir.
    **oluşturulmadı** — hâlâ tek in-memory `RateLimiter` var.
 8. [x] User enumeration açığını kapat — `registrationTrackingToken` +
    `registration-status/:token`. (Milestone A)
-9. [ ] Password reset akışını tamamla — `forgot-password` hâlâ sadece admin'e
-   bildirim gönderiyor; gerçek `reset-password` (tek kullanımlık token,
-   hash'li saklama, session revoke) **yapılmadı**.
+9. [x] Password reset akışını tamamla — e-postası kayıtlı hesaplar için gerçek
+   self-service `reset-password` eklendi: tek kullanımlık, hash'li saklanan,
+   1 saat TTL'li token (`approval_tokens` tablosu, `purpose =
+   "password_reset"`), sıfırlama linki doğrudan hesap sahibine e-postayla
+   gönderiliyor, token kullanılmadan önce atomik olarak tüketiliyor, başarılı
+   sıfırlamada hesabın tüm oturumları iptal ediliyor ve
+   `AUTH_PASSWORD_RESET_COMPLETED` audit kaydı düşülüyor. E-postası olmayan
+   hesaplar için eski admin-bildirim akışı korunuyor. Backend
+   (`server/tests/password_reset.rs`, 3 test) ve frontend
+   (`ResetPasswordPage`, `App.tsx` `resetToken` query-param yönlendirmesi, 6
+   dilde i18n) tamamlandı ve doğrulandı.
 10. [ ] MFA altyapısı ekle — TOTP altyapısı **yapılmadı**.
 11. [~] Role değişiminde JWT stale yetki sorunu — ban anında session revoke
     var (Milestone A). Role **downgrade** anında session revoke / auth_version

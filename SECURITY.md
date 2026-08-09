@@ -72,6 +72,13 @@ Implemented controls:
 - Refresh-token cookie `SameSite`/`Secure` attributes are selected based
   on whether the request is same-origin and whether the server is running
   in production — see `docs/SECURITY_ARCHITECTURE.md`.
+- **Self-service password reset**: accounts with an email on file receive
+  a single-use, hashed, 1-hour-TTL reset token by email
+  (`POST /api/v1/auth/forgot-password` →
+  `POST /api/v1/auth/reset-password`); the token is consumed atomically
+  before the password changes, and a successful reset revokes every
+  active session for the account. Accounts without an email keep the
+  existing admin-notification fallback. See `docs/SECURITY_ARCHITECTURE.md`.
 - **Append-only audit trail**: every security- or case-relevant action
   (auth success/failure, token reuse detection, registration approve/
   reject, user create/update/ban/unban/delete, search create/complete/

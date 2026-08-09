@@ -12,13 +12,18 @@ use std::time::Duration;
 
 use crate::audit::{action, result as audit_result, AuditRecorder};
 use crate::db::{
-    create_session, create_user, find_session_by_family, load_registration_tracking_status,
-    load_user_by_code, load_user_by_email, load_user_by_id, revoke_all_sessions_for_user,
-    revoke_session, revoke_session_family, rotate_session, set_registration_tracking_token,
-    AppState, UserRow,
+    consume_approval_token as consume_single_use_token,
+    create_approval_token as create_single_use_token, create_session, create_user,
+    find_approval_token_by_hash as find_single_use_token_by_hash, find_session_by_family,
+    load_registration_tracking_status, load_user_by_code, load_user_by_email, load_user_by_id,
+    revoke_all_sessions_for_user, revoke_session, revoke_session_family, rotate_session,
+    set_registration_tracking_token, update_user_password, AppState, UserRow,
 };
 use crate::error::ApiError;
 use crate::roles;
+
+const PASSWORD_RESET_PURPOSE: &str = "password_reset";
+const PASSWORD_RESET_TOKEN_TTL_HOURS: i64 = 1;
 
 const ACCESS_TOKEN_TTL_SECS: i64 = 15 * 60;
 const REFRESH_TOKEN_TTL_DAYS: i64 = 30;
@@ -850,13 +855,47 @@ pub async fn forgot_password(
     };
 
     if let Some(user) = user {
-        crate::email::send_password_reset_request(
-            &user.first_name,
-            &user.last_name,
-            &user.user_code,
-            user.email.as_deref(),
-        )
-        .await;
+        match user.email.as_deref() {
+            // A real self-service reset: a single-use, hashed, 1-hour
+            // token the account holder uses themselves — never the raw
+            // token stored, never a way to skip straight to a new
+            // password without proving control of the mailbox.
+            Some(email) => {
+                let expires_at = Utc::now() + ChronoDuration::hours(PASSWORD_RESET_TOKEN_TTL_HOURS);
+                let raw_token = random_hex(32);
+                if create_single_use_token(
+                    &state.backend,
+                    &user.id,
+                    &sha256_hex(&raw_token),
+                    PASSWORD_RESET_PURPOSE,
+                    expires_at,
+                )
+                .await
+                .is_ok()
+                {
+                    let reset_link = format!("{}/?resetToken={}", app_url(), raw_token);
+                    crate::email::send_password_reset_email(
+                        &user.first_name,
+                        &user.last_name,
+                        email,
+                        &reset_link,
+                    )
+                    .await;
+                }
+            }
+            // No email on file (e.g. an admin-created account) — no
+            // self-service channel exists, so fall back to notifying the
+            // admin, who resets the password from the management panel.
+            None => {
+                crate::email::send_password_reset_request(
+                    &user.first_name,
+                    &user.last_name,
+                    &user.user_code,
+                    None,
+                )
+                .await;
+            }
+        }
         AuditRecorder::new(
             action::AUTH_PASSWORD_RESET_REQUESTED,
             audit_result::SUCCESS,
@@ -869,6 +908,80 @@ pub async fn forgot_password(
     }
 
     Json(serde_json::json!({ "messageKey": "auth.forgotPasswordReceived" })).into_response()
+}
+
+fn app_url() -> String {
+    std::env::var("APP_URL")
+        .or_else(|_| std::env::var("RENDER_EXTERNAL_URL"))
+        .unwrap_or_else(|_| "http://localhost:8080".to_string())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResetPasswordPayload {
+    pub token: String,
+    pub new_password: String,
+}
+
+/// Completes a self-service password reset: consumes the single-use token
+/// `forgot_password` issued, sets the new password, and revokes every
+/// active session for the account — a reset is exactly the kind of event
+/// that should force every other signed-in device to re-authenticate.
+pub async fn reset_password(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<ResetPasswordPayload>,
+) -> Response {
+    let rid = request_id(&headers);
+    if payload.token.trim().is_empty() {
+        return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
+    }
+    if validate_password(&payload.new_password).is_some() {
+        return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
+    }
+
+    let token_hash = sha256_hex(payload.token.trim());
+    let Ok(Some(row)) = find_single_use_token_by_hash(&state.backend, &token_hash).await else {
+        return ApiError::new("VALIDATION_ERROR", "errors.invalidResetToken", rid).into_response();
+    };
+    if row.purpose != PASSWORD_RESET_PURPOSE || row.consumed_at.is_some() {
+        return ApiError::new("VALIDATION_ERROR", "errors.invalidResetToken", rid).into_response();
+    }
+    let Ok(expires_at) = row.expires_at.parse::<DateTime<Utc>>() else {
+        return ApiError::new("VALIDATION_ERROR", "errors.invalidResetToken", rid).into_response();
+    };
+    if expires_at < Utc::now() {
+        return ApiError::new("VALIDATION_ERROR", "errors.invalidResetToken", rid).into_response();
+    }
+    // Single-use: consumed before the password is even changed, so a
+    // concurrent replay of the same token can never land twice.
+    if !consume_single_use_token(&state.backend, &row.id, "reset")
+        .await
+        .unwrap_or(false)
+    {
+        return ApiError::new("VALIDATION_ERROR", "errors.invalidResetToken", rid).into_response();
+    }
+
+    let hashed = match hash(&payload.new_password, DEFAULT_COST) {
+        Ok(v) => v,
+        Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    };
+    let Ok(Some(user)) = update_user_password(&state.backend, &row.user_id, &hashed).await else {
+        return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response();
+    };
+    let _ = revoke_all_sessions_for_user(&state.backend, &user.id).await;
+
+    AuditRecorder::new(
+        action::AUTH_PASSWORD_RESET_COMPLETED,
+        audit_result::SUCCESS,
+        rid,
+    )
+    .actor_by_id(&user.id, &user.user_code, &user.role)
+    .headers(&headers)
+    .save(&state)
+    .await;
+
+    Json(serde_json::json!({ "messageKey": "auth.passwordResetSuccess" })).into_response()
 }
 
 fn cleared_cookie() -> HeaderValue {

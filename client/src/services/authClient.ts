@@ -55,6 +55,10 @@ export async function forgotPassword(identifier: string): Promise<void> {
   await apiClient.post('/v1/auth/forgot-password', { identifier });
 }
 
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await apiClient.post('/v1/auth/reset-password', { token, newPassword });
+}
+
 export async function me(): Promise<PublicUser> {
   const { data } = await apiClient.get<PublicUser>('/v1/users/me');
   return data;
