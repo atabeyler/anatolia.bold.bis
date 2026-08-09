@@ -7,7 +7,7 @@ import { brandMark } from '../lib/brand';
 const ADMIN_ROLES = ['SYSTEM_ADMIN', 'SECURITY_ADMIN'];
 
 interface DashboardPageProps {
-  onOpenAdmin: () => void;
+  onOpenAdmin?: () => void;
 }
 
 export function DashboardPage({ onOpenAdmin }: DashboardPageProps) {
@@ -23,7 +23,7 @@ export function DashboardPage({ onOpenAdmin }: DashboardPageProps) {
         {user && (
           <div className="app-header__session">
             <span>{t('auth.welcomeBack', { name: `${user.firstName} ${user.lastName}` })}</span>
-            {isAdmin && (
+            {isAdmin && onOpenAdmin && (
               <button type="button" onClick={onOpenAdmin}>
                 {t('admin.openLabel')}
               </button>

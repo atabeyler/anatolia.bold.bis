@@ -10,7 +10,7 @@ import { apiErrorMessageKey } from '../services/apiClient';
 const NATIONAL_ID_PATTERN = /^[0-9]{11}$/;
 
 interface AdminPageProps {
-  onClose: () => void;
+  onGoHome: () => void;
 }
 
 interface EditForm {
@@ -22,7 +22,7 @@ interface EditForm {
 
 const EMPTY_EDIT_FORM: EditForm = { nickname: '', nationalId: '', email: '', password: '' };
 
-export function AdminPage({ onClose }: AdminPageProps) {
+export function AdminPage({ onGoHome }: AdminPageProps) {
   const { t, i18n } = useTranslation();
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -139,8 +139,8 @@ export function AdminPage({ onClose }: AdminPageProps) {
             <div className="admin-header__subtitle">{t('admin.panelTitle')}</div>
           </div>
         </div>
-        <button type="button" className="app-header__nav-button" onClick={onClose}>
-          {t('admin.back')}
+        <button type="button" className="app-header__nav-button" onClick={onGoHome}>
+          {t('admin.goHome')}
         </button>
       </header>
 

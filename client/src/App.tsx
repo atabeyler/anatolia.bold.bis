@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { MenuOverlay } from './components/MenuOverlay';
@@ -8,12 +8,29 @@ import { AdminPage } from './pages/AdminPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 
+const ADMIN_ROLES = ['SYSTEM_ADMIN', 'SECURITY_ADMIN'];
+
+type View = 'dashboard' | 'admin';
+
 function App() {
   const { t } = useTranslation();
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(false);
+  const [view, setView] = useState<View | null>(null);
+  const isAdmin = !!user && ADMIN_ROLES.includes(user.role);
+
+  useEffect(() => {
+    if (status === 'signed-in' && view === null) {
+      // Admins land straight on the management panel — no intermediate
+      // dashboard click required — while everyone else lands on the
+      // dashboard as before.
+      setView(isAdmin ? 'admin' : 'dashboard');
+    }
+    if (status !== 'signed-in' && view !== null) {
+      setView(null);
+    }
+  }, [status, isAdmin, view]);
 
   return (
     <div className="app-shell">
@@ -28,10 +45,10 @@ function App() {
 
       <div className="app-main">
         {status === 'loading' ? null : status === 'signed-in' ? (
-          adminOpen ? (
-            <AdminPage onClose={() => setAdminOpen(false)} />
+          view === 'admin' ? (
+            <AdminPage onGoHome={() => setView('dashboard')} />
           ) : (
-            <DashboardPage onOpenAdmin={() => setAdminOpen(true)} />
+            <DashboardPage onOpenAdmin={isAdmin ? () => setView('admin') : undefined} />
           )
         ) : (
           <LoginPage />
