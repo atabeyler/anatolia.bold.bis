@@ -945,9 +945,9 @@ body::before {
 .overlay-secondary-button::after {
   content: '';
   position: absolute;
-  width: 12px;
-  height: 2px;
-  background: currentColor;
+  width: 8px;
+  height: 8px;
+  border: 2px solid transparent;
   pointer-events: none;
 }
 
@@ -959,9 +959,10 @@ body::before {
 .app-header__nav-button::before,
 .app-header__session button::before,
 .overlay-secondary-button::before {
-  top: 2.5px;
-  right: -2.5px;
-  transform: rotate(45deg);
+  top: -1px;
+  right: -1px;
+  border-top-color: currentColor;
+  border-right-color: currentColor;
 }
 
 .auth-submit::after,
@@ -972,9 +973,10 @@ body::before {
 .app-header__nav-button::after,
 .app-header__session button::after,
 .overlay-secondary-button::after {
-  bottom: 2.5px;
-  left: -2.5px;
-  transform: rotate(45deg);
+  bottom: -1px;
+  left: -1px;
+  border-bottom-color: currentColor;
+  border-left-color: currentColor;
 }
 
 /* ── Admin management panel ───────────────────────────────────── */
