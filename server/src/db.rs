@@ -25,11 +25,19 @@ pub struct Secrets {
     pub approval_token_secret: String,
 }
 
+/// Search tuning resolved once at startup by `Config::from_env`.
+#[derive(Clone)]
+pub struct SearchLimits {
+    pub default_top_k: i64,
+    pub max_top_k: i64,
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub backend: DbBackend,
     pub rate_limiter: Arc<RateLimiter>,
     pub secrets: Arc<Secrets>,
+    pub search_limits: Arc<SearchLimits>,
 }
 
 impl AppState {
@@ -60,6 +68,10 @@ impl AppState {
                 jwt_refresh_secret: config.jwt_refresh_secret.clone(),
                 approval_token_secret: config.approval_token_secret.clone(),
             }),
+            search_limits: Arc::new(SearchLimits {
+                default_top_k: config.search_default_top_k,
+                max_top_k: config.search_max_top_k,
+            }),
         })
     }
 
@@ -82,6 +94,10 @@ impl AppState {
                 jwt_secret: "test-access-secret-not-for-prod-use-only".to_string(),
                 jwt_refresh_secret: "test-refresh-secret-not-for-prod-use-only".to_string(),
                 approval_token_secret: "test-approval-secret-not-for-prod-use-only".to_string(),
+            }),
+            search_limits: Arc::new(SearchLimits {
+                default_top_k: 10,
+                max_top_k: 50,
             }),
         }
     }
@@ -245,15 +261,38 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                     purpose TEXT NOT NULL,
                     requested_by UUID NOT NULL,
                     requested_by_name VARCHAR(200) NOT NULL,
-                    status VARCHAR(20) NOT NULL DEFAULT 'completed',
+                    status VARCHAR(20) NOT NULL DEFAULT 'queued',
                     latitude DOUBLE PRECISION,
                     longitude DOUBLE PRECISION,
+                    top_k INTEGER,
+                    started_at TIMESTAMPTZ,
+                    completed_at TIMESTAMPTZ,
+                    failure_code TEXT,
+                    failure_message_key TEXT,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
                 "#,
             )
             .execute(pool)
             .await?;
+            // Same "table may already exist from an earlier deploy" hazard
+            // as `users.national_id` — patch in columns added after
+            // `searches` first shipped rather than assuming a fresh table.
+            sqlx::query("ALTER TABLE searches ADD COLUMN IF NOT EXISTS top_k INTEGER")
+                .execute(pool)
+                .await?;
+            sqlx::query("ALTER TABLE searches ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ")
+                .execute(pool)
+                .await?;
+            sqlx::query("ALTER TABLE searches ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ")
+                .execute(pool)
+                .await?;
+            sqlx::query("ALTER TABLE searches ADD COLUMN IF NOT EXISTS failure_code TEXT")
+                .execute(pool)
+                .await?;
+            sqlx::query("ALTER TABLE searches ADD COLUMN IF NOT EXISTS failure_message_key TEXT")
+                .execute(pool)
+                .await?;
             sqlx::query(
                 r#"
                 CREATE TABLE IF NOT EXISTS search_candidates (
@@ -280,6 +319,35 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             sqlx::query("ALTER TABLE searches ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION")
                 .execute(pool)
                 .await?;
+
+            // Append-only review history: `search_candidates.status`
+            // (above) is a convenience "current status" column, but the
+            // decisions that led to it must never be silently overwritten.
+            // Every confirm/reject writes one new row here in addition to
+            // updating that column — see search::review.
+            sqlx::query(
+                r#"
+                CREATE TABLE IF NOT EXISTS verification_events (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    search_candidate_id UUID NOT NULL,
+                    reviewer_user_id UUID NOT NULL,
+                    reviewer_name VARCHAR(200) NOT NULL,
+                    decision VARCHAR(20) NOT NULL,
+                    reason TEXT,
+                    notes TEXT,
+                    request_id TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                "#,
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query(
+                "CREATE INDEX IF NOT EXISTS idx_verification_events_search_candidate_id \
+                 ON verification_events (search_candidate_id)",
+            )
+            .execute(pool)
+            .await?;
 
             // Server-side session records backing refresh-token rotation
             // (see auth.rs). The raw refresh token is never stored — only
@@ -440,15 +508,37 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                     purpose TEXT NOT NULL,
                     requested_by TEXT NOT NULL,
                     requested_by_name TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'completed',
+                    status TEXT NOT NULL DEFAULT 'queued',
                     latitude REAL,
                     longitude REAL,
+                    top_k INTEGER,
+                    started_at TEXT,
+                    completed_at TEXT,
+                    failure_code TEXT,
+                    failure_message_key TEXT,
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 )
                 "#,
             )
             .execute(pool)
             .await?;
+            // Best-effort patch for a dev.db predating these columns — see
+            // the equivalent Postgres ADD COLUMN IF NOT EXISTS branch above.
+            let _ = sqlx::query("ALTER TABLE searches ADD COLUMN top_k INTEGER")
+                .execute(pool)
+                .await;
+            let _ = sqlx::query("ALTER TABLE searches ADD COLUMN started_at TEXT")
+                .execute(pool)
+                .await;
+            let _ = sqlx::query("ALTER TABLE searches ADD COLUMN completed_at TEXT")
+                .execute(pool)
+                .await;
+            let _ = sqlx::query("ALTER TABLE searches ADD COLUMN failure_code TEXT")
+                .execute(pool)
+                .await;
+            let _ = sqlx::query("ALTER TABLE searches ADD COLUMN failure_message_key TEXT")
+                .execute(pool)
+                .await;
             sqlx::query(
                 r#"
                 CREATE TABLE IF NOT EXISTS search_candidates (
@@ -463,6 +553,30 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 )
                 "#,
+            )
+            .execute(pool)
+            .await?;
+
+            sqlx::query(
+                r#"
+                CREATE TABLE IF NOT EXISTS verification_events (
+                    id TEXT PRIMARY KEY,
+                    search_candidate_id TEXT NOT NULL,
+                    reviewer_user_id TEXT NOT NULL,
+                    reviewer_name TEXT NOT NULL,
+                    decision TEXT NOT NULL,
+                    reason TEXT,
+                    notes TEXT,
+                    request_id TEXT,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                )
+                "#,
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query(
+                "CREATE INDEX IF NOT EXISTS idx_verification_events_search_candidate_id \
+                 ON verification_events (search_candidate_id)",
             )
             .execute(pool)
             .await?;
@@ -1141,62 +1255,19 @@ pub struct SearchRow {
     pub status: String,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    pub top_k: Option<i64>,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+    pub failure_code: Option<String>,
+    pub failure_message_key: Option<String>,
     pub created_at: String,
 }
 
-const SEARCH_COLUMNS_PG: &str =
-    "id::text, case_reference, purpose, requested_by::text, requested_by_name, status, latitude, longitude, created_at::text";
+const SEARCH_COLUMNS_PG: &str = "id::text, case_reference, purpose, requested_by::text, requested_by_name, status, \
+     latitude, longitude, top_k, started_at::text, completed_at::text, failure_code, failure_message_key, created_at::text";
 const SEARCH_COLUMNS_SQLITE: &str =
-    "id, case_reference, purpose, requested_by, requested_by_name, status, latitude, longitude, created_at";
-
-#[allow(clippy::too_many_arguments)]
-pub async fn create_search(
-    backend: &DbBackend,
-    case_reference: &str,
-    purpose: &str,
-    requested_by: &str,
-    requested_by_name: &str,
-    latitude: Option<f64>,
-    longitude: Option<f64>,
-) -> Result<Option<SearchRow>, sqlx::Error> {
-    match backend {
-        DbBackend::Postgres(pool) => {
-            let Ok(requester_uuid) = Uuid::parse_str(requested_by) else {
-                return Ok(None);
-            };
-            sqlx::query_as::<_, SearchRow>(&format!(
-                "INSERT INTO searches (case_reference, purpose, requested_by, requested_by_name, latitude, longitude)
-                 VALUES ($1, $2, $3, $4, $5, $6) RETURNING {SEARCH_COLUMNS_PG}"
-            ))
-            .bind(case_reference)
-            .bind(purpose)
-            .bind(requester_uuid)
-            .bind(requested_by_name)
-            .bind(latitude)
-            .bind(longitude)
-            .fetch_one(pool)
-            .await
-            .map(Some)
-        }
-        DbBackend::Sqlite(pool) => {
-            let id = Uuid::new_v4().to_string();
-            sqlx::query(
-                "INSERT INTO searches (id, case_reference, purpose, requested_by, requested_by_name, latitude, longitude)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            )
-            .bind(&id)
-            .bind(case_reference)
-            .bind(purpose)
-            .bind(requested_by)
-            .bind(requested_by_name)
-            .bind(latitude)
-            .bind(longitude)
-            .execute(pool)
-            .await?;
-            load_search_by_id(backend, &id).await
-        }
-    }
-}
+    "id, case_reference, purpose, requested_by, requested_by_name, status, latitude, \
+     longitude, top_k, started_at, completed_at, failure_code, failure_message_key, created_at";
 
 pub async fn load_search_by_id(
     backend: &DbBackend,
@@ -1225,21 +1296,217 @@ pub async fn load_search_by_id(
     }
 }
 
-pub async fn list_searches(backend: &DbBackend) -> Result<Vec<SearchRow>, sqlx::Error> {
+const SEARCH_PAGE_MAX_SIZE: i64 = 200;
+
+/// Server-side paginated search history, newest first. `page` is
+/// 1-indexed; `page_size` is clamped to `SEARCH_PAGE_MAX_SIZE` regardless
+/// of what's requested. Returns `(rows, total_matching_count)`.
+pub async fn list_searches_page(
+    backend: &DbBackend,
+    page: i64,
+    page_size: i64,
+) -> Result<(Vec<SearchRow>, i64), sqlx::Error> {
+    let page = page.max(1);
+    let page_size = page_size.clamp(1, SEARCH_PAGE_MAX_SIZE);
+    let offset = (page - 1) * page_size;
     match backend {
         DbBackend::Postgres(pool) => {
-            sqlx::query_as::<_, SearchRow>(&format!(
-                "SELECT {SEARCH_COLUMNS_PG} FROM searches ORDER BY created_at DESC"
+            let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM searches")
+                .fetch_one(pool)
+                .await?;
+            let rows = sqlx::query_as::<_, SearchRow>(&format!(
+                "SELECT {SEARCH_COLUMNS_PG} FROM searches ORDER BY created_at DESC LIMIT $1 OFFSET $2"
             ))
+            .bind(page_size)
+            .bind(offset)
             .fetch_all(pool)
-            .await
+            .await?;
+            Ok((rows, total))
         }
         DbBackend::Sqlite(pool) => {
-            sqlx::query_as::<_, SearchRow>(&format!(
-                "SELECT {SEARCH_COLUMNS_SQLITE} FROM searches ORDER BY created_at DESC"
+            let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM searches")
+                .fetch_one(pool)
+                .await?;
+            let rows = sqlx::query_as::<_, SearchRow>(&format!(
+                "SELECT {SEARCH_COLUMNS_SQLITE} FROM searches ORDER BY created_at DESC LIMIT ?1 OFFSET ?2"
             ))
+            .bind(page_size)
+            .bind(offset)
             .fetch_all(pool)
+            .await?;
+            Ok((rows, total))
+        }
+    }
+}
+
+/// Persists a search attempt that failed before (or while) writing its
+/// candidate results — see `create_search_with_candidates`. Distinct from
+/// that function: this is a single, non-transactional insert, used only
+/// after the transactional attempt has already rolled back, so the
+/// failure itself has a durable, queryable record instead of vanishing
+/// silently.
+#[allow(clippy::too_many_arguments)]
+pub async fn record_failed_search(
+    backend: &DbBackend,
+    case_reference: &str,
+    purpose: &str,
+    requested_by: &str,
+    requested_by_name: &str,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    top_k: i64,
+    failure_code: &str,
+    failure_message_key: &str,
+) -> Result<Option<SearchRow>, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(requester_uuid) = Uuid::parse_str(requested_by) else {
+                return Ok(None);
+            };
+            sqlx::query_as::<_, SearchRow>(&format!(
+                "INSERT INTO searches (case_reference, purpose, requested_by, requested_by_name, latitude, longitude,
+                 top_k, status, started_at, completed_at, failure_code, failure_message_key)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'failed', NOW(), NOW(), $8, $9) RETURNING {SEARCH_COLUMNS_PG}"
+            ))
+            .bind(case_reference)
+            .bind(purpose)
+            .bind(requester_uuid)
+            .bind(requested_by_name)
+            .bind(latitude)
+            .bind(longitude)
+            .bind(top_k)
+            .bind(failure_code)
+            .bind(failure_message_key)
+            .fetch_one(pool)
             .await
+            .map(Some)
+        }
+        DbBackend::Sqlite(pool) => {
+            let id = Uuid::new_v4().to_string();
+            sqlx::query(
+                "INSERT INTO searches (id, case_reference, purpose, requested_by, requested_by_name, latitude, longitude,
+                 top_k, status, started_at, completed_at, failure_code, failure_message_key)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'failed', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                 strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?9, ?10)",
+            )
+            .bind(&id)
+            .bind(case_reference)
+            .bind(purpose)
+            .bind(requested_by)
+            .bind(requested_by_name)
+            .bind(latitude)
+            .bind(longitude)
+            .bind(top_k)
+            .bind(failure_code)
+            .bind(failure_message_key)
+            .execute(pool)
+            .await?;
+            load_search_by_id(backend, &id).await
+        }
+    }
+}
+
+/// Atomically creates a search and every one of its candidate results:
+/// `BEGIN`, insert the search row, insert each candidate row, mark the
+/// search `completed`, `COMMIT`. If any step fails, the whole attempt is
+/// rolled back — no partial candidate list is ever left visible for a
+/// search that didn't fully succeed (see CLAUDE.md's transactional-search
+/// requirement). On failure, the caller is expected to call
+/// `record_failed_search` separately to leave a durable failure record.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_search_with_candidates(
+    backend: &DbBackend,
+    case_reference: &str,
+    purpose: &str,
+    requested_by: &str,
+    requested_by_name: &str,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    top_k: i64,
+    scored: &[(String, f64)],
+) -> Result<SearchRow, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let requester_uuid = Uuid::parse_str(requested_by)
+                .map_err(|e| sqlx::Error::Protocol(format!("invalid requested_by uuid: {e}")))?;
+            let mut tx = pool.begin().await?;
+            let search: SearchRow = sqlx::query_as(&format!(
+                "INSERT INTO searches (case_reference, purpose, requested_by, requested_by_name, latitude, longitude,
+                 top_k, status, started_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing', NOW()) RETURNING {SEARCH_COLUMNS_PG}"
+            ))
+            .bind(case_reference)
+            .bind(purpose)
+            .bind(requester_uuid)
+            .bind(requested_by_name)
+            .bind(latitude)
+            .bind(longitude)
+            .bind(top_k)
+            .fetch_one(&mut *tx)
+            .await?;
+            let search_uuid =
+                Uuid::parse_str(&search.id).expect("just-inserted search id is a valid uuid");
+            for (candidate_id, score) in scored {
+                let candidate_uuid = Uuid::parse_str(candidate_id)
+                    .map_err(|e| sqlx::Error::Protocol(format!("invalid candidate uuid: {e}")))?;
+                sqlx::query("INSERT INTO search_candidates (search_id, candidate_id, score) VALUES ($1, $2, $3)")
+                    .bind(search_uuid)
+                    .bind(candidate_uuid)
+                    .bind(score)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            let completed: SearchRow = sqlx::query_as(&format!(
+                "UPDATE searches SET status = 'completed', completed_at = NOW() WHERE id = $1 RETURNING {SEARCH_COLUMNS_PG}"
+            ))
+            .bind(search_uuid)
+            .fetch_one(&mut *tx)
+            .await?;
+            tx.commit().await?;
+            Ok(completed)
+        }
+        DbBackend::Sqlite(pool) => {
+            let mut tx = pool.begin().await?;
+            let search_id = Uuid::new_v4().to_string();
+            sqlx::query(
+                "INSERT INTO searches (id, case_reference, purpose, requested_by, requested_by_name, latitude, longitude,
+                 top_k, status, started_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'processing', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            )
+            .bind(&search_id)
+            .bind(case_reference)
+            .bind(purpose)
+            .bind(requested_by)
+            .bind(requested_by_name)
+            .bind(latitude)
+            .bind(longitude)
+            .bind(top_k)
+            .execute(&mut *tx)
+            .await?;
+            for (candidate_id, score) in scored {
+                let row_id = Uuid::new_v4().to_string();
+                sqlx::query("INSERT INTO search_candidates (id, search_id, candidate_id, score) VALUES (?1, ?2, ?3, ?4)")
+                    .bind(&row_id)
+                    .bind(&search_id)
+                    .bind(candidate_id)
+                    .bind(score)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+            sqlx::query(
+                "UPDATE searches SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+            )
+            .bind(&search_id)
+            .execute(&mut *tx)
+            .await?;
+            let completed: SearchRow = sqlx::query_as(&format!(
+                "SELECT {SEARCH_COLUMNS_SQLITE} FROM searches WHERE id = ?1"
+            ))
+            .bind(&search_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            tx.commit().await?;
+            Ok(completed)
         }
     }
 }
@@ -1341,13 +1608,24 @@ pub async fn list_search_candidates(
 /// Sets a candidate's review status (`confirmed`/`rejected`) within one
 /// search. This is the one explicit human verification action that sets
 /// "Confirmed Identity" — never derived automatically from a score.
-pub async fn set_search_candidate_status(
+/// Records one review decision: inserts an immutable `verification_events`
+/// row (never overwritten or deleted — see docs/SECURITY_ARCHITECTURE.md)
+/// and updates `search_candidates`'s current-status columns, atomically.
+/// A later decision on the same candidate adds another event row rather
+/// than replacing this one; `search_candidates.status`/`reviewed_*` only
+/// ever reflect the most recent decision, the full history lives in
+/// `verification_events`.
+#[allow(clippy::too_many_arguments)]
+pub async fn record_review_decision(
     backend: &DbBackend,
     search_id: &str,
     candidate_id: &str,
-    status: &str,
+    decision: &str,
     reviewed_by: &str,
     reviewed_by_name: &str,
+    reason: Option<&str>,
+    notes: Option<&str>,
+    request_id: &str,
 ) -> Result<Option<SearchCandidateRow>, sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
@@ -1358,31 +1636,83 @@ pub async fn set_search_candidate_status(
             ) else {
                 return Ok(None);
             };
-            sqlx::query(
-                "UPDATE search_candidates SET status = $1, reviewed_by = $2, reviewed_by_name = $3, reviewed_at = NOW()
-                 WHERE search_id = $4 AND candidate_id = $5",
+            let mut tx = pool.begin().await?;
+            let search_candidate_id: Option<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM search_candidates WHERE search_id = $1 AND candidate_id = $2",
             )
-            .bind(status)
-            .bind(reviewer_uuid)
-            .bind(reviewed_by_name)
             .bind(search_uuid)
             .bind(candidate_uuid)
-            .execute(pool)
+            .fetch_optional(&mut *tx)
             .await?;
+            let Some(search_candidate_id) = search_candidate_id else {
+                return Ok(None);
+            };
+            sqlx::query(
+                "INSERT INTO verification_events
+                 (search_candidate_id, reviewer_user_id, reviewer_name, decision, reason, notes, request_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            )
+            .bind(search_candidate_id)
+            .bind(reviewer_uuid)
+            .bind(reviewed_by_name)
+            .bind(decision)
+            .bind(reason)
+            .bind(notes)
+            .bind(request_id)
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query(
+                "UPDATE search_candidates SET status = $1, reviewed_by = $2, reviewed_by_name = $3, reviewed_at = NOW()
+                 WHERE id = $4",
+            )
+            .bind(decision)
+            .bind(reviewer_uuid)
+            .bind(reviewed_by_name)
+            .bind(search_candidate_id)
+            .execute(&mut *tx)
+            .await?;
+            tx.commit().await?;
         }
         DbBackend::Sqlite(pool) => {
+            let mut tx = pool.begin().await?;
+            let search_candidate_id: Option<String> = sqlx::query_scalar(
+                "SELECT id FROM search_candidates WHERE search_id = ?1 AND candidate_id = ?2",
+            )
+            .bind(search_id)
+            .bind(candidate_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+            let Some(search_candidate_id) = search_candidate_id else {
+                return Ok(None);
+            };
+            let event_id = Uuid::new_v4().to_string();
+            sqlx::query(
+                "INSERT INTO verification_events
+                 (id, search_candidate_id, reviewer_user_id, reviewer_name, decision, reason, notes, request_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            )
+            .bind(&event_id)
+            .bind(&search_candidate_id)
+            .bind(reviewed_by)
+            .bind(reviewed_by_name)
+            .bind(decision)
+            .bind(reason)
+            .bind(notes)
+            .bind(request_id)
+            .execute(&mut *tx)
+            .await?;
             sqlx::query(
                 "UPDATE search_candidates SET status = ?1, reviewed_by = ?2, reviewed_by_name = ?3,
                  reviewed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                 WHERE search_id = ?4 AND candidate_id = ?5",
+                 WHERE id = ?4",
             )
-            .bind(status)
+            .bind(decision)
             .bind(reviewed_by)
             .bind(reviewed_by_name)
-            .bind(search_id)
-            .bind(candidate_id)
-            .execute(pool)
+            .bind(&search_candidate_id)
+            .execute(&mut *tx)
             .await?;
+            tx.commit().await?;
         }
     }
     list_search_candidates(backend, search_id)
@@ -1391,6 +1721,56 @@ pub async fn set_search_candidate_status(
             rows.into_iter()
                 .find(|row| row.candidate_id == candidate_id)
         })
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct VerificationEventRow {
+    pub id: String,
+    pub search_candidate_id: String,
+    pub reviewer_user_id: String,
+    pub reviewer_name: String,
+    pub decision: String,
+    pub reason: Option<String>,
+    pub notes: Option<String>,
+    pub request_id: Option<String>,
+    pub created_at: String,
+}
+
+const VERIFICATION_EVENT_COLUMNS_PG: &str =
+    "id::text, search_candidate_id::text, reviewer_user_id::text, \
+     reviewer_name, decision, reason, notes, request_id, created_at::text";
+const VERIFICATION_EVENT_COLUMNS_SQLITE: &str =
+    "id, search_candidate_id, reviewer_user_id, reviewer_name, decision, reason, notes, request_id, created_at";
+
+/// Full, unabridged review history for one candidate within one search —
+/// every decision ever recorded, oldest first, never just the latest one.
+pub async fn list_verification_events(
+    backend: &DbBackend,
+    search_candidate_id: &str,
+) -> Result<Vec<VerificationEventRow>, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(uuid) = Uuid::parse_str(search_candidate_id) else {
+                return Ok(vec![]);
+            };
+            sqlx::query_as::<_, VerificationEventRow>(&format!(
+                "SELECT {VERIFICATION_EVENT_COLUMNS_PG} FROM verification_events \
+                 WHERE search_candidate_id = $1 ORDER BY created_at ASC"
+            ))
+            .bind(uuid)
+            .fetch_all(pool)
+            .await
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query_as::<_, VerificationEventRow>(&format!(
+                "SELECT {VERIFICATION_EVENT_COLUMNS_SQLITE} FROM verification_events \
+                 WHERE search_candidate_id = ?1 ORDER BY created_at ASC"
+            ))
+            .bind(search_candidate_id)
+            .fetch_all(pool)
+            .await
+        }
+    }
 }
 
 // ── Sessions (refresh-token rotation) ───────────────────────────────

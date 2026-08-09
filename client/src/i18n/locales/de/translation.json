@@ -50,6 +50,11 @@
   },
   "errors": {
     "validation": "Bitte überprüfen Sie die Felder und versuchen Sie es erneut.",
+    "invalidCoordinates": "Die Standortkoordinaten sind ungültig oder unvollständig.",
+    "imageTooLarge": "Die Bilddatei ist zu groß (maximal 10 MB).",
+    "unsupportedImageType": "Nicht unterstützter Bildtyp. Verwenden Sie JPEG, PNG oder WEBP.",
+    "imageDecodeFailed": "Die Bilddatei konnte nicht gelesen werden. Sie ist möglicherweise beschädigt.",
+    "imageDimensionsInvalid": "Die Bildabmessungen sind für ein Testfoto nicht gültig.",
     "invalidCredentials": "Benutzercode oder Passwort ist falsch.",
     "accountBanned": "Ihr Konto wurde gesperrt.",
     "accountNotApproved": "Ihr Konto wurde noch nicht genehmigt. Bitte warten Sie auf die Genehmigung durch den Administrator.",

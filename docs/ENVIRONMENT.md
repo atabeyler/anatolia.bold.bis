@@ -37,6 +37,7 @@ Everything else:
 | `RENDER`, `NODE_ENV` | Either being set to a production value switches the refresh-token cookie to `Secure`, selects `SameSite=Lax`/`None` instead of the dev-only `Strict`, enables the `Strict-Transport-Security` header, and enforces the production secret-strength checks described above. | No |
 | `TRUST_PROXY` | Set to `true` only when this deployment sits behind a reverse proxy you control that sets `X-Forwarded-For` itself. Governs whether login rate limiting and session `ip_address` records trust that header at all — an untrusted deployment ignores it entirely rather than trusting an attacker-controlled value. Defaults to the same value as "is this production" (Render always fronts the app with a trusted proxy); explicitly `false` disables it even in production if you know your deploy has no such proxy. | No |
 | `GIT_COMMIT_SHA` | Build-time only (not a runtime env var). Passed as a Docker build arg when `.git` isn't available in the build context; `server/build.rs` falls back to reading the checkout's own commit directly otherwise. | No |
+| `SEARCH_DEFAULT_TOP_K`, `SEARCH_MAX_TOP_K` | How many ranked candidates a search returns when the client doesn't request a specific count, and the hard ceiling a client-requested `topK` is clamped to (never rejected outright — see `POST /api/v1/search/face` in `API.md`). Default `10` / `50`. | No |
 
 ## Frontend (`client/`)
 

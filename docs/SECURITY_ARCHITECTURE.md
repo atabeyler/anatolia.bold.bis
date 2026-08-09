@@ -90,10 +90,48 @@ reporting.
   guarantee is only meaningful if reading it is also access-controlled.
   A failed audit write is logged as a warning and never blocks or fails
   the request that triggered it.
+- **Transactional search with a status state machine**
+  (`db::create_search_with_candidates`): a search row and every one of its
+  candidate results are written inside a single database transaction —
+  `BEGIN`, insert search (`processing`), insert each candidate, mark
+  `completed`, `COMMIT`. Any failure mid-way rolls the whole attempt back
+  (no partial candidate list is ever visible), and a separate,
+  non-transactional `record_failed_search` call then persists a `failed`
+  search row with a `failureCode`/`failureMessageKey` so the failed
+  attempt has a durable, queryable record instead of vanishing silently.
+  `status` is one of `queued`/`processing`/`completed`/`failed`.
+- **Immutable review history** (`verification_events` table,
+  `db::record_review_decision`): every confirm/reject on a candidate
+  appends a new event row (reviewer, decision, reason, notes, timestamp)
+  in the same transaction as the `search_candidates` status update. A
+  later decision on the same candidate — e.g. a second reviewer
+  correcting the first — adds another event rather than overwriting the
+  first; `GET /api/v1/search/{id}/candidates/{id}/history` returns the
+  full, ordered trail.
+- **Real probe-image validation** (`server/src/image_validation.rs`):
+  magic-byte sniff plus an actual decode (JPEG/PNG/WEBP only, via the
+  `image` crate), a 10 MB size cap, minimum/maximum pixel dimensions, and
+  a decompression-bomb guard on total decoded pixel count — replacing a
+  bare "the byte slice is non-empty" check. Failures return one of
+  `IMAGE_TOO_LARGE`, `UNSUPPORTED_IMAGE_TYPE`, `IMAGE_DECODE_FAILED`,
+  `IMAGE_DIMENSIONS_INVALID` (see `API.md`).
+- **Coordinate validation**: `POST /api/v1/search/face` requires latitude
+  in `[-90, 90]` and longitude in `[-180, 180]`, and rejects one being
+  present without the other — a malformed capture, not a legitimate
+  "location unavailable" case.
+- **Configurable, server-enforced top-K**: `SEARCH_DEFAULT_TOP_K`/
+  `SEARCH_MAX_TOP_K` (see `docs/ENVIRONMENT.md`) replace a compile-time
+  constant; a client-requested `topK` above the configured ceiling is
+  clamped down server-side, never trusted as-is.
+- **Server-side pagination** on search history
+  (`GET /api/v1/search?page=&pageSize=`, max page size 200), matching the
+  pattern already used by `GET /api/v1/audit`.
 
 ## Not yet implemented
 
-MFA, organization/unit-scoped authorization, enterprise SSO, and real
-upload validation (MIME/size/dimension/corruption checks) are planned
-(see `docs/ROADMAP.md`) but not present in the codebase yet. Do not
-assume any of them are active.
+MFA, organization/unit-scoped authorization, and enterprise SSO are
+planned (see `docs/ROADMAP.md`) but not present in the codebase yet. Do
+not assume any of them are active. The admin user list
+(`GET /api/v1/admin/users`) is intentionally not yet paginated — a small,
+bounded, manually-managed dataset, unlike search history or the audit
+trail.

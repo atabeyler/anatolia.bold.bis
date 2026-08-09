@@ -1,4 +1,4 @@
-use axum::extract::{Multipart, Path, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -9,9 +9,10 @@ use crate::audit::{action, result as audit_result, AuditRecorder};
 use crate::auth::{auth_user_from_headers, require_role};
 use crate::biometric::{BiometricProvider, MockBiometricProvider};
 use crate::db::{
-    create_search, list_candidates, list_search_candidates, list_searches, load_candidate_by_id,
-    load_search_by_id, load_user_by_id, set_search_candidate_status, AppState, CandidateRow,
-    SearchCandidateRow, SearchRow,
+    create_search_with_candidates, list_candidates, list_search_candidates, list_searches_page,
+    list_verification_events, load_candidate_by_id, load_search_by_id, load_user_by_id,
+    record_failed_search, record_review_decision, AppState, CandidateRow, SearchCandidateRow,
+    SearchRow, VerificationEventRow,
 };
 use crate::error::ApiError;
 use crate::roles;
@@ -33,7 +34,7 @@ const VIEW_ROLES: &[&str] = &[
     roles::SYSTEM_ADMIN,
     roles::AUDITOR,
 ];
-const TOP_K: usize = 5;
+const DEFAULT_PAGE_SIZE: i64 = 50;
 
 fn request_id(headers: &HeaderMap) -> String {
     headers
@@ -52,6 +53,11 @@ fn search_json(search: &SearchRow) -> serde_json::Value {
         "status": search.status,
         "latitude": search.latitude,
         "longitude": search.longitude,
+        "topK": search.top_k,
+        "startedAt": search.started_at,
+        "completedAt": search.completed_at,
+        "failureCode": search.failure_code,
+        "failureMessageKey": search.failure_message_key,
         "createdAt": search.created_at,
     })
 }
@@ -78,10 +84,26 @@ fn candidate_json(candidate: &CandidateRow) -> serde_json::Value {
     })
 }
 
+fn verification_event_json(event: &VerificationEventRow) -> serde_json::Value {
+    json!({
+        "id": event.id,
+        "reviewerName": event.reviewer_name,
+        "decision": event.decision,
+        "reason": event.reason,
+        "notes": event.notes,
+        "createdAt": event.created_at,
+    })
+}
+
 /// `POST /api/v1/search/face` — multipart form: `caseReference`, `purpose`,
-/// `image`. Runs the (currently mock) `BiometricProvider` over every known
-/// candidate and stores the ranked, scored result — never a verdict, see
-/// CLAUDE.md's "candidates, not verdicts" principle.
+/// `image`, optional `topK`. Runs the (currently mock) `BiometricProvider`
+/// over every known candidate and stores the ranked, scored result — never
+/// a verdict, see CLAUDE.md's "candidates, not verdicts" principle. The
+/// search row and every one of its candidate results are written in a
+/// single transaction (see `db::create_search_with_candidates`); a
+/// persistence failure never leaves a partial candidate list behind, and
+/// is itself recorded as a `failed` search (see `db::record_failed_search`)
+/// rather than silently vanishing.
 pub async fn create_search_route(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -100,6 +122,7 @@ pub async fn create_search_route(
     let mut image_bytes: Option<Vec<u8>> = None;
     let mut latitude: Option<f64> = None;
     let mut longitude: Option<f64> = None;
+    let mut requested_top_k: Option<i64> = None;
 
     loop {
         let field = match multipart.next_field().await {
@@ -115,6 +138,7 @@ pub async fn create_search_route(
             "image" => image_bytes = field.bytes().await.ok().map(|b| b.to_vec()),
             "latitude" => latitude = field.text().await.ok().and_then(|v| v.parse().ok()),
             "longitude" => longitude = field.text().await.ok().and_then(|v| v.parse().ok()),
+            "topK" => requested_top_k = field.text().await.ok().and_then(|v| v.parse().ok()),
             _ => {}
         }
     }
@@ -124,9 +148,36 @@ pub async fn create_search_route(
     let Some(image_bytes) = image_bytes.filter(|b| !b.is_empty()) else {
         return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
     };
+    let image_bytes = match crate::image_validation::validate_probe_image(&image_bytes) {
+        Ok(()) => image_bytes,
+        Err(code) => return ApiError::new(code, code_message_key(code), rid).into_response(),
+    };
     if case_reference.is_empty() || purpose.is_empty() {
         return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
     }
+    // Either both coordinates are present and each within its valid
+    // range, or neither is present — one without the other is a
+    // malformed capture, not a "coordinate unavailable" case.
+    match (latitude, longitude) {
+        (Some(lat), Some(lon)) => {
+            if !(-90.0..=90.0).contains(&lat) || !(-180.0..=180.0).contains(&lon) {
+                return ApiError::new("VALIDATION_ERROR", "errors.invalidCoordinates", rid)
+                    .into_response();
+            }
+        }
+        (None, None) => {}
+        _ => {
+            return ApiError::new("VALIDATION_ERROR", "errors.invalidCoordinates", rid)
+                .into_response()
+        }
+    }
+
+    // A client-requested top-k above the configured ceiling is clamped
+    // down, never rejected — see docs/ENVIRONMENT.md's SEARCH_MAX_TOP_K.
+    let top_k = requested_top_k
+        .filter(|k| *k > 0)
+        .unwrap_or(state.search_limits.default_top_k)
+        .min(state.search_limits.max_top_k);
 
     let requester_name = match load_user_by_id(&state.backend, &claims.id).await {
         Ok(Some(user)) => format!("{} {}", user.first_name, user.last_name)
@@ -135,7 +186,17 @@ pub async fn create_search_route(
         _ => claims.user_code.clone(),
     };
 
-    let search = match create_search(
+    let candidates = match list_candidates(&state.backend).await {
+        Ok(rows) => rows,
+        Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    };
+    let ranked = MockBiometricProvider.search(&image_bytes, candidates, top_k as usize);
+    let scored: Vec<(String, f64)> = ranked
+        .iter()
+        .map(|s| (s.candidate.id.clone(), s.score))
+        .collect();
+
+    match create_search_with_candidates(
         &state.backend,
         &case_reference,
         &purpose,
@@ -143,67 +204,90 @@ pub async fn create_search_route(
         &requester_name,
         latitude,
         longitude,
+        top_k,
+        &scored,
     )
     .await
     {
-        Ok(Some(search)) => search,
-        _ => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
-    };
+        Ok(search) => {
+            let candidate_rows = match list_search_candidates(&state.backend, &search.id).await {
+                Ok(rows) => rows,
+                Err(_) => {
+                    return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response()
+                }
+            };
 
-    AuditRecorder::new(action::SEARCH_CREATED, audit_result::SUCCESS, rid.clone())
-        .actor(&claims)
-        .headers(&headers)
-        .case_reference(&case_reference)
-        .resource("search", &search.id)
-        .save(&state)
-        .await;
-
-    let candidates = match list_candidates(&state.backend).await {
-        Ok(rows) => rows,
-        Err(_) => {
-            AuditRecorder::new(action::SEARCH_FAILED, audit_result::FAILURE, rid.clone())
+            AuditRecorder::new(action::SEARCH_COMPLETED, audit_result::SUCCESS, rid)
                 .actor(&claims)
                 .headers(&headers)
                 .case_reference(&case_reference)
                 .resource("search", &search.id)
+                .metadata(json!({ "candidateCount": candidate_rows.len(), "topK": top_k }))
                 .save(&state)
                 .await;
-            return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response();
+
+            Json(json!({
+                "search": search_json(&search),
+                "candidates": candidate_rows.iter().map(search_candidate_json).collect::<Vec<_>>(),
+            }))
+            .into_response()
         }
-    };
-    let ranked = MockBiometricProvider.search(&image_bytes, candidates, TOP_K);
-    for scored in &ranked {
-        let _ = crate::db::insert_search_candidate(
-            &state.backend,
-            &search.id,
-            &scored.candidate.id,
-            scored.score,
-        )
-        .await;
+        Err(err) => {
+            tracing::warn!(error = %err, "search persistence failed; rolled back");
+            let failed = record_failed_search(
+                &state.backend,
+                &case_reference,
+                &purpose,
+                &claims.id,
+                &requester_name,
+                latitude,
+                longitude,
+                top_k,
+                "SEARCH_PERSIST_FAILED",
+                "errors.internal",
+            )
+            .await
+            .ok()
+            .flatten();
+
+            AuditRecorder::new(action::SEARCH_FAILED, audit_result::FAILURE, rid.clone())
+                .actor(&claims)
+                .headers(&headers)
+                .case_reference(&case_reference)
+                .resource(
+                    "search",
+                    failed.as_ref().map(|s| s.id.as_str()).unwrap_or("unknown"),
+                )
+                .save(&state)
+                .await;
+
+            ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response()
+        }
     }
-
-    let candidate_rows = match list_search_candidates(&state.backend, &search.id).await {
-        Ok(rows) => rows,
-        Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
-    };
-
-    AuditRecorder::new(action::SEARCH_COMPLETED, audit_result::SUCCESS, rid)
-        .actor(&claims)
-        .headers(&headers)
-        .case_reference(&case_reference)
-        .resource("search", &search.id)
-        .metadata(json!({ "candidateCount": candidate_rows.len() }))
-        .save(&state)
-        .await;
-
-    Json(json!({
-        "search": search_json(&search),
-        "candidates": candidate_rows.iter().map(search_candidate_json).collect::<Vec<_>>(),
-    }))
-    .into_response()
 }
 
-pub async fn list_searches_route(State(state): State<AppState>, headers: HeaderMap) -> Response {
+fn code_message_key(code: &'static str) -> &'static str {
+    match code {
+        "IMAGE_TOO_LARGE" => "errors.imageTooLarge",
+        "UNSUPPORTED_IMAGE_TYPE" => "errors.unsupportedImageType",
+        "IMAGE_DECODE_FAILED" => "errors.imageDecodeFailed",
+        "IMAGE_DIMENSIONS_INVALID" => "errors.imageDimensionsInvalid",
+        _ => "errors.validation",
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PageQuery {
+    pub page: Option<i64>,
+    #[serde(rename = "pageSize")]
+    pub page_size: Option<i64>,
+}
+
+pub async fn list_searches_route(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<PageQuery>,
+) -> Response {
     let rid = request_id(&headers);
     if auth_user_from_headers(&headers, &state.secrets.jwt_secret).is_none() {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
@@ -211,8 +295,16 @@ pub async fn list_searches_route(State(state): State<AppState>, headers: HeaderM
     if !require_role(&state, &headers, VIEW_ROLES) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
-    match list_searches(&state.backend).await {
-        Ok(rows) => Json(rows.iter().map(search_json).collect::<Vec<_>>()).into_response(),
+    let page = query.page.unwrap_or(1).max(1);
+    let page_size = query.page_size.unwrap_or(DEFAULT_PAGE_SIZE);
+    match list_searches_page(&state.backend, page, page_size).await {
+        Ok((rows, total)) => Json(json!({
+            "items": rows.iter().map(search_json).collect::<Vec<_>>(),
+            "page": page,
+            "pageSize": page_size.clamp(1, 200),
+            "total": total,
+        }))
+        .into_response(),
         Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }
 }
@@ -256,6 +348,44 @@ pub async fn get_search_candidates_route(
     }
 }
 
+/// `GET /api/v1/search/{search_id}/candidates/{candidate_id}/history` — the
+/// full, immutable review history for one candidate within one search
+/// (every `verification_events` row, oldest first) — not just the current
+/// status. Same view-role requirement as the rest of the search workflow.
+pub async fn get_candidate_history_route(
+    State(state): State<AppState>,
+    Path((search_id, candidate_id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Response {
+    let rid = request_id(&headers);
+    if auth_user_from_headers(&headers, &state.secrets.jwt_secret).is_none() {
+        return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
+    }
+    if !require_role(&state, &headers, VIEW_ROLES) {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
+    let candidates = match list_search_candidates(&state.backend, &search_id).await {
+        Ok(rows) => rows,
+        Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    };
+    let Some(search_candidate) = candidates
+        .into_iter()
+        .find(|row| row.candidate_id == candidate_id)
+    else {
+        return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response();
+    };
+    match list_verification_events(&state.backend, &search_candidate.id).await {
+        Ok(events) => Json(
+            events
+                .iter()
+                .map(verification_event_json)
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
+        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    }
+}
+
 pub async fn get_candidate_route(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -279,11 +409,15 @@ pub async fn get_candidate_route(
 #[serde(rename_all = "camelCase")]
 pub struct ReviewPayload {
     pub search_id: String,
+    pub reason: Option<String>,
+    pub notes: Option<String>,
 }
 
 /// The one explicit human verification action that can set a candidate's
 /// status to "confirmed" within a search — never derived automatically
-/// from a similarity score. Restricted to `REVIEWER`/admin roles.
+/// from a similarity score. Restricted to `REVIEWER`/admin roles. Every
+/// call appends a new `verification_events` row rather than overwriting
+/// the previous decision — see `db::record_review_decision`.
 async fn review(
     state: AppState,
     headers: HeaderMap,
@@ -306,13 +440,16 @@ async fn review(
         _ => claims.user_code.clone(),
     };
 
-    match set_search_candidate_status(
+    match record_review_decision(
         &state.backend,
         &payload.search_id,
         &candidate_id,
         status,
         &claims.id,
         &reviewer_name,
+        payload.reason.as_deref(),
+        payload.notes.as_deref(),
+        &rid,
     )
     .await
     {

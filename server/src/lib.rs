@@ -6,6 +6,7 @@ pub mod config;
 pub mod db;
 pub mod email;
 pub mod error;
+pub mod image_validation;
 pub mod middleware;
 pub mod ratelimit;
 pub mod roles;

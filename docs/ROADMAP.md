@@ -1,6 +1,6 @@
 # Roadmap
 
-Implemented incrementally. Nothing below Phase 3.6 is implemented yet.
+Implemented incrementally. Nothing below Phase 3.7 is implemented yet.
 
 ## Phase 1 — Repository foundation (this phase)
 
@@ -66,11 +66,40 @@ Implemented incrementally. Nothing below Phase 3.6 is implemented yet.
 - [ ] Organization/unit-scoped audit visibility (depends on the
       organization model in a later milestone)
 
+## Phase 3.7 — Search/data correctness
+
+- [x] Transactional search creation (`db::create_search_with_candidates`):
+      search row + every candidate result written in one transaction; a
+      failure rolls back and is recorded as a `failed` search rather than
+      leaving a partial candidate list or vanishing silently
+- [x] Search status state machine (`queued`/`processing`/`completed`/
+      `failed`, `started_at`/`completed_at`/`failure_code`/
+      `failure_message_key`); `cancelled` reserved for the async-search
+      milestone below
+- [x] Configurable `SEARCH_DEFAULT_TOP_K`/`SEARCH_MAX_TOP_K` replacing a
+      compile-time constant; client-requested `topK` clamped server-side
+- [x] Server-side pagination on search history (`GET /api/v1/search`)
+- [x] Coordinate validation (latitude/longitude range + paired-presence)
+- [x] Immutable review history (`verification_events` table) — every
+      confirm/reject decision preserved, not just the current status;
+      `GET /api/v1/search/{id}/candidates/{id}/history`
+- [x] Real probe-image validation (magic-byte sniff + decode, JPEG/PNG/
+      WEBP, size/dimension limits, decompression-bomb guard) replacing a
+      bare non-empty-bytes check
+- [ ] Organization/unit-scoped authorization (deliberately deferred — a
+      separate architectural change: new tables plus RBAC filtering
+      throughout search/candidate/audit visibility; not attempted
+      alongside the above to avoid a rushed, half-scoped implementation
+      of least-privilege data access)
+- [ ] Pagination for the admin user list (small, bounded, manually
+      managed dataset — lower priority than search history or the audit
+      trail)
+
 ## Phase 4 — Production biometric provider
 
 - [ ] Real `BiometricProvider` implementation (ONNX Runtime via `ort`, server-side)
 - [ ] Vector database provider abstraction (pgvector/Qdrant/other)
-- [ ] Image quality assessment (blur, brightness, face angle, multiple faces)
+- [ ] Image quality assessment (blur, brightness, face angle, multiple faces) — distinct from Phase 3.7's format/size/dimension validation, which only checks the file is a genuine, well-formed image, not that it contains a usable face
 
 ## Phase 5 — Authorized connectors and administration
 

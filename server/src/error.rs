@@ -34,6 +34,12 @@ impl ApiError {
     fn status_code(&self) -> StatusCode {
         match self.code {
             "VALIDATION_ERROR" => StatusCode::BAD_REQUEST,
+            // Probe-image validation failures (image_validation.rs) — the
+            // client sent something wrong, not the server failing.
+            "IMAGE_TOO_LARGE"
+            | "UNSUPPORTED_IMAGE_TYPE"
+            | "IMAGE_DECODE_FAILED"
+            | "IMAGE_DIMENSIONS_INVALID" => StatusCode::BAD_REQUEST,
             "UNAUTHORIZED" => StatusCode::UNAUTHORIZED,
             "FORBIDDEN" => StatusCode::FORBIDDEN,
             "NOT_FOUND" => StatusCode::NOT_FOUND,

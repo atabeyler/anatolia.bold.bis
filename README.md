@@ -32,10 +32,16 @@ implemented end to end using **`MockBiometricProvider`** — a deterministic,
 non-biometric stand-in behind the same `BiometricProvider` trait a real
 model will later implement. Production biometric inference (real face
 detection/embedding/vector search) is not yet implemented — do not treat
-returned "candidates" as based on any real face analysis. Verified:
+returned "candidates" as based on any real face analysis. A search and all
+of its candidate results are written in a single database transaction, so
+a persistence failure never leaves a partial result set behind; every
+review decision is preserved as immutable history rather than just the
+current status; the probe image is validated for real (magic bytes plus
+decode, size/dimension limits) before anything else touches it. Verified:
 backend tests (including register → admin-approve → login, refresh
-rotation/reuse-detection/logout-all, and audit-trail role/pagination
-integration tests) + clippy, frontend typecheck + tests + build all pass.
+rotation/reuse-detection/logout-all, audit-trail role/pagination, and
+search transactional/validation/review-history integration tests) +
+clippy, frontend typecheck + tests + build all pass.
 See `docs/ROADMAP.md` for what's
 planned next. This README is expanded as each part of the system is
 actually built — it never describes a feature, endpoint, or integration

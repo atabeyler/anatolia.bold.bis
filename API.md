@@ -182,33 +182,70 @@ All routes below require `Authorization: Bearer <accessToken>`.
 
 #### `POST /api/v1/search/face`
 
-Multipart form: `caseReference`, `purpose`, `image` (file), plus optional
-`latitude`/`longitude` (the operator's captured geolocation, sent by the
-frontend from `useGeolocation`'s last known coordinate — see
-`docs/ROADMAP.md`'s "Operator geolocation"). Requires `OPERATOR`,
-`REVIEWER`, `SECURITY_ADMIN`, or `SYSTEM_ADMIN`. Runs the
-`BiometricProvider` (currently `MockBiometricProvider` — see CLAUDE.md)
-over every known candidate and stores the result. The probe image itself
-is never persisted; only its derived scores are.
+Multipart form: `caseReference`, `purpose`, `image` (file), optional
+`topK` (integer; defaults to `SEARCH_DEFAULT_TOP_K`, clamped to
+`SEARCH_MAX_TOP_K` — never rejected for being too large, just capped), and
+optional `latitude`/`longitude` (the operator's captured geolocation, sent
+by the frontend from `useGeolocation`'s last known coordinate — see
+`docs/ROADMAP.md`'s "Operator geolocation"; either both coordinates must be
+present and in range, or neither — one without the other is
+**`400 Bad Request`** `errors.invalidCoordinates`). Requires `OPERATOR`,
+`REVIEWER`, `SECURITY_ADMIN`, or `SYSTEM_ADMIN`.
+
+The image is validated before anything else touches it (see
+`server/src/image_validation.rs`): magic-byte sniff plus a real decode,
+JPEG/PNG/WEBP only, max 10 MB, dimensions between 32px and 8000px per side,
+and a decompression-bomb guard on total decoded pixel count. A failure
+returns **`400 Bad Request`** with one of these codes:
+
+| `code` | Meaning |
+|---|---|
+| `IMAGE_TOO_LARGE` | Over 10 MB. |
+| `UNSUPPORTED_IMAGE_TYPE` | Not a JPEG/PNG/WEBP magic byte sequence. |
+| `IMAGE_DECODE_FAILED` | Right magic bytes, but the file doesn't actually decode (corrupted/truncated). |
+| `IMAGE_DIMENSIONS_INVALID` | Below the minimum size, above the maximum size, or above the total-pixel decompression-bomb guard. |
+
+Runs the `BiometricProvider` (currently `MockBiometricProvider` — see
+CLAUDE.md) over every known candidate. The search row and every one of its
+candidate results are written in a single database transaction (see
+`db::create_search_with_candidates`) — a persistence failure never leaves
+a partial candidate list visible; the attempt is instead recorded as a
+`failed` search (see the status table below) and the request returns
+**`500 Internal Server Error`**. The probe image itself is never
+persisted; only its derived scores are.
 
 **`200 OK`**:
 ```json
 {
-  "search": { "id": "...", "caseReference": "...", "purpose": "...", "requestedByName": "...", "status": "completed", "latitude": 41.0082, "longitude": 28.9784, "createdAt": "..." },
+  "search": {
+    "id": "...", "caseReference": "...", "purpose": "...", "requestedByName": "...",
+    "status": "completed", "latitude": 41.0082, "longitude": 28.9784, "topK": 10,
+    "startedAt": "...", "completedAt": "...", "failureCode": null, "failureMessageKey": null,
+    "createdAt": "..."
+  },
   "candidates": [
     { "id": "...", "candidateId": "...", "referenceCode": "CAND-0001", "fullName": "...", "score": 0.87, "status": "pending", "reviewedByName": null, "reviewedAt": null }
   ]
 }
 ```
-`candidates` is ranked highest score first, capped at 5. `score` is a
+`candidates` is ranked highest score first, capped at `topK`. `score` is a
 similarity value in `[0, 1]` — never a match/no-match verdict; see
 "Candidates, not verdicts" in CLAUDE.md.
 
+`search.status` is one of `queued`, `processing`, `completed`, `failed`
+(state machine; `cancelled` is reserved for the async-search milestone in
+`docs/ROADMAP.md` and not reachable yet). `failureCode`/
+`failureMessageKey` are only set on a `failed` search.
+
 #### `GET /api/v1/search`
 
-Lists every search. Requires `OPERATOR`, `REVIEWER`, `SECURITY_ADMIN`,
-`SYSTEM_ADMIN`, or `AUDITOR` (the latter is read-only oversight — see
+Server-side paginated search history. Query parameters: `page` (1-indexed,
+default `1`), `pageSize` (default `50`, clamped to a maximum of `200`).
+Requires `OPERATOR`, `REVIEWER`, `SECURITY_ADMIN`, `SYSTEM_ADMIN`, or
+`AUDITOR` (the latter is read-only oversight — see
 docs/SECURITY_ARCHITECTURE.md).
+
+**`200 OK`**: `{ "items": [ <search> ], "page": 1, "pageSize": 50, "total": 137 }`.
 
 #### `GET /api/v1/search/{search_id}`
 
@@ -220,6 +257,22 @@ Same role requirement as `GET /api/v1/search`.
 Returns that search's ranked candidates (same shape as the `candidates`
 array above). Same role requirement as `GET /api/v1/search`.
 
+#### `GET /api/v1/search/{search_id}/candidates/{candidate_id}/history`
+
+The full, immutable review history for one candidate within one search —
+every `verification_events` row, oldest first, not just the current
+status (see "Immutable review history" in
+`docs/SECURITY_ARCHITECTURE.md`). Same role requirement as
+`GET /api/v1/search`.
+
+**`200 OK`**:
+```json
+[
+  { "id": "...", "reviewerName": "...", "decision": "confirmed", "reason": "clear match", "notes": null, "createdAt": "..." },
+  { "id": "...", "reviewerName": "...", "decision": "rejected", "reason": "corrected on second review", "notes": null, "createdAt": "..." }
+]
+```
+
 #### `GET /api/v1/candidates/{candidate_id}`
 
 Returns `{ "id": "...", "referenceCode": "...", "fullName": "...", "notes": "..." }`.
@@ -227,11 +280,15 @@ Same role requirement as `GET /api/v1/search`.
 
 #### `POST /api/v1/candidates/{candidate_id}/verify`
 
-Body: `{ "searchId": "..." }`. Requires `REVIEWER`, `SECURITY_ADMIN`, or
+Body: `{ "searchId": "...", "reason": "...", "notes": "..." }` (`reason`/
+`notes` optional). Requires `REVIEWER`, `SECURITY_ADMIN`, or
 `SYSTEM_ADMIN`. The one explicit human verification action that sets a
 candidate's status to `confirmed` ("Confirmed Identity") for that search —
-never derived automatically from a score. Returns the updated candidate
-row.
+never derived automatically from a score. Appends a new
+`verification_events` row rather than overwriting any prior decision on
+the same candidate (see the history endpoint above). Returns the updated
+candidate row (current status only — fetch the history endpoint for the
+full trail).
 
 #### `POST /api/v1/candidates/{candidate_id}/reject`
 
