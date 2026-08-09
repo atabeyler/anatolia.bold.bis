@@ -64,6 +64,7 @@ pub fn router(state: AppState) -> Router {
 
     Router::new()
         .route("/api/health", get(health::health))
+        .route("/api/health/ready", get(health::ready))
         .route("/api/v1/users/me", get(auth::me))
         .route("/api/v1/audit", get(audit::list_audit_events_route))
         .nest("/api/v1/auth", auth_routes)

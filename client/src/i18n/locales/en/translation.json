@@ -73,6 +73,7 @@
     "sessionExpired": "Your session has expired. Please sign in again.",
     "unauthorized": "Please sign in to continue.",
     "forbidden": "You do not have permission to do that.",
+    "lastAdminProtected": "This is the last active system administrator account and cannot be banned or deleted.",
     "notFound": "Not found.",
     "internal": "Something went wrong. Please try again."
   },
@@ -146,6 +147,7 @@
       "newPassword": "New password (optional)"
     },
     "confirmDelete": "Are you sure you want to delete this user?",
+    "confirmBan": "Are you sure you want to ban this user? This immediately signs them out everywhere.",
     "loading": "Loading users…",
     "empty": "No users yet.",
     "loadError": "Failed to load users.",

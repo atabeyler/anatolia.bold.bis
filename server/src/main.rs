@@ -103,8 +103,15 @@ async fn shutdown_signal() {
 // as traffic and keeps the instance warm. This cannot eliminate the very
 // first cold start after a genuinely idle period — only prevent repeated
 // ones — and is a no-op outside Render (e.g. desktop/local dev), since
-// the env var is unset there.
+// the env var is unset there. Opt-out via `ENABLE_SELF_PING=false` for
+// deployments that would rather let the service sleep (e.g. to avoid
+// masking real idle-shutdown behavior, or on a plan without the cold-start
+// penalty).
 fn spawn_self_ping() {
+    if std::env::var("ENABLE_SELF_PING").as_deref() == Ok("false") {
+        tracing::info!("self-ping disabled via ENABLE_SELF_PING=false");
+        return;
+    }
     let Ok(external_url) = std::env::var("RENDER_EXTERNAL_URL") else {
         return;
     };

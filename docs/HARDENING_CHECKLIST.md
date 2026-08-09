@@ -129,10 +129,13 @@ eşleşme bu dosyanın sonunda listelidir.
     repository/service katmanlarında ayrılması) — **yapılmadı**.
 32. [ ] National ID hassasiyeti (encrypted/lookup-hash, maskeleme, response'a
     gereksiz koymama) — **yapılmadı**, national_id hâlâ plaintext saklanıyor.
-33. [~] Database index/constraint — `sessions`, `audit_events`,
-    `verification_events` için indexler eklendi (Milestone A/B/C).
-    `search_candidates` üzerinde `unique(search_id, candidate_id)` ve
-    `searches.created_at/case_reference/requested_by` indexleri **eklenmedi**.
+33. [x] Database index/constraint — `sessions`, `audit_events`,
+    `verification_events` için indexler zaten vardı (Milestone A/B/C).
+    Eklendi: `search_candidates (search_id, candidate_id)` üzerinde unique
+    index (bir aday bir arama içinde en fazla bir kez görünebilir, artık
+    veritabanı tarafından zorlanıyor) ve `searches (created_at,
+    case_reference, requested_by)` indexleri (arama geçmişi bu kolonlara
+    göre filtreleniyor/sıralanıyor).
 34. [ ] Soft delete (users için `disabled_at`/`deleted_at`) — **yapılmadı**,
     `delete_user` hâlâ hard delete.
 
@@ -150,22 +153,37 @@ eşleşme bu dosyanın sonunda listelidir.
 
 38. [x] Error format (`{code, messageKey, requestId, details}`) — zaten
     mevcuttu, korundu ve tüm yeni endpoint'lerde kullanıldı.
-39. [~] Request ID — `x-request-id` her response'ta dönüyor, audit log'a
-    yazılıyor. Client'ın gönderdiği request id için **length/charset
-    validation eklenmedi** (kör kabul ediliyor).
+39. [x] Request ID — `x-request-id` her response'ta dönüyor, audit log'a
+    yazılıyor. Client'ın gönderdiği request id artık doğrulanıyor (1–128
+    ASCII harf/rakam/`-`/`_`); bunun dışındaki değerler (boş, aşırı uzun,
+    izin verilmeyen karakter) sessizce üretilen bir UUID ile değiştiriliyor.
+    Doğrulama `server/src/error.rs::request_id`'de merkezi hale getirildi
+    (admin/audit/auth/search'teki 4 ayrı kopya kaldırıldı).
 40. [ ] OpenAPI (machine-readable spec, CI'da docs drift kontrolü) —
     **yapılmadı**, API.md hâlâ elle yazılan markdown.
 
 ## P2 — Admin
 
-41. [~] Admin seed — rate-limited + constant-time token comparison zaten
-    vardı. `BOOTSTRAP_ENABLED=false` production default'u ve ilk admin
-    sonrası seed endpoint'ini disable etme **yapılmadı**.
-42. [~] Sensitive admin confirmation — silme işleminde frontend confirm
-    modal'ı zaten vardı. Ban/role-change için confirm modal'ları
-    **doğrulanmadı/eklenmedi**.
-43. [ ] Son SYSTEM_ADMIN koruması (ban/delete/downgrade engeli + test) —
-    **yapılmadı**.
+41. [x] Admin seed — rate-limited + constant-time token comparison zaten
+    vardı. `POST /api/v1/admin/seed-admin` artık en az bir aktif
+    `SYSTEM_ADMIN` varsa kendini otomatik devre dışı bırakıyor (doğru
+    seed token ile bile, farklı bir `ADMIN_USER_CODE` ile tekrar
+    çağrılsa dahi `403 Forbidden`); `BOOTSTRAP_ENABLED=true` bilinçli bir
+    kurtarma senaryosu için bunu açıkça yeniden açıyor.
+42. [x] Sensitive admin confirmation — silme işleminde frontend confirm
+    modal'ı zaten vardı. Ban işlemi için de `window.confirm` eklendi;
+    ayrıca `runAction` artık başarısız admin işlemlerini (ör.
+    `LAST_ADMIN_PROTECTED`) sessizce yutmuyor, kullanıcıya çevrilmiş hata
+    mesajı gösteriyor.
+43. [x] Son SYSTEM_ADMIN koruması — `ban_user` ve `delete_user_route`,
+    hedef son aktif `SYSTEM_ADMIN` ise `409 Conflict`
+    (`LAST_ADMIN_PROTECTED`) ile reddediyor
+    (`db::count_active_system_admins`). 3 entegrasyon testi ile
+    doğrulandı (ban reddi, delete reddi + ikinci adminin silinebildiği
+    kontrol, seed-admin self-disable). Role **downgrade** koruması hâlâ
+    yok çünkü backend'de bir rol değiştirme endpoint'i henüz mevcut
+    değil (madde 11'in bir parçası olarak, ayrı bir özellik olarak ele
+    alınmalı).
 
 ## P2 — Frontend
 
@@ -196,8 +214,9 @@ eşleşme bu dosyanın sonunda listelidir.
 54. [x] Structured logging (JSON) — zaten vardı, hassas alan eklenmedi.
 55. [ ] Metrics interface (latency, auth failures, db pool vb.) —
     **yapılmadı**.
-56. [~] Health/readiness — `GET /api/health` var. `GET /api/health/ready`
-    (DB + kritik bağımlılık kontrolü) **yapılmadı**.
+56. [x] Health/readiness — `GET /api/health` (liveness, DB'ye dokunmuyor)
+    zaten vardı. `GET /api/health/ready` eklendi: gerçek backend'e karşı
+    basit bir sorgu çalıştırıyor, başarısız olursa `503` dönüyor.
 
 ## P2 — Background Job
 
@@ -219,9 +238,9 @@ eşleşme bu dosyanın sonunda listelidir.
 62. [~] Security testleri — production secret eksikliği, weak secret, refresh
     rotation, reuse detection, banned session, rate limit, approval
     single-use, invalid/oversized image, coordinate range, review permission,
-    audit generated kapsandı. **Kapsanmayan:** last-admin protection (madde
-    43), organization scoping (madde 12), password reset single-use (madde 9
-    henüz yok).
+    audit generated, password reset single-use/expiry (madde 9), last-admin
+    protection + seed-admin self-disable (madde 43) kapsandı. **Kapsanmayan:**
+    organization scoping (madde 12, ayrı büyük mimari iş).
 63. [ ] Role matrix test (table-driven, her hassas endpoint × her rol) —
     **yapılmadı** (rol kontrolleri endpoint bazlı ad-hoc test edildi, sistemik
     matris testi yok).
@@ -240,8 +259,9 @@ eşleşme bu dosyanın sonunda listelidir.
 
 ## P2 — Deployment
 
-67. [ ] Self-ping'i opsiyonel yap (`ENABLE_SELF_PING=false` default) —
-    **yapılmadı**, hâlâ `RENDER_EXTERNAL_URL` varsa koşulsuz aktif.
+67. [x] Self-ping'i opsiyonel yap — `ENABLE_SELF_PING=false` ile devre dışı
+    bırakılabiliyor; varsayılan davranış (RENDER_EXTERNAL_URL varsa aktif)
+    korunuyor, sadece açık bir opt-out eklendi.
 68. [x] Production DB zorunluluğu — production'da SQLite'a düşme zaten
     panic ediyordu, korundu.
 69. [~] Migration — inline `ALTER TABLE IF NOT EXISTS` tabanlı migration var

@@ -73,6 +73,7 @@
     "sessionExpired": "Oturumunuzun süresi doldu. Lütfen tekrar giriş yapın.",
     "unauthorized": "Devam etmek için giriş yapın.",
     "forbidden": "Bu işlem için yetkiniz yok.",
+    "lastAdminProtected": "Bu, son aktif sistem yöneticisi hesabıdır ve yasaklanamaz veya silinemez.",
     "notFound": "Bulunamadı.",
     "internal": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
   },
@@ -146,6 +147,7 @@
       "newPassword": "Yeni şifre (opsiyonel)"
     },
     "confirmDelete": "Bu kullanıcıyı silmek istediğinize emin misiniz?",
+    "confirmBan": "Bu kullanıcıyı yasaklamak istediğinize emin misiniz? Bu, kullanıcıyı anında her yerden çıkış yaptırır.",
     "loading": "Kullanıcılar yükleniyor…",
     "empty": "Henüz kullanıcı yok.",
     "loadError": "Kullanıcılar yüklenemedi.",

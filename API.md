@@ -21,11 +21,19 @@ All error responses share one shape:
 key the frontend resolves to a localized message — the backend never
 returns human-readable text directly. `details` is omitted when empty.
 
+`requestId` echoes the client-supplied `x-request-id` header when one is
+present and well-formed (ASCII letters/digits/`-`/`_`, 1–128 characters);
+otherwise the server generates a fresh UUID. This bounds what ends up in
+audit records and logs — an oversized or oddly-charactered header is
+treated the same as a missing one rather than passed through.
+
 ## Implemented endpoints
 
 ### `GET /api/health`
 
-Liveness/readiness check.
+Liveness check only — confirms the process is running, never touches the
+database. Always `200 OK` if the server is up at all, even mid database
+outage.
 
 **Response `200 OK`**
 
@@ -39,6 +47,16 @@ Liveness/readiness check.
 
 `version` is the exact commit SHA of the running build — compare it against
 a pushed commit to confirm a deployment has actually gone live.
+
+### `GET /api/health/ready`
+
+Readiness check: runs a trivial query against the real database backend.
+Use this, not `/api/health`, to gate whether traffic should be routed to
+this instance.
+
+**Response `200 OK`** (`{ "status": "ready", "version": "...", "timestamp": "..." }`)
+if the database answered; **`503 Service Unavailable`**
+(`{ "status": "not_ready", ... }`) if it didn't.
 
 ### Authentication
 
@@ -154,12 +172,15 @@ links require a `SYSTEM_ADMIN` or `SECURITY_ADMIN` bearer token.
 - `POST /api/v1/admin/seed-admin` — one-time bootstrap of the first
   `SYSTEM_ADMIN` account. Requires an `x-seed-token` header matching
   `ADMIN_SEED_TOKEN`, plus `ADMIN_USER_CODE`/`ADMIN_PASSWORD`/`ADMIN_EMAIL`
-  set in the environment. Rate-limited globally (5 / 15 min). Idempotent:
-  `201`-equivalent `{ "messageKey": "admin.adminCreated" }` the first time,
-  `{ "messageKey": "admin.alreadySeeded" }` (still `200`) on a repeat call
-  once that user code/email already exists. `/admin-seed.html` is a small
-  static form (same origin, no separate CORS setup) that calls this
-  endpoint from a browser instead of a terminal.
+  set in the environment. Rate-limited globally (5 / 15 min).
+  `201`-equivalent `{ "messageKey": "admin.adminCreated" }` on success;
+  `{ "messageKey": "admin.alreadySeeded" }` (still `200`) if that exact
+  user code/email is already seeded. **Self-disables** once any active
+  `SYSTEM_ADMIN` exists — a further call returns `403 Forbidden`
+  regardless of the identity supplied, unless `BOOTSTRAP_ENABLED=true` is
+  explicitly set for a deliberate recovery (see `docs/ENVIRONMENT.md`).
+  `/admin-seed.html` is a small static form (same origin, no separate CORS
+  setup) that calls this endpoint from a browser instead of a terminal.
 - `GET /api/v1/admin/users` — list all users.
 - `POST /api/v1/admin/users` — admin creates a user directly (immediately
   approved, no self-registration/approval round trip). Body:
@@ -185,6 +206,11 @@ links require a `SYSTEM_ADMIN` or `SECURITY_ADMIN` bearer token.
   logins.
 - `POST /api/v1/admin/users/{id}/unban`
 - `DELETE /api/v1/admin/users/{id}`
+
+Both `ban` and `DELETE` refuse to act on the last active `SYSTEM_ADMIN`
+account: **`409 Conflict`** (`LAST_ADMIN_PROTECTED`,
+`errors.lastAdminProtected`) instead of taking effect, so the platform can
+never lock itself out of its own administration.
 - `GET /api/v1/admin/review/{token}` — HTML approve/reject page linked from
   the admin's registration-notification email (valid 3 days, single-use;
   signed with `APPROVAL_TOKEN_SECRET`, independent of the JWT secrets —
