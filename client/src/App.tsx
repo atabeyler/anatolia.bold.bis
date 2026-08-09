@@ -87,7 +87,7 @@ function App() {
         <header className="app-topbar" ref={topbarRef}>
           <div className="app-topbar__brand">
             <Logo compact />
-            <div>
+            <div className="app-topbar__brand-text">
               <div className="app-topbar__title">{brandMark(i18n.resolvedLanguage)}</div>
               <div className="app-topbar__subtitle">
                 {view === 'admin' ? t('admin.panelTitle') : t('search.subtitle')}
@@ -97,30 +97,42 @@ function App() {
           <div className="app-topbar__actions">
             {view === 'admin' ? (
               <div className="app-header__session">
-                <button type="button" className="app-header__nav-button" onClick={() => setView('dashboard')}>
-                  {t('admin.goHome')}
+                <button
+                  type="button"
+                  className="app-header__nav-button"
+                  onClick={() => setView('dashboard')}
+                  aria-label={t('admin.goHome')}
+                >
+                  <span aria-hidden="true">←</span> <span className="topbar-label">{t('admin.goHome')}</span>
                 </button>
-                <button type="button" onClick={() => void logout()}>
-                  {t('auth.logout')}
+                <button type="button" onClick={() => void logout()} aria-label={t('auth.logout')}>
+                  <span aria-hidden="true">⏻</span> <span className="topbar-label">{t('auth.logout')}</span>
                 </button>
               </div>
             ) : (
               user && (
                 <div className="app-header__session">
-                  <span>{t('auth.welcomeBack', { name: `${user.firstName} ${user.lastName}` })}</span>
+                  <span className="app-header__welcome">
+                    {t('auth.welcomeBack', { name: `${user.firstName} ${user.lastName}` })}
+                  </span>
                   {isAdmin && (
-                    <button type="button" onClick={() => setView('admin')}>
-                      {t('admin.openLabel')}
+                    <button type="button" onClick={() => setView('admin')} aria-label={t('admin.openLabel')}>
+                      <span aria-hidden="true">⚙</span> <span className="topbar-label">{t('admin.openLabel')}</span>
                     </button>
                   )}
-                  <button type="button" onClick={() => void logout()}>
-                    {t('auth.logout')}
+                  <button type="button" onClick={() => void logout()} aria-label={t('auth.logout')}>
+                    <span aria-hidden="true">⏻</span> <span className="topbar-label">{t('auth.logout')}</span>
                   </button>
                 </div>
               )
             )}
-            <button type="button" className="app-header__nav-button" onClick={() => setMenuOpen(true)}>
-              ☰ {t('menu.openLabel')}
+            <button
+              type="button"
+              className="app-header__nav-button"
+              onClick={() => setMenuOpen(true)}
+              aria-label={t('menu.openLabel')}
+            >
+              ☰ <span className="topbar-label">{t('menu.openLabel')}</span>
             </button>
           </div>
         </header>

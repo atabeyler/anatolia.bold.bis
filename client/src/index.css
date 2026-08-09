@@ -138,7 +138,7 @@ body::before {
 .app-header__session {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.5rem;
   font-size: var(--text-sm);
   color: var(--color-text-muted);
@@ -180,10 +180,10 @@ body::before {
 
 .app-main--with-topbar {
   /* --topbar-height is measured live the same way, for the same reason:
-     .app-topbar wraps onto two or three lines on phones and in German/
-     French/Russian/Arabic, and a fixed guess would let content start
-     underneath it. */
-  padding-top: calc(var(--topbar-height, 88px) + 1rem);
+     the topbar stays single-line by design (see .app-topbar), but its
+     height still shifts with font metrics across browsers/locales, and a
+     fixed guess would let content start underneath it. */
+  padding-top: calc(var(--topbar-height, 56px) + 1rem);
 }
 
 /* ── Menu / Settings overlays: terminal panel look ────────────── */
@@ -464,6 +464,7 @@ body::before {
   width: 40px;
   height: 40px;
   margin-bottom: 0;
+  flex-shrink: 0;
 }
 
 .brand-logo--compact .brand-logo__ping {
@@ -809,18 +810,31 @@ body::before {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 1rem;
   padding: 0.6rem 1.5rem;
   background: var(--color-bar-surface);
   border-bottom: 1px solid var(--color-panel-border);
   box-shadow: 0 0 16px rgba(200, 34, 34, 0.15);
+  overflow-x: auto;
 }
 
 .app-topbar__brand {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  min-width: 0;
+}
+
+.app-topbar__brand-text {
+  min-width: 0;
+}
+
+.app-topbar__title,
+.app-topbar__subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-topbar__title {
@@ -841,8 +855,22 @@ body::before {
 .app-topbar__actions {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
   gap: 0.6rem;
+}
+
+/* Below this width the topbar can't fit full labels alongside the logo
+   without wrapping, so button text collapses to icon-only (the icon
+   glyph stays, --aria-label carries the full label for a11y) and the
+   subtitle/welcome-name text — decorative on a phone — hides outright.
+   The bar itself stays a single row at every width (see .app-topbar). */
+@media (max-width: 640px) {
+  .app-topbar__subtitle,
+  .app-header__welcome,
+  .topbar-label {
+    display: none;
+  }
 }
 
 /* ── HUD corner accents ───────────────────────────────────────────
