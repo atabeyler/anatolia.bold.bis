@@ -21,6 +21,27 @@
   --font-heading: 'Orbitron', sans-serif;
   --font-mono: 'Share Tech Mono', 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
 
+  /* Type scale — every font-size in this file resolves to one of these
+     steps instead of a one-off rem value, so sizes stay comparable across
+     components. */
+  --text-2xs: 0.65rem;
+  --text-xs: 0.72rem;
+  --text-sm: 0.78rem;
+  --text-base: 0.85rem;
+  --text-md: 0.9rem;
+  --text-lg: 1rem;
+  --text-xl: 1.1rem;
+  --text-2xl: 1.2rem;
+  --text-display: clamp(1.5rem, 6vw, 2.4rem);
+
+  /* Letter-spacing scale — same idea, for tracking values. */
+  --tracking-tight: 0.02em;
+  --tracking-snug: 0.03em;
+  --tracking-normal: 0.05em;
+  --tracking-wide: 0.08em;
+  --tracking-wider: 0.12em;
+  --tracking-widest: 0.18em;
+
   /* HUD-style cut corners (top-right / bottom-left) — the sim project's
      signature panel/button silhouette. Two sizes: -lg for panels, -sm for
      buttons/cards where padding is tighter. */
@@ -106,8 +127,8 @@ body::before {
   clip-path: var(--cut-sm);
   padding: 0.4rem 0.75rem;
   font-family: var(--font-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-normal);
   cursor: pointer;
 }
 
@@ -122,9 +143,9 @@ body::before {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem;
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--tracking-tight);
 }
 
 .app-header__session button {
@@ -134,8 +155,8 @@ body::before {
   clip-path: var(--cut-sm);
   padding: 0.3rem 0.6rem;
   font-family: var(--font-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-snug);
   cursor: pointer;
 }
 
@@ -207,8 +228,8 @@ body::before {
 }
 
 .overlay-header__title {
-  font-size: 0.82rem;
-  letter-spacing: 0.15em;
+  font-size: var(--text-base);
+  letter-spacing: var(--tracking-wider);
   color: var(--color-success);
 }
 
@@ -216,7 +237,7 @@ body::before {
   background: transparent;
   border: none;
   color: var(--color-text-muted);
-  font-size: 1.1rem;
+  font-size: var(--text-xl);
   line-height: 1;
   cursor: pointer;
   padding: 0.25rem 0.5rem;
@@ -234,10 +255,10 @@ body::before {
 
 .overlay-section-label {
   margin: 0 0 0.5rem;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-wide);
 }
 
 .overlay-list {
@@ -258,8 +279,8 @@ body::before {
   color: var(--color-text);
   padding: 0.65rem 0.25rem;
   font-family: var(--font-mono);
-  font-size: 0.88rem;
-  letter-spacing: 0.04em;
+  font-size: var(--text-md);
+  letter-spacing: var(--tracking-snug);
   text-align: left;
   cursor: pointer;
 }
@@ -278,16 +299,16 @@ body::before {
 
 .overlay-content p {
   margin: 0 0 0.6rem;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   color: var(--color-text-muted);
   line-height: 1.6;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--tracking-tight);
 }
 
 .overlay-content__heading {
   color: var(--color-success) !important;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-wide);
 }
 
 .overlay-tabs {
@@ -304,8 +325,8 @@ body::before {
   color: var(--color-text-muted);
   padding: 0.4rem 0.5rem;
   font-family: var(--font-mono);
-  font-size: 0.8rem;
-  letter-spacing: 0.03em;
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-snug);
   cursor: pointer;
 }
 
@@ -325,7 +346,7 @@ body::before {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.88rem;
+  font-size: var(--text-md);
   color: var(--color-text);
   cursor: pointer;
 }
@@ -337,7 +358,7 @@ body::before {
   clip-path: var(--cut-sm);
   padding: 0.4rem 0.75rem;
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -374,8 +395,8 @@ body::before {
   margin: 0;
   font-family: var(--font-heading);
   font-weight: 800;
-  font-size: 1.2rem;
-  letter-spacing: 0.12em;
+  font-size: var(--text-2xl);
+  letter-spacing: var(--tracking-wider);
   color: var(--color-success);
   text-shadow: 0 0 12px rgba(0, 232, 135, 0.5);
 }
@@ -392,7 +413,7 @@ body::before {
 
 .status-card__line {
   margin: 0.25rem 0;
-  letter-spacing: 0.03em;
+  letter-spacing: var(--tracking-snug);
 }
 
 .status-card__line--online {
@@ -404,7 +425,7 @@ body::before {
 }
 
 .status-card__mono {
-  font-size: 0.82rem;
+  font-size: var(--text-base);
   color: var(--color-text-muted);
 }
 
@@ -428,8 +449,8 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-normal);
   color: var(--color-text-muted);
   text-align: start;
 }
@@ -559,8 +580,8 @@ body::before {
   margin: 0;
   font-family: var(--font-heading);
   font-weight: 800;
-  font-size: clamp(1.5rem, 6vw, 2.4rem);
-  letter-spacing: 0.18em;
+  font-size: var(--text-display);
+  letter-spacing: var(--tracking-widest);
   color: var(--color-success);
   text-shadow: 0 0 16px rgba(0, 232, 135, 0.6), 0 0 32px rgba(0, 232, 135, 0.3);
 }
@@ -568,8 +589,8 @@ body::before {
 .auth-brand__tagline {
   margin: 0;
   max-width: 32rem;
-  font-size: 0.8rem;
-  letter-spacing: 0.06em;
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-normal);
   color: var(--color-accent-strong);
 }
 
@@ -625,8 +646,8 @@ body::before {
   clip-path: var(--cut-sm);
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: 0.82rem;
-  letter-spacing: 0.08em;
+  font-size: var(--text-base);
+  letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
 }
 
@@ -648,8 +669,8 @@ body::before {
   flex-direction: column;
   gap: 0.3rem;
   min-width: 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.06em;
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-normal);
   text-transform: uppercase;
   color: var(--color-text-muted);
 }
@@ -662,8 +683,8 @@ body::before {
   border-bottom: 1px solid rgba(204, 68, 68, 0.5);
   padding: 0.5rem 0.6rem;
   font-family: var(--font-mono);
-  font-size: 0.9rem;
-  letter-spacing: 0.03em;
+  font-size: var(--text-md);
+  letter-spacing: var(--tracking-snug);
   text-transform: none;
 }
 
@@ -675,16 +696,16 @@ body::before {
 
 .auth-field small {
   color: var(--color-text-muted);
-  font-size: 0.68rem;
+  font-size: var(--text-2xs);
   text-transform: none;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--tracking-tight);
 }
 
 .auth-remember {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.82rem;
+  font-size: var(--text-base);
   color: var(--color-text-muted);
 }
 
@@ -693,7 +714,7 @@ body::before {
   background: none;
   border: none;
   padding: 0;
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   color: var(--color-accent-strong);
   cursor: pointer;
   text-decoration: underline;
@@ -703,8 +724,8 @@ body::before {
 .auth-message {
   margin: 0;
   padding: 0.6rem 0.75rem;
-  font-size: 0.82rem;
-  letter-spacing: 0.02em;
+  font-size: var(--text-base);
+  letter-spacing: var(--tracking-tight);
   border-left: 2px solid transparent;
 }
 
@@ -735,8 +756,8 @@ body::before {
   box-shadow: 0 0 10px rgba(79, 110, 247, 0.25);
   font-family: var(--font-heading);
   font-weight: 700;
-  font-size: 0.9rem;
-  letter-spacing: 0.15em;
+  font-size: var(--text-md);
+  letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
   cursor: pointer;
 }
@@ -768,8 +789,8 @@ body::before {
   padding: 0.7rem 1.5rem;
   background: var(--color-bar-surface);
   color: var(--color-text-muted);
-  font-size: 0.72rem;
-  letter-spacing: 0.03em;
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-snug);
   text-align: center;
 }
 
@@ -808,15 +829,15 @@ body::before {
 .app-topbar__title {
   font-family: var(--font-heading);
   font-weight: 800;
-  font-size: 1rem;
-  letter-spacing: 0.1em;
+  font-size: var(--text-lg);
+  letter-spacing: var(--tracking-wide);
   color: var(--color-text);
 }
 
 .app-topbar__subtitle {
   font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.14em;
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wider);
   color: var(--color-panel-border);
 }
 
@@ -959,8 +980,8 @@ body::before {
 
 .admin-tabs__tab {
   padding-bottom: 0.6rem;
-  font-size: 0.85rem;
-  letter-spacing: 0.08em;
+  font-size: var(--text-base);
+  letter-spacing: var(--tracking-wide);
   color: var(--color-text-muted);
 }
 
@@ -979,8 +1000,8 @@ body::before {
 
 .admin-panel__heading {
   margin: 0 0 1rem;
-  font-size: 0.85rem;
-  letter-spacing: 0.1em;
+  font-size: var(--text-base);
+  letter-spacing: var(--tracking-wide);
   color: var(--color-accent-strong);
 }
 
@@ -1010,7 +1031,7 @@ body::before {
   color: var(--color-text);
   padding: 0.6rem 0.75rem;
   font-family: var(--font-mono);
-  font-size: 0.85rem;
+  font-size: var(--text-base);
 }
 
 .admin-form-row input:focus {
@@ -1022,13 +1043,13 @@ body::before {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   color: var(--color-text);
 }
 
 .admin-hint {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   line-height: 1.4;
   color: var(--color-accent-strong);
   opacity: 0.85;
@@ -1038,7 +1059,7 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
 
@@ -1048,12 +1069,12 @@ body::before {
   color: var(--color-text);
   padding: 0.5rem 0.6rem;
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
 }
 
 .search-score {
   font-family: var(--font-mono);
-  font-size: 0.85rem;
+  font-size: var(--text-base);
   color: var(--color-success);
   text-shadow: 0 0 8px rgba(0, 232, 135, 0.5);
 }
@@ -1074,7 +1095,7 @@ body::before {
   box-shadow: 0 0 10px rgba(79, 110, 247, 0.2);
   color: var(--color-accent-strong);
   font-family: var(--font-heading);
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-wide);
   cursor: pointer;
 }
 
@@ -1138,7 +1159,7 @@ body::before {
   flex-wrap: wrap;
   gap: 0.4rem;
   font-family: var(--font-mono);
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
   color: var(--color-text);
 }
 
@@ -1148,15 +1169,15 @@ body::before {
 
 .admin-user-card__note {
   margin: 0.3rem 0 0;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   color: var(--color-accent-strong);
   opacity: 0.85;
 }
 
 .admin-badge {
   padding: 0.1rem 0.5rem;
-  font-size: 0.65rem;
-  letter-spacing: 0.08em;
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide);
   border: 1px solid currentColor;
   box-shadow: 0 0 6px currentColor;
 }
@@ -1182,8 +1203,8 @@ body::before {
 
 .admin-icon-button {
   padding: 0.4rem 0.75rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-normal);
   background: transparent;
   border: 1px solid var(--color-border);
   clip-path: var(--cut-sm);
