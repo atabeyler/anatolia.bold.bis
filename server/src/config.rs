@@ -27,6 +27,10 @@ pub struct Config {
     pub approval_token_secret: String,
     pub search_default_top_k: i64,
     pub search_max_top_k: i64,
+    /// Which `BiometricProvider` implementation to run — see
+    /// `biometric.rs`. Only `"mock"` exists today; any other value is a
+    /// hard startup failure until a real provider ships.
+    pub biometric_provider: String,
 }
 
 /// True when this process should apply production security posture:
@@ -90,6 +94,8 @@ impl Config {
             .unwrap_or(DEFAULT_SEARCH_DEFAULT_TOP_K)
             .min(search_max_top_k);
 
+        let biometric_provider = resolve_biometric_provider(production);
+
         Self {
             port,
             allowed_origins,
@@ -98,8 +104,50 @@ impl Config {
             approval_token_secret,
             search_default_top_k,
             search_max_top_k,
+            biometric_provider,
         }
     }
+}
+
+/// `BIOMETRIC_PROVIDER` (default `"mock"`) selects the `BiometricProvider`
+/// implementation. Only `"mock"` exists in this codebase today — a real,
+/// server-side face-embedding provider (ONNX Runtime via `ort`) is planned
+/// but not implemented (see docs/ROADMAP.md Phase 4). Silently running the
+/// mock, non-biometric provider in production would let a deployment look
+/// fully functional while every "match" is actually a deterministic hash
+/// of the uploaded bytes — CLAUDE.md explicitly forbids this. Production
+/// therefore requires `ALLOW_MOCK_BIOMETRICS=true` as an explicit,
+/// conscious override before it will start with the mock provider; any
+/// other `BIOMETRIC_PROVIDER` value is a hard failure until that
+/// implementation actually exists, in any environment.
+fn resolve_biometric_provider(production: bool) -> String {
+    let provider = env::var("BIOMETRIC_PROVIDER")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| "mock".to_string());
+
+    if provider != "mock" {
+        panic!(
+            "BIOMETRIC_PROVIDER={provider} is not implemented — only \"mock\" exists today; \
+             refusing to start with an unknown biometric provider"
+        );
+    }
+
+    if production {
+        let allow_mock = env::var("ALLOW_MOCK_BIOMETRICS")
+            .map(|v| v == "true")
+            .unwrap_or(false);
+        if !allow_mock {
+            panic!(
+                "BIOMETRIC_PROVIDER=mock in production requires an explicit \
+                 ALLOW_MOCK_BIOMETRICS=true override — refusing to silently run a \
+                 non-biometric mock provider in production. Every \"match\" it returns is a \
+                 deterministic hash of the uploaded bytes, not a real face comparison."
+            );
+        }
+    }
+
+    provider
 }
 
 /// Resolves a single secret from `env_var`. In production, a missing or
@@ -168,5 +216,39 @@ mod tests {
             strong
         );
         env::remove_var("JWT_SECRET_TEST_STRONG");
+    }
+
+    #[test]
+    fn dev_mode_defaults_to_mock_without_override() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        env::remove_var("BIOMETRIC_PROVIDER");
+        env::remove_var("ALLOW_MOCK_BIOMETRICS");
+        assert_eq!(resolve_biometric_provider(false), "mock");
+    }
+
+    #[test]
+    #[should_panic(expected = "requires an explicit ALLOW_MOCK_BIOMETRICS=true override")]
+    fn production_without_override_panics() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        env::remove_var("BIOMETRIC_PROVIDER");
+        env::remove_var("ALLOW_MOCK_BIOMETRICS");
+        resolve_biometric_provider(true);
+    }
+
+    #[test]
+    fn production_with_explicit_override_succeeds() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        env::remove_var("BIOMETRIC_PROVIDER");
+        env::set_var("ALLOW_MOCK_BIOMETRICS", "true");
+        assert_eq!(resolve_biometric_provider(true), "mock");
+        env::remove_var("ALLOW_MOCK_BIOMETRICS");
+    }
+
+    #[test]
+    #[should_panic(expected = "is not implemented")]
+    fn unknown_provider_panics_even_outside_production() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        env::set_var("BIOMETRIC_PROVIDER", "onnx");
+        resolve_biometric_provider(false);
     }
 }

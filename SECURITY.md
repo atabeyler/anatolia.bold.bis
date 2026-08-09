@@ -93,6 +93,12 @@ Implemented controls:
 - **Coordinate validation**: latitude/longitude are range-checked and
   required to be a matched pair; malformed geolocation data is rejected
   rather than silently stored.
+- **Production guard against a silent mock biometric provider**: only the
+  non-biometric `MockBiometricProvider` exists today. Production refuses
+  to start with it unless `ALLOW_MOCK_BIOMETRICS=true` is explicitly set —
+  a conscious acknowledgment, not a silent default. Any `BIOMETRIC_PROVIDER`
+  value other than `mock` is a hard startup failure everywhere, since no
+  other implementation exists yet. See `docs/SECURITY_ARCHITECTURE.md`.
 
 ## Planned (see `docs/ROADMAP.md` and `docs/SECURITY_ARCHITECTURE.md`)
 
