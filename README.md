@@ -21,16 +21,22 @@ SECURITY_ADMIN, OPERATOR, REVIEWER, AUDITOR), an admin-approval workflow
 for new registrations (with its own isolated, single-use approval token),
 enumeration-safe registration-status polling, layered rate limiting, and a
 production-only CSP/Permissions-Policy/HSTS header set — see `API.md` and
-`docs/SECURITY_ARCHITECTURE.md`. The end-to-end search workflow (case
+`docs/SECURITY_ARCHITECTURE.md`. Every security- or case-relevant action
+(auth, registration, user administration, search, candidate review,
+admin bootstrap) is recorded to an append-only audit trail through one
+central `AuditRecorder`, browsable at `GET /api/v1/audit` and in a
+dedicated frontend Audit Logs screen (`AUDITOR`/`SECURITY_ADMIN`/
+`SYSTEM_ADMIN` only). The end-to-end search workflow (case
 reference + purpose → face image → ranked candidates → human review) is
 implemented end to end using **`MockBiometricProvider`** — a deterministic,
 non-biometric stand-in behind the same `BiometricProvider` trait a real
 model will later implement. Production biometric inference (real face
 detection/embedding/vector search) is not yet implemented — do not treat
 returned "candidates" as based on any real face analysis. Verified:
-backend tests (including register → admin-approve → login, and refresh
-rotation/reuse-detection/logout-all integration tests) + clippy, frontend
-typecheck + tests + build all pass. See `docs/ROADMAP.md` for what's
+backend tests (including register → admin-approve → login, refresh
+rotation/reuse-detection/logout-all, and audit-trail role/pagination
+integration tests) + clippy, frontend typecheck + tests + build all pass.
+See `docs/ROADMAP.md` for what's
 planned next. This README is expanded as each part of the system is
 actually built — it never describes a feature, endpoint, or integration
 ahead of the code that implements it.

@@ -5,6 +5,7 @@ use axum::Json;
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::audit::{action, result as audit_result, AuditRecorder};
 use crate::auth::{auth_user_from_headers, require_role};
 use crate::biometric::{BiometricProvider, MockBiometricProvider};
 use crate::db::{
@@ -149,9 +150,26 @@ pub async fn create_search_route(
         _ => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     };
 
+    AuditRecorder::new(action::SEARCH_CREATED, audit_result::SUCCESS, rid.clone())
+        .actor(&claims)
+        .headers(&headers)
+        .case_reference(&case_reference)
+        .resource("search", &search.id)
+        .save(&state)
+        .await;
+
     let candidates = match list_candidates(&state.backend).await {
         Ok(rows) => rows,
-        Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+        Err(_) => {
+            AuditRecorder::new(action::SEARCH_FAILED, audit_result::FAILURE, rid.clone())
+                .actor(&claims)
+                .headers(&headers)
+                .case_reference(&case_reference)
+                .resource("search", &search.id)
+                .save(&state)
+                .await;
+            return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response();
+        }
     };
     let ranked = MockBiometricProvider.search(&image_bytes, candidates, TOP_K);
     for scored in &ranked {
@@ -168,6 +186,15 @@ pub async fn create_search_route(
         Ok(rows) => rows,
         Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     };
+
+    AuditRecorder::new(action::SEARCH_COMPLETED, audit_result::SUCCESS, rid)
+        .actor(&claims)
+        .headers(&headers)
+        .case_reference(&case_reference)
+        .resource("search", &search.id)
+        .metadata(json!({ "candidateCount": candidate_rows.len() }))
+        .save(&state)
+        .await;
 
     Json(json!({
         "search": search_json(&search),
@@ -289,7 +316,21 @@ async fn review(
     )
     .await
     {
-        Ok(Some(row)) => Json(search_candidate_json(&row)).into_response(),
+        Ok(Some(row)) => {
+            let event_action = if status == "confirmed" {
+                action::CANDIDATE_CONFIRMED
+            } else {
+                action::CANDIDATE_REJECTED
+            };
+            AuditRecorder::new(event_action, audit_result::SUCCESS, rid)
+                .actor(&claims)
+                .headers(&headers)
+                .resource("search_candidate", &row.id)
+                .metadata(json!({ "searchId": payload.search_id, "candidateId": candidate_id }))
+                .save(&state)
+                .await;
+            Json(search_candidate_json(&row)).into_response()
+        }
         Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
         Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }

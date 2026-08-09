@@ -4,7 +4,7 @@ use axum::routing::{delete, get, post};
 use axum::Router;
 
 use crate::db::AppState;
-use crate::{admin, auth, search};
+use crate::{admin, audit, auth, search};
 
 pub fn router(state: AppState) -> Router {
     let auth_routes = Router::new()
@@ -60,6 +60,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/api/health", get(health::health))
         .route("/api/v1/users/me", get(auth::me))
+        .route("/api/v1/audit", get(audit::list_audit_events_route))
         .nest("/api/v1/auth", auth_routes)
         .nest("/api/v1/admin", admin_routes)
         .nest("/api/v1/search", search_routes)

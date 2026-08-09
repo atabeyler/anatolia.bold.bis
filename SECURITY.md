@@ -5,7 +5,7 @@
 Report suspected vulnerabilities directly to the repository owner
 (info@boldkimya.com.tr) rather than opening a public issue.
 
-## Current state (Phase 3 — authentication hardening)
+## Current state (Phase 3.5 — authentication hardening + audit trail)
 
 Implemented controls:
 - Security response headers on every response: `X-Content-Type-Options`,
@@ -72,13 +72,20 @@ Implemented controls:
 - Refresh-token cookie `SameSite`/`Secure` attributes are selected based
   on whether the request is same-origin and whether the server is running
   in production — see `docs/SECURITY_ARCHITECTURE.md`.
+- **Append-only audit trail**: every security- or case-relevant action
+  (auth success/failure, token reuse detection, registration approve/
+  reject, user create/update/ban/unban/delete, search create/complete/
+  fail, candidate confirm/reject, admin-seed use/failure) is recorded
+  through a single central `AuditRecorder`, never an ad-hoc `INSERT`.
+  Nothing ever `UPDATE`s or `DELETE`s an audit row. `GET /api/v1/audit`
+  (server-side paginated/filtered) is restricted to `AUDITOR`,
+  `SECURITY_ADMIN`, and `SYSTEM_ADMIN`. See `docs/SECURITY_ARCHITECTURE.md`.
 
 ## Planned (see `docs/ROADMAP.md` and `docs/SECURITY_ARCHITECTURE.md`)
 
-Append-only audit logging, MFA, organization-scoped authorization,
-enterprise SSO, and real image/upload validation are designed but not yet
-implemented. Do not assume any of them are active until this document is
-updated to say otherwise.
+MFA, organization-scoped authorization, enterprise SSO, and real image/
+upload validation are designed but not yet implemented. Do not assume any
+of them are active until this document is updated to say otherwise.
 
 ## Rules enforced in this repository
 

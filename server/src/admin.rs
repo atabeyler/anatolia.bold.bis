@@ -7,7 +7,11 @@ use serde::Deserialize;
 use serde_json::json;
 use std::time::Duration;
 
-use crate::auth::{consume_approval_token, peek_approval_token, public_user, require_role};
+use crate::audit::{action, result as audit_result, AuditRecorder};
+use crate::auth::{
+    auth_user_from_headers, consume_approval_token, peek_approval_token, public_user, require_role,
+    Claims,
+};
 use crate::db::{
     create_user, delete_user, list_users as load_users, load_user_by_id,
     revoke_all_sessions_for_user, update_user_flags, update_user_profile, AppState,
@@ -79,6 +83,14 @@ fn require_admin(state: &AppState, headers: &HeaderMap) -> Option<Response> {
     } else {
         Some(ApiError::new("FORBIDDEN", "errors.forbidden", request_id(headers)).into_response())
     }
+}
+
+/// The acting admin's claims, for attributing an audit event to a
+/// specific actor. `require_admin` has already established that some
+/// valid admin bearer token is present by the time any caller reaches
+/// this — this just re-decodes it to get the identity to attribute to.
+fn actor_claims(state: &AppState, headers: &HeaderMap) -> Option<Claims> {
+    auth_user_from_headers(headers, &state.secrets.jwt_secret)
 }
 
 fn request_id(headers: &HeaderMap) -> String {
@@ -177,7 +189,15 @@ pub async fn create_user_route(
     )
     .await
     {
-        Ok(Some(user)) => Json(json!({ "user": user_json(&user) })).into_response(),
+        Ok(Some(user)) => {
+            AuditRecorder::new(action::USER_CREATED, audit_result::SUCCESS, rid.clone())
+                .actor_opt(actor_claims(&state, &headers).as_ref())
+                .headers(&headers)
+                .resource("user", &user.id)
+                .save(&state)
+                .await;
+            Json(json!({ "user": user_json(&user) })).into_response()
+        }
         Ok(None) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
         Err(err) if err.to_string().to_lowercase().contains("unique") => {
             ApiError::new("CONFLICT", "errors.registrationConflict", rid).into_response()
@@ -254,7 +274,15 @@ pub async fn update_user_route(
     )
     .await
     {
-        Ok(Some(user)) => Json(json!({ "user": user_json(&user) })).into_response(),
+        Ok(Some(user)) => {
+            AuditRecorder::new(action::USER_UPDATED, audit_result::SUCCESS, rid.clone())
+                .actor_opt(actor_claims(&state, &headers).as_ref())
+                .headers(&headers)
+                .resource("user", &user.id)
+                .save(&state)
+                .await;
+            Json(json!({ "user": user_json(&user) })).into_response()
+        }
         Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
         Err(err) if err.to_string().to_lowercase().contains("unique") => {
             ApiError::new("CONFLICT", "errors.registrationConflict", rid).into_response()
@@ -271,6 +299,7 @@ pub async fn approve_user(
     if let Some(denied) = require_admin(&state, &headers) {
         return denied;
     }
+    let rid = request_id(&headers);
     match update_user_flags(
         &state.backend,
         &id,
@@ -291,14 +320,16 @@ pub async fn approve_user(
                 )
                 .await;
             }
+            AuditRecorder::new(action::REGISTRATION_APPROVED, audit_result::SUCCESS, rid)
+                .actor_opt(actor_claims(&state, &headers).as_ref())
+                .headers(&headers)
+                .resource("user", &user.id)
+                .save(&state)
+                .await;
             Json(json!({ "user": public_user(&user) })).into_response()
         }
-        Ok(None) => {
-            ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response()
-        }
-        Err(_) => {
-            ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response()
-        }
+        Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
+        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }
 }
 
@@ -310,23 +341,27 @@ pub async fn reject_user(
     if let Some(denied) = require_admin(&state, &headers) {
         return denied;
     }
+    let rid = request_id(&headers);
     let user = load_user_by_id(&state.backend, &id).await.ok().flatten();
+    let actor = actor_claims(&state, &headers);
     match delete_user(&state.backend, &id).await {
         Ok(true) => {
-            if let Some(user) = user {
+            if let Some(user) = &user {
                 if let Some(email) = user.email.as_deref() {
                     crate::email::send_rejection_email(&user.first_name, &user.last_name, email)
                         .await;
                 }
             }
+            AuditRecorder::new(action::REGISTRATION_REJECTED, audit_result::SUCCESS, rid)
+                .actor_opt(actor.as_ref())
+                .headers(&headers)
+                .resource("user", &id)
+                .save(&state)
+                .await;
             Json(json!({ "messageKey": "admin.requestRejected" })).into_response()
         }
-        Ok(false) => {
-            ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response()
-        }
-        Err(_) => {
-            ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response()
-        }
+        Ok(false) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
+        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }
 }
 
@@ -339,6 +374,7 @@ pub async fn ban_user(
     if let Some(denied) = require_admin(&state, &headers) {
         return denied;
     }
+    let rid = request_id(&headers);
     match update_user_flags(
         &state.backend,
         &id,
@@ -354,14 +390,17 @@ pub async fn ban_user(
             // logins — a short-lived access token issued before the ban
             // would otherwise keep working until it expires.
             let _ = revoke_all_sessions_for_user(&state.backend, &id).await;
+            AuditRecorder::new(action::USER_BANNED, audit_result::SUCCESS, rid)
+                .actor_opt(actor_claims(&state, &headers).as_ref())
+                .headers(&headers)
+                .resource("user", &id)
+                .metadata(json!({ "reason": payload.reason }))
+                .save(&state)
+                .await;
             Json(json!({ "messageKey": "admin.userBanned" })).into_response()
         }
-        Ok(None) => {
-            ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response()
-        }
-        Err(_) => {
-            ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response()
-        }
+        Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
+        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }
 }
 
@@ -373,14 +412,19 @@ pub async fn unban_user(
     if let Some(denied) = require_admin(&state, &headers) {
         return denied;
     }
+    let rid = request_id(&headers);
     match update_user_flags(&state.backend, &id, None, Some(false), None, None).await {
-        Ok(Some(_)) => Json(json!({ "messageKey": "admin.banLifted" })).into_response(),
-        Ok(None) => {
-            ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response()
+        Ok(Some(_)) => {
+            AuditRecorder::new(action::USER_UNBANNED, audit_result::SUCCESS, rid)
+                .actor_opt(actor_claims(&state, &headers).as_ref())
+                .headers(&headers)
+                .resource("user", &id)
+                .save(&state)
+                .await;
+            Json(json!({ "messageKey": "admin.banLifted" })).into_response()
         }
-        Err(_) => {
-            ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response()
-        }
+        Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
+        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }
 }
 
@@ -392,14 +436,19 @@ pub async fn delete_user_route(
     if let Some(denied) = require_admin(&state, &headers) {
         return denied;
     }
+    let rid = request_id(&headers);
     match delete_user(&state.backend, &id).await {
-        Ok(true) => Json(json!({ "messageKey": "admin.userDeleted" })).into_response(),
-        Ok(false) => {
-            ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response()
+        Ok(true) => {
+            AuditRecorder::new(action::USER_DELETED, audit_result::SUCCESS, rid)
+                .actor_opt(actor_claims(&state, &headers).as_ref())
+                .headers(&headers)
+                .resource("user", &id)
+                .save(&state)
+                .await;
+            Json(json!({ "messageKey": "admin.userDeleted" })).into_response()
         }
-        Err(_) => {
-            ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response()
-        }
+        Ok(false) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
+        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }
 }
 
@@ -421,6 +470,10 @@ pub async fn seed_admin(State(state): State<AppState>, headers: HeaderMap) -> Re
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
     if expected.is_empty() || !constant_time_eq(provided, &expected) {
+        AuditRecorder::new(action::ADMIN_SEED_FAILED, audit_result::DENIED, rid.clone())
+            .headers(&headers)
+            .save(&state)
+            .await;
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
 
@@ -452,7 +505,14 @@ pub async fn seed_admin(State(state): State<AppState>, headers: HeaderMap) -> Re
     )
     .await
     {
-        Ok(Some(_)) => Json(json!({ "messageKey": "admin.adminCreated" })).into_response(),
+        Ok(Some(user)) => {
+            AuditRecorder::new(action::ADMIN_SEED_USED, audit_result::SUCCESS, rid)
+                .headers(&headers)
+                .resource("user", &user.id)
+                .save(&state)
+                .await;
+            Json(json!({ "messageKey": "admin.adminCreated" })).into_response()
+        }
         Ok(None) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
         // Re-running seed-admin with the same ADMIN_USER_CODE/ADMIN_EMAIL is
         // the expected way to check "has this already been bootstrapped" —
@@ -528,7 +588,12 @@ pub async fn review(State(state): State<AppState>, Path(token): Path<String>) ->
     html_page("Review registration request", &body)
 }
 
-pub async fn quick_approve(State(state): State<AppState>, Path(token): Path<String>) -> Response {
+pub async fn quick_approve(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    let rid = request_id(&headers);
     let Some(user_id) = consume_approval_token(&state, &token, "approved").await else {
         return html_page(
             "Invalid or expired link",
@@ -555,6 +620,12 @@ pub async fn quick_approve(State(state): State<AppState>, Path(token): Path<Stri
                 )
                 .await;
             }
+            AuditRecorder::new(action::REGISTRATION_APPROVED, audit_result::SUCCESS, rid)
+                .headers(&headers)
+                .resource("user", &user.id)
+                .metadata(json!({ "source": "email_link" }))
+                .save(&state)
+                .await;
             html_page(
                 "Approved",
                 &format!(
@@ -572,7 +643,12 @@ pub async fn quick_approve(State(state): State<AppState>, Path(token): Path<Stri
     }
 }
 
-pub async fn quick_reject(State(state): State<AppState>, Path(token): Path<String>) -> Response {
+pub async fn quick_reject(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    let rid = request_id(&headers);
     let Some(user_id) = consume_approval_token(&state, &token, "rejected").await else {
         return html_page(
             "Invalid or expired link",
@@ -585,6 +661,12 @@ pub async fn quick_reject(State(state): State<AppState>, Path(token): Path<Strin
         .flatten();
     match delete_user(&state.backend, &user_id).await {
         Ok(true) => {
+            AuditRecorder::new(action::REGISTRATION_REJECTED, audit_result::SUCCESS, rid)
+                .headers(&headers)
+                .resource("user", &user_id)
+                .metadata(json!({ "source": "email_link" }))
+                .save(&state)
+                .await;
             if let Some(user) = user {
                 if let Some(email) = user.email.as_deref() {
                     crate::email::send_rejection_email(&user.first_name, &user.last_name, email)

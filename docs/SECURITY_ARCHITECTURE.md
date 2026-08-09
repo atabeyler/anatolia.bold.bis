@@ -75,10 +75,25 @@ reporting.
   `Secure`) only for the one legitimate cross-origin case (a
   desktop/mobile client's local bridge calling the cloud API) — never a
   blanket `None`.
+- **Append-only audit trail** (`server/src/audit.rs`, `db::audit_events`):
+  every security- or case-relevant action — auth (login/refresh/logout/
+  reuse detection), registration approve/reject, user administration
+  (create/update/ban/unban/delete), search create/complete/fail, candidate
+  confirm/reject, and admin-seed use/failure — is recorded through one
+  central `AuditRecorder` rather than ad-hoc `INSERT`s scattered across
+  handlers. No code path ever `UPDATE`s or `DELETE`s an `audit_events`
+  row. Records never include raw passwords, tokens, national IDs, or
+  biometric data — only stable action codes, actor identity, result,
+  resource references, and small, explicitly-constructed metadata.
+  `GET /api/v1/audit` (server-side paginated and filtered) exposes it to
+  `AUDITOR`, `SECURITY_ADMIN`, and `SYSTEM_ADMIN` only — the append-only
+  guarantee is only meaningful if reading it is also access-controlled.
+  A failed audit write is logged as a warning and never blocks or fails
+  the request that triggered it.
 
 ## Not yet implemented
 
-Append-only audit logging, MFA, organization/unit-scoped authorization,
-enterprise SSO, and real upload validation (MIME/size/dimension/
-corruption checks) are planned (see `docs/ROADMAP.md`) but not present in
-the codebase yet. Do not assume any of them are active.
+MFA, organization/unit-scoped authorization, enterprise SSO, and real
+upload validation (MIME/size/dimension/corruption checks) are planned
+(see `docs/ROADMAP.md`) but not present in the codebase yet. Do not
+assume any of them are active.

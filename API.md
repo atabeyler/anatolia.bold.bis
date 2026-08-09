@@ -237,6 +237,46 @@ row.
 
 Same shape and role requirement as `verify`, sets status to `rejected`.
 
+### Audit trail
+
+#### `GET /api/v1/audit`
+
+Requires `AUDITOR`, `SECURITY_ADMIN`, or `SYSTEM_ADMIN`. Server-side
+paginated, filtered read over the append-only `audit_events` table (see
+`docs/SECURITY_ARCHITECTURE.md`) — no endpoint ever exposes a way to
+modify or delete an audit event.
+
+Query parameters (all optional):
+
+| Parameter | Meaning |
+|---|---|
+| `dateFrom`, `dateTo` | RFC3339 timestamps; inclusive range. |
+| `actor` | Exact match on the acting user's ID (not user code). |
+| `action` | Exact match on the action constant, e.g. `AUTH_LOGIN_FAILED`. |
+| `caseReference` | Exact match. |
+| `resourceType` | Exact match, e.g. `user`, `search`, `session`. |
+| `result` | `success`, `failure`, or `denied`. |
+| `page` | 1-indexed; defaults to `1`. |
+| `pageSize` | Defaults to 50; clamped server-side to a maximum of 200 regardless of what's requested. |
+
+**`200 OK`**:
+```json
+{
+  "items": [
+    {
+      "id": "...", "timestamp": "...", "actorUserId": "...", "actorUserCode": "OPER01",
+      "actorRole": "OPERATOR", "action": "SEARCH_CREATED", "requestId": "...",
+      "caseReference": "CASE-001", "resourceType": "search", "resourceId": "...",
+      "result": "success", "source": "api", "ipAddress": null, "userAgent": "...",
+      "metadata": { "candidateCount": 5 }, "organizationId": null, "organizationUnitId": null
+    }
+  ],
+  "page": 1,
+  "pageSize": 50,
+  "total": 137
+}
+```
+
 ## Planned endpoints
 
 The following are designed but not implemented. Do not call them.

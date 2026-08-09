@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::Duration;
 
+use crate::audit::{action, result as audit_result, AuditRecorder};
 use crate::db::{
     create_session, create_user, find_session_by_family, load_registration_tracking_status,
     load_user_by_code, load_user_by_email, load_user_by_id, revoke_all_sessions_for_user,
@@ -207,7 +208,7 @@ fn trust_proxy() -> bool {
         .unwrap_or_else(|_| is_production())
 }
 
-fn client_ip(headers: &HeaderMap) -> Option<String> {
+pub(crate) fn client_ip(headers: &HeaderMap) -> Option<String> {
     if !trust_proxy() {
         return None;
     }
@@ -219,7 +220,7 @@ fn client_ip(headers: &HeaderMap) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
-fn user_agent(headers: &HeaderMap) -> Option<String> {
+pub(crate) fn user_agent(headers: &HeaderMap) -> Option<String> {
     headers
         .get(header::USER_AGENT)
         .and_then(|v| v.to_str().ok())
@@ -481,6 +482,17 @@ pub async fn register(
                 )
                 .await;
             }
+
+            AuditRecorder::new(
+                action::REGISTRATION_CREATED,
+                audit_result::SUCCESS,
+                rid.clone(),
+            )
+            .actor_by_id(&user.id, &user.user_code, roles::PENDING)
+            .headers(&headers)
+            .save(&state)
+            .await;
+
             (
                 StatusCode::CREATED,
                 Json(serde_json::json!({
@@ -574,18 +586,49 @@ pub async fn login(
     let user = match load_user_by_code(&state.backend, &payload.user_code).await {
         Ok(Some(user)) => user,
         Ok(None) => {
-            return ApiError::new("UNAUTHORIZED", "errors.invalidCredentials", rid).into_response()
+            AuditRecorder::new(
+                action::AUTH_LOGIN_FAILED,
+                audit_result::FAILURE,
+                rid.clone(),
+            )
+            .headers(&headers)
+            .metadata(serde_json::json!({ "userCode": rate_key, "reason": "unknown_account" }))
+            .save(&state)
+            .await;
+            return ApiError::new("UNAUTHORIZED", "errors.invalidCredentials", rid).into_response();
         }
         Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     };
 
     if !verify(&payload.password, &user.password_hash).unwrap_or(false) {
+        AuditRecorder::new(
+            action::AUTH_LOGIN_FAILED,
+            audit_result::FAILURE,
+            rid.clone(),
+        )
+        .actor_by_id(&user.id, &user.user_code, &user.role)
+        .headers(&headers)
+        .metadata(serde_json::json!({ "reason": "invalid_password" }))
+        .save(&state)
+        .await;
         return ApiError::new("UNAUTHORIZED", "errors.invalidCredentials", rid).into_response();
     }
     if user.is_banned {
+        AuditRecorder::new(action::AUTH_LOGIN_FAILED, audit_result::DENIED, rid.clone())
+            .actor_by_id(&user.id, &user.user_code, &user.role)
+            .headers(&headers)
+            .metadata(serde_json::json!({ "reason": "account_banned" }))
+            .save(&state)
+            .await;
         return ApiError::new("FORBIDDEN", "errors.accountBanned", rid).into_response();
     }
     if !user.is_approved {
+        AuditRecorder::new(action::AUTH_LOGIN_FAILED, audit_result::DENIED, rid.clone())
+            .actor_by_id(&user.id, &user.user_code, &user.role)
+            .headers(&headers)
+            .metadata(serde_json::json!({ "reason": "account_not_approved" }))
+            .save(&state)
+            .await;
         return ApiError::new("FORBIDDEN", "errors.accountNotApproved", rid).into_response();
     }
 
@@ -593,6 +636,16 @@ pub async fn login(
         Ok(pair) => pair,
         Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     };
+
+    AuditRecorder::new(
+        action::AUTH_LOGIN_SUCCESS,
+        audit_result::SUCCESS,
+        rid.clone(),
+    )
+    .actor_by_id(&user.id, &user.user_code, &user.role)
+    .headers(&headers)
+    .save(&state)
+    .await;
 
     let mut response = Json(serde_json::json!({
         "accessToken": access_token,
@@ -627,6 +680,16 @@ pub async fn refresh(State(state): State<AppState>, headers: HeaderMap) -> Respo
     let token_hash = sha256_hex(&token);
     if session.revoked_at.is_some() || session.refresh_token_hash != token_hash {
         let _ = revoke_session_family(&state.backend, &claims.family).await;
+        AuditRecorder::new(
+            action::AUTH_TOKEN_REUSE_DETECTED,
+            audit_result::DENIED,
+            rid.clone(),
+        )
+        .actor_by_id(&claims.sub, "", "")
+        .headers(&headers)
+        .resource("session", &claims.family)
+        .save(&state)
+        .await;
         return unauthorized(&headers);
     }
 
@@ -644,6 +707,15 @@ pub async fn refresh(State(state): State<AppState>, headers: HeaderMap) -> Respo
     };
     if user.is_banned || !user.is_approved {
         let _ = revoke_session(&state.backend, &session.id).await;
+        AuditRecorder::new(
+            action::AUTH_REFRESH_FAILED,
+            audit_result::DENIED,
+            rid.clone(),
+        )
+        .actor_by_id(&user.id, &user.user_code, &user.role)
+        .headers(&headers)
+        .save(&state)
+        .await;
         return unauthorized(&headers);
     }
 
@@ -673,6 +745,16 @@ pub async fn refresh(State(state): State<AppState>, headers: HeaderMap) -> Respo
         Ok(token) => token,
         Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     };
+
+    AuditRecorder::new(
+        action::AUTH_REFRESH_SUCCESS,
+        audit_result::SUCCESS,
+        rid.clone(),
+    )
+    .actor_by_id(&user.id, &user.user_code, &user.role)
+    .headers(&headers)
+    .save(&state)
+    .await;
 
     let mut response = Json(serde_json::json!({
         "accessToken": access_token,
@@ -775,6 +857,15 @@ pub async fn forgot_password(
             user.email.as_deref(),
         )
         .await;
+        AuditRecorder::new(
+            action::AUTH_PASSWORD_RESET_REQUESTED,
+            audit_result::SUCCESS,
+            rid.clone(),
+        )
+        .actor_by_id(&user.id, &user.user_code, &user.role)
+        .headers(&headers)
+        .save(&state)
+        .await;
     }
 
     Json(serde_json::json!({ "messageKey": "auth.forgotPasswordReceived" })).into_response()
@@ -785,6 +876,7 @@ fn cleared_cookie() -> HeaderValue {
 }
 
 pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let rid = request_id(&headers);
     // Best-effort: revoke the session this refresh token belongs to. Any
     // failure to decode/find it still results in the cookie being cleared
     // — logout must never appear to fail from the client's perspective.
@@ -793,6 +885,12 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Respon
             if let Ok(Some(session)) = find_session_by_family(&state.backend, &claims.family).await
             {
                 let _ = revoke_session(&state.backend, &session.id).await;
+                AuditRecorder::new(action::AUTH_LOGOUT, audit_result::SUCCESS, rid)
+                    .actor_by_id(&claims.sub, "", "")
+                    .headers(&headers)
+                    .resource("session", &claims.family)
+                    .save(&state)
+                    .await;
             }
         }
     }
@@ -807,10 +905,16 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Respon
 /// everywhere". Requires a currently-valid access token; the refresh
 /// cookie on this device is cleared same as ordinary logout.
 pub async fn logout_all(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let rid = request_id(&headers);
     let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
         return unauthorized(&headers);
     };
     let _ = revoke_all_sessions_for_user(&state.backend, &claims.id).await;
+    AuditRecorder::new(action::AUTH_LOGOUT_ALL, audit_result::SUCCESS, rid)
+        .actor(&claims)
+        .headers(&headers)
+        .save(&state)
+        .await;
     let mut response =
         Json(serde_json::json!({ "messageKey": "auth.loggedOutAll" })).into_response();
     response

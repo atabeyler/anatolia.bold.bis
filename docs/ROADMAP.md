@@ -1,6 +1,6 @@
 # Roadmap
 
-Implemented incrementally. Nothing below Phase 3.5 is implemented yet.
+Implemented incrementally. Nothing below Phase 3.6 is implemented yet.
 
 ## Phase 1 — Repository foundation (this phase)
 
@@ -44,8 +44,27 @@ Implemented incrementally. Nothing below Phase 3.5 is implemented yet.
       addition to the existing per-account window)
 - [x] CORS method list includes `PATCH`; CSP and Permissions-Policy
       headers; HSTS restricted to production
-- [ ] Append-only audit log, MFA, organization/unit-scoped authorization
-      (tracked separately — see the milestones below)
+- [ ] MFA, organization/unit-scoped authorization (tracked separately —
+      see the milestones below)
+
+## Phase 3.6 — Audit trail
+
+- [x] Append-only `audit_events` table (PostgreSQL/SQLite), never
+      `UPDATE`d or `DELETE`d by any code path
+- [x] Central `AuditService`/`AuditRecorder` (`server/src/audit.rs`) —
+      handlers call one consistent API instead of ad-hoc `INSERT`s
+- [x] Events wired into auth (login/refresh/logout/logout-all/token
+      reuse/password reset request), registration (created/approved/
+      rejected), user administration (created/updated/banned/unbanned/
+      deleted), search (created/completed/failed), candidate (confirmed/
+      rejected), and admin-seed (used/failed)
+- [x] `GET /api/v1/audit`, server-side paginated and filtered
+      (date range, actor, action, case reference, resource type, result),
+      restricted to `AUDITOR`/`SECURITY_ADMIN`/`SYSTEM_ADMIN`
+- [x] Frontend Audit Logs screen (filters, pagination, expandable detail),
+      all 6 locales
+- [ ] Organization/unit-scoped audit visibility (depends on the
+      organization model in a later milestone)
 
 ## Phase 4 — Production biometric provider
 

@@ -165,5 +165,39 @@
     "location": "Operator location at time of search: {{lat}} · {{lon}}",
     "mockNotice": "Demo mode: this deployment uses a mock matching engine — scores are simulated, not derived from real biometric matching.",
     "viewOnlyNotice": "Your role allows viewing searches and candidates only. Starting a new search requires the OPERATOR, REVIEWER, SECURITY_ADMIN, or SYSTEM_ADMIN role."
+  },
+  "audit": {
+    "panelTitle": "AUDIT LOG",
+    "openLabel": "Audit log",
+    "tabTitle": "AUDIT LOG",
+    "loading": "Loading audit events…",
+    "loadError": "Failed to load audit events.",
+    "empty": "No audit events match these filters.",
+    "unknownActor": "System",
+    "hideDetail": "Hide detail",
+    "showDetail": "Show detail",
+    "filters": {
+      "heading": "Filters",
+      "dateFrom": "From",
+      "dateTo": "To",
+      "action": "Action",
+      "result": "Result",
+      "caseReference": "Case reference",
+      "resourceType": "Resource type",
+      "hint": "Filters are applied server-side. Leave a field empty to ignore it.",
+      "apply": "Apply filters",
+      "clear": "Clear"
+    },
+    "detail": {
+      "requestId": "Request ID",
+      "ipAddress": "IP address",
+      "userAgent": "User agent",
+      "metadata": "Metadata"
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "pageOf": "Page {{page}} of {{totalPages}}"
+    }
   }
 }
