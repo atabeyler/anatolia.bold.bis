@@ -8,7 +8,9 @@ use serde_json::json;
 use std::time::Duration;
 
 use crate::auth::{decode_approval_token, public_user, require_role};
-use crate::db::{create_user, delete_user, list_users as load_users, load_user_by_id, update_user_flags, AppState};
+use crate::db::{
+    create_user, delete_user, list_users as load_users, load_user_by_id, update_user_flags, update_user_profile, AppState,
+};
 use crate::email::escape_html;
 use crate::error::ApiError;
 use crate::roles;
@@ -16,6 +18,41 @@ use crate::roles;
 #[derive(Debug, Deserialize)]
 pub struct BanPayload {
     pub reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateUserPayload {
+    pub user_code: String,
+    pub password: String,
+    pub nickname: Option<String>,
+    pub national_id: String,
+    pub email: String,
+    pub is_admin: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateUserPayload {
+    pub nickname: Option<String>,
+    pub national_id: Option<String>,
+    pub email: Option<String>,
+    pub password: Option<String>,
+}
+
+fn user_json(user: &crate::db::UserRow) -> serde_json::Value {
+    json!({
+        "id": user.id,
+        "userCode": user.user_code,
+        "firstName": user.first_name,
+        "lastName": user.last_name,
+        "nationalId": user.national_id,
+        "email": user.email,
+        "role": user.role,
+        "isApproved": user.is_approved,
+        "isBanned": user.is_banned,
+        "banReason": user.ban_reason,
+    })
 }
 
 /// Plain `!=` on the seed token would let a network attacker recover it
@@ -53,26 +90,122 @@ pub async fn list_users(State(state): State<AppState>, headers: HeaderMap) -> Re
     }
     match load_users(&state.backend).await {
         Ok(rows) => {
-            let payload: Vec<_> = rows
-                .into_iter()
-                .map(|user| {
-                    json!({
-                        "id": user.id,
-                        "userCode": user.user_code,
-                        "firstName": user.first_name,
-                        "lastName": user.last_name,
-                        "nationalId": user.national_id,
-                        "email": user.email,
-                        "role": user.role,
-                        "isApproved": user.is_approved,
-                        "isBanned": user.is_banned,
-                        "banReason": user.ban_reason,
-                    })
-                })
-                .collect();
+            let payload: Vec<_> = rows.iter().map(user_json).collect();
             Json(payload).into_response()
         }
         Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response(),
+    }
+}
+
+/// Lets an admin create an account directly (immediately approved, no
+/// self-registration/approval round trip) — for operators the admin sets
+/// up in person rather than ones who self-register. Distinct from
+/// `register`: no national ID is collected here, email is optional, and
+/// the password policy is only a minimum length since the admin is
+/// choosing it, not the account's eventual owner.
+pub async fn create_user_route(State(state): State<AppState>, headers: HeaderMap, Json(payload): Json<CreateUserPayload>) -> Response {
+    if let Some(denied) = require_admin(&headers) {
+        return denied;
+    }
+    let rid = request_id(&headers);
+
+    let code = payload.user_code.trim().to_uppercase();
+    if !(4..=20).contains(&code.len()) || !code.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()) {
+        return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
+    }
+    if payload.password.len() < 8 {
+        return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
+    }
+    let national_id = payload.national_id.trim();
+    if national_id.len() != 11 || !national_id.chars().all(|c| c.is_ascii_digit()) {
+        return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
+    }
+    let email = payload.email.trim().to_lowercase();
+    if email.is_empty() {
+        return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
+    }
+
+    let nickname = payload.nickname.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or(&code).to_string();
+
+    let hashed = match hash(&payload.password, bcrypt::DEFAULT_COST) {
+        Ok(v) => v,
+        Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    };
+    let role = if payload.is_admin { roles::SYSTEM_ADMIN } else { roles::DEFAULT_APPROVED_ROLE };
+
+    match create_user(&state.backend, &code, Some(&email), &nickname, "", Some(national_id), &hashed, role, true).await {
+        Ok(Some(user)) => Json(json!({ "user": user_json(&user) })).into_response(),
+        Ok(None) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+        Err(err) if err.to_string().to_lowercase().contains("unique") => {
+            ApiError::new("CONFLICT", "errors.registrationConflict", rid).into_response()
+        }
+        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    }
+}
+
+/// Admin edit of an existing account's nickname/national ID/email, and
+/// optionally a password reset — this is the "Düzenle" action next to
+/// ban/delete in the management panel, and also how an admin fulfils a
+/// forgot-password request (see `auth::forgot_password`, which only
+/// notifies the admin — it does not reset anything itself).
+pub async fn update_user_route(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    Json(payload): Json<UpdateUserPayload>,
+) -> Response {
+    if let Some(denied) = require_admin(&headers) {
+        return denied;
+    }
+    let rid = request_id(&headers);
+
+    let Some(current) = load_user_by_id(&state.backend, &id).await.ok().flatten() else {
+        return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response();
+    };
+
+    let first_name = payload
+        .nickname
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&current.first_name)
+        .to_string();
+
+    let national_id = match payload.national_id.as_deref().map(str::trim) {
+        Some(v) if !v.is_empty() => {
+            if v.len() != 11 || !v.chars().all(|c| c.is_ascii_digit()) {
+                return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
+            }
+            Some(v.to_string())
+        }
+        _ => current.national_id.clone(),
+    };
+
+    let email = match payload.email.as_deref().map(str::trim) {
+        Some(v) if !v.is_empty() => Some(v.to_lowercase()),
+        _ => current.email.clone(),
+    };
+
+    let password_hash = match payload.password.as_deref() {
+        Some(p) if !p.is_empty() => {
+            if p.len() < 8 {
+                return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
+            }
+            match hash(p, bcrypt::DEFAULT_COST) {
+                Ok(v) => v,
+                Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+            }
+        }
+        _ => current.password_hash.clone(),
+    };
+
+    match update_user_profile(&state.backend, &id, &first_name, email.as_deref(), national_id.as_deref(), &password_hash).await {
+        Ok(Some(user)) => Json(json!({ "user": user_json(&user) })).into_response(),
+        Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
+        Err(err) if err.to_string().to_lowercase().contains("unique") => {
+            ApiError::new("CONFLICT", "errors.registrationConflict", rid).into_response()
+        }
+        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }
 }
 
@@ -82,7 +215,9 @@ pub async fn approve_user(State(state): State<AppState>, Path(id): Path<String>,
     }
     match update_user_flags(&state.backend, &id, Some(true), Some(false), None, Some(roles::DEFAULT_APPROVED_ROLE)).await {
         Ok(Some(user)) => {
-            crate::email::send_approval_email(&user.first_name, &user.last_name, &user.email, &user.user_code).await;
+            if let Some(email) = user.email.as_deref() {
+                crate::email::send_approval_email(&user.first_name, &user.last_name, email, &user.user_code).await;
+            }
             Json(json!({ "user": public_user(&user) })).into_response()
         }
         Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", request_id(&headers)).into_response(),
@@ -98,7 +233,9 @@ pub async fn reject_user(State(state): State<AppState>, Path(id): Path<String>, 
     match delete_user(&state.backend, &id).await {
         Ok(true) => {
             if let Some(user) = user {
-                crate::email::send_rejection_email(&user.first_name, &user.last_name, &user.email).await;
+                if let Some(email) = user.email.as_deref() {
+                    crate::email::send_rejection_email(&user.first_name, &user.last_name, email).await;
+                }
             }
             Json(json!({ "messageKey": "admin.requestRejected" })).into_response()
         }
@@ -178,10 +315,10 @@ pub async fn seed_admin(State(state): State<AppState>, headers: HeaderMap) -> Re
     match create_user(
         &state.backend,
         &code.trim().to_uppercase(),
-        &email,
+        Some(&email),
         "System",
         "Administrator",
-        "00000000000",
+        None,
         &hashed,
         roles::SYSTEM_ADMIN,
         true,
@@ -241,7 +378,7 @@ pub async fn review(State(state): State<AppState>, Path(token): Path<String>) ->
         <form method="post" action="/api/v1/admin/quick-reject/{token}"><button type="submit" class="btn reject">Reject</button></form>"#,
         escape_html(&user.first_name),
         escape_html(&user.last_name),
-        escape_html(&user.email),
+        escape_html(user.email.as_deref().unwrap_or("-")),
         escape_html(&user.user_code),
     );
     html_page("Review registration request", &body)
@@ -253,7 +390,9 @@ pub async fn quick_approve(State(state): State<AppState>, Path(token): Path<Stri
     };
     match update_user_flags(&state.backend, &user_id, Some(true), Some(false), None, Some(roles::DEFAULT_APPROVED_ROLE)).await {
         Ok(Some(user)) => {
-            crate::email::send_approval_email(&user.first_name, &user.last_name, &user.email, &user.user_code).await;
+            if let Some(email) = user.email.as_deref() {
+                crate::email::send_approval_email(&user.first_name, &user.last_name, email, &user.user_code).await;
+            }
             html_page(
                 "Approved",
                 &format!("<p>{} {} has been approved and notified by email.</p>", escape_html(&user.first_name), escape_html(&user.last_name)),
@@ -272,7 +411,9 @@ pub async fn quick_reject(State(state): State<AppState>, Path(token): Path<Strin
     match delete_user(&state.backend, &user_id).await {
         Ok(true) => {
             if let Some(user) = user {
-                crate::email::send_rejection_email(&user.first_name, &user.last_name, &user.email).await;
+                if let Some(email) = user.email.as_deref() {
+                    crate::email::send_rejection_email(&user.first_name, &user.last_name, email).await;
+                }
                 html_page("Rejected", &format!("<p>{} {} has been rejected and notified by email.</p>", escape_html(&user.first_name), escape_html(&user.last_name)))
             } else {
                 html_page("Rejected", "<p>Registration request rejected.</p>")

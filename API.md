@@ -82,6 +82,17 @@ if the cookie is missing, invalid, or the account is banned/unapproved.
 
 Clears the refresh cookie.
 
+#### `POST /api/v1/auth/forgot-password`
+
+Request: `{ "identifier": "..." }` (user code or email). Rate-limited per
+identifier (5 / 15 min). Does not reset anything itself — there is no
+self-service reset flow. If the identifier matches an account, emails
+`ADMIN_EMAIL` a request to act on; an admin then sets a new password via
+`PATCH /api/v1/admin/users/{id}`. Always responds **`200 OK`**
+(`{ "messageKey": "auth.forgotPasswordReceived" }`) whether or not a
+matching account was found, so it can't be used to enumerate registered
+user codes/emails.
+
 #### `GET /api/v1/auth/pending-status/{userCode}`
 
 Polled by the registration form to detect admin approval without a manual
@@ -107,6 +118,21 @@ links require a `SYSTEM_ADMIN` or `SECURITY_ADMIN` bearer token.
   static form (same origin, no separate CORS setup) that calls this
   endpoint from a browser instead of a terminal.
 - `GET /api/v1/admin/users` — list all users.
+- `POST /api/v1/admin/users` — admin creates a user directly (immediately
+  approved, no self-registration/approval round trip). Body:
+  `{ "userCode": "...", "password": "...", "nickname": "...", "nationalId": "...", "email": "...", "isAdmin": false }`.
+  `nationalId` (11 digits) and `email` are required; `nickname` is
+  optional (falls back to the user code). Password only requires a
+  minimum of 8 characters (the admin chooses it, not the account's
+  eventual owner — contrast with `register`'s stronger policy). `isAdmin:
+  true` grants `SYSTEM_ADMIN` instead of the default `OPERATOR` role.
+  `409 Conflict` if the user code, national ID, or email is already taken.
+- `PATCH /api/v1/admin/users/{id}` — admin edits an existing account's
+  nickname, national ID, email, and/or resets its password. Body:
+  `{ "nickname": "...", "nationalId": "...", "email": "...", "password": "..." }`,
+  all fields optional — anything omitted or empty is left unchanged.
+  `409 Conflict` if the new national ID or email collides with another
+  account.
 - `POST /api/v1/admin/users/{id}/approve` — approves a pending
   registration, granting the default `OPERATOR` role.
 - `POST /api/v1/admin/users/{id}/reject` — deletes a pending registration.

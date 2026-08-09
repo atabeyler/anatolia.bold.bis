@@ -4,10 +4,17 @@ import { useAuth } from '../features/auth/AuthContext';
 import { useHealthCheck } from '../hooks/useHealthCheck';
 import { brandMark } from '../lib/brand';
 
-export function DashboardPage() {
+const ADMIN_ROLES = ['SYSTEM_ADMIN', 'SECURITY_ADMIN'];
+
+interface DashboardPageProps {
+  onOpenAdmin: () => void;
+}
+
+export function DashboardPage({ onOpenAdmin }: DashboardPageProps) {
   const { t, i18n } = useTranslation();
   const { user, logout } = useAuth();
   const health = useHealthCheck();
+  const isAdmin = !!user && ADMIN_ROLES.includes(user.role);
 
   return (
     <main className="dashboard">
@@ -16,6 +23,11 @@ export function DashboardPage() {
         {user && (
           <div className="app-header__session">
             <span>{t('auth.welcomeBack', { name: `${user.firstName} ${user.lastName}` })}</span>
+            {isAdmin && (
+              <button type="button" onClick={onOpenAdmin}>
+                {t('admin.openLabel')}
+              </button>
+            )}
             <button type="button" onClick={() => void logout()}>
               {t('auth.logout')}
             </button>

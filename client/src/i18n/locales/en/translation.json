@@ -38,7 +38,12 @@
     "registrationPendingMessage": "Request received. User code: {{code}} — awaiting admin approval…",
     "accountApproved": "Your account has been approved. You can now sign in.",
     "logout": "Sign out",
-    "welcomeBack": "Signed in as {{name}}"
+    "welcomeBack": "Signed in as {{name}}",
+    "forgotPassword": "Forgot password?",
+    "forgotPasswordIdentifier": "User code or email",
+    "forgotPasswordSubmit": "Send request",
+    "forgotPasswordSuccess": "Your request has been sent to the administrator. You will be contacted once your password has been reset.",
+    "backToLogin": "Back to sign in"
   },
   "errors": {
     "validation": "Please check the fields and try again.",
@@ -87,5 +92,45 @@
     "aboutContent": "Anatolia B.I.S. is a biometric candidate-matching and identity verification platform developed by Bold Askeri Teknoloji ve Savunma Sanayi A.Ş. for authorized institutions. The system is built around human-reviewed candidate matches, not automated identity decisions.\n\nProject code: BIS 200120401018",
     "missionContent": "MISSION\nProvide authorized institutions with a reliable, auditable, privacy-first biometric verification infrastructure.\n\nVISION\nBecome the institutional standard for verification systems that leave decisions to people, not algorithms, and record every action.",
     "contactContent": "Organization: Bold Askeri Teknoloji ve Savunma Sanayi A.Ş.\nEmail: info@boldkimya.com.tr\nPhone: +90 532 217 07 76\n\n© 2026 All rights reserved."
+  },
+  "admin": {
+    "openLabel": "Management panel",
+    "panelTitle": "MANAGEMENT PANEL",
+    "back": "Back",
+    "tabUsers": "USERS",
+    "addUser": {
+      "heading": "ADD NEW USER",
+      "userCode": "User code",
+      "password": "Password (min 8 characters)",
+      "nickname": "Nickname (optional)",
+      "nationalId": "National ID No",
+      "email": "Email (for notifications)",
+      "isAdmin": "Admin privileges",
+      "hint": "If an email is entered, this user also receives approval/rejection and account notices by email.",
+      "submit": "ADD"
+    },
+    "badge": {
+      "admin": "ADMIN",
+      "pending": "PENDING",
+      "banned": "BANNED"
+    },
+    "noEmail": "No email — notifications cannot be delivered",
+    "actions": {
+      "approve": "Approve",
+      "reject": "Reject",
+      "ban": "Ban",
+      "unban": "Lift ban",
+      "edit": "Edit",
+      "delete": "Delete",
+      "save": "Save",
+      "cancel": "Cancel",
+      "newPassword": "New password (optional)"
+    },
+    "confirmDelete": "Are you sure you want to delete this user?",
+    "loading": "Loading users…",
+    "empty": "No users yet.",
+    "loadError": "Failed to load users.",
+    "createSuccess": "User created.",
+    "createError": "Failed to create user."
   }
 }

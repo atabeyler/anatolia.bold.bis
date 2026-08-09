@@ -11,17 +11,18 @@ pub fn router(state: AppState) -> Router {
         .route("/register", post(auth::register))
         .route("/login", post(auth::login))
         .route("/refresh", post(auth::refresh))
+        .route("/forgot-password", post(auth::forgot_password))
         .route("/logout", post(auth::logout))
         .route("/pending-status/:user_code", get(auth::pending_status));
 
     let admin_routes = Router::new()
         .route("/seed-admin", post(admin::seed_admin))
-        .route("/users", get(admin::list_users))
+        .route("/users", get(admin::list_users).post(admin::create_user_route))
         .route("/users/:id/approve", post(admin::approve_user))
         .route("/users/:id/reject", post(admin::reject_user))
         .route("/users/:id/ban", post(admin::ban_user))
         .route("/users/:id/unban", post(admin::unban_user))
-        .route("/users/:id", delete(admin::delete_user_route))
+        .route("/users/:id", delete(admin::delete_user_route).patch(admin::update_user_route))
         .route("/review/:token", get(admin::review))
         .route("/quick-approve/:token", post(admin::quick_approve))
         .route("/quick-reject/:token", post(admin::quick_reject));

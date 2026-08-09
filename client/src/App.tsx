@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { MenuOverlay } from './components/MenuOverlay';
 import { SettingsOverlay } from './components/SettingsOverlay';
 import { useAuth } from './features/auth/AuthContext';
+import { AdminPage } from './pages/AdminPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 
@@ -12,6 +13,7 @@ function App() {
   const { status } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
 
   return (
     <div className="app-shell">
@@ -25,7 +27,15 @@ function App() {
       </div>
 
       <div className="app-main">
-        {status === 'loading' ? null : status === 'signed-in' ? <DashboardPage /> : <LoginPage />}
+        {status === 'loading' ? null : status === 'signed-in' ? (
+          adminOpen ? (
+            <AdminPage onClose={() => setAdminOpen(false)} />
+          ) : (
+            <DashboardPage onOpenAdmin={() => setAdminOpen(true)} />
+          )
+        ) : (
+          <LoginPage />
+        )}
       </div>
 
       <footer className="app-footer">

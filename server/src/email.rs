@@ -110,6 +110,14 @@ pub async fn send_approval_email(first_name: &str, last_name: &str, email: &str,
     deliver(email, "Anatolia B.I.S. — Your registration has been approved", &text, None).await;
 }
 
+pub async fn send_password_reset_request(first_name: &str, last_name: &str, user_code: &str, email: Option<&str>) {
+    let text = format!(
+        "A user has requested a password reset — Anatolia B.I.S.\n\nFull name: {first_name} {last_name}\nUser code: {user_code}\nEmail on file: {}\n\nSet a new password for this account from the management panel's \"Edit\" action.",
+        email.unwrap_or("-")
+    );
+    deliver(&admin_email(), &format!("[Password reset request] {first_name} {last_name}"), &text, None).await;
+}
+
 pub async fn send_rejection_email(first_name: &str, last_name: &str, email: &str) {
     let text = format!(
         "Dear {first_name} {last_name},\n\nYour registration request has been rejected. For questions, contact {}.\n\nBold Askeri Teknoloji ve Savunma Sanayi A.Ş.",

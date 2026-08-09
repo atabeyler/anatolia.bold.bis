@@ -38,7 +38,12 @@
     "registrationPendingMessage": "Demande reçue. Code utilisateur : {{code}} — en attente d'approbation par l'administrateur…",
     "accountApproved": "Votre compte a été approuvé. Vous pouvez maintenant vous connecter.",
     "logout": "Se déconnecter",
-    "welcomeBack": "Connecté en tant que {{name}}"
+    "welcomeBack": "Connecté en tant que {{name}}",
+    "forgotPassword": "Mot de passe oublié ?",
+    "forgotPasswordIdentifier": "Code utilisateur ou e-mail",
+    "forgotPasswordSubmit": "Envoyer la demande",
+    "forgotPasswordSuccess": "Votre demande a été envoyée à l'administrateur. Vous serez contacté une fois votre mot de passe réinitialisé.",
+    "backToLogin": "Retour à la connexion"
   },
   "errors": {
     "validation": "Veuillez vérifier les champs et réessayer.",
@@ -87,5 +92,45 @@
     "aboutContent": "Anatolia B.I.S. est une plateforme de rapprochement biométrique de candidats et de vérification d'identité développée par Bold Askeri Teknoloji ve Savunma Sanayi A.Ş. pour des institutions autorisées. Le système repose sur des correspondances de candidats validées par des humains, et non sur des décisions d'identité automatisées.\n\nCode du projet : BIS 200120401018",
     "missionContent": "MISSION\nFournir aux institutions autorisées une infrastructure de vérification biométrique fiable, auditable et axée sur la confidentialité.\n\nVISION\nDevenir la norme institutionnelle pour les systèmes de vérification qui laissent les décisions aux humains, et non aux algorithmes, et qui enregistrent chaque action.",
     "contactContent": "Organisation : Bold Askeri Teknoloji ve Savunma Sanayi A.Ş.\nE-mail : info@boldkimya.com.tr\nTéléphone : +90 532 217 07 76\n\n© 2026 Tous droits réservés."
+  },
+  "admin": {
+    "openLabel": "Panneau de gestion",
+    "panelTitle": "PANNEAU DE GESTION",
+    "back": "Retour",
+    "tabUsers": "UTILISATEURS",
+    "addUser": {
+      "heading": "AJOUTER UN NOUVEL UTILISATEUR",
+      "userCode": "Code utilisateur",
+      "password": "Mot de passe (min. 8 caractères)",
+      "nickname": "Pseudonyme (facultatif)",
+      "nationalId": "Numéro de carte d'identité",
+      "email": "E-mail (pour les notifications)",
+      "isAdmin": "Droits d'administrateur",
+      "hint": "Si un e-mail est renseigné, cet utilisateur reçoit aussi les notifications d'approbation/rejet et de compte par e-mail.",
+      "submit": "AJOUTER"
+    },
+    "badge": {
+      "admin": "ADMIN",
+      "pending": "EN ATTENTE",
+      "banned": "BANNI"
+    },
+    "noEmail": "Aucun e-mail — les notifications ne peuvent pas être envoyées",
+    "actions": {
+      "approve": "Approuver",
+      "reject": "Rejeter",
+      "ban": "Bannir",
+      "unban": "Lever le bannissement",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "newPassword": "Nouveau mot de passe (facultatif)"
+    },
+    "confirmDelete": "Voulez-vous vraiment supprimer cet utilisateur ?",
+    "loading": "Chargement des utilisateurs…",
+    "empty": "Aucun utilisateur pour le moment.",
+    "loadError": "Échec du chargement des utilisateurs.",
+    "createSuccess": "Utilisateur créé.",
+    "createError": "Échec de la création de l'utilisateur."
   }
 }

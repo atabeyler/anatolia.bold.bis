@@ -8,7 +8,7 @@ use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, 
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::db::{create_user, load_user_by_code, load_user_by_id, AppState, UserRow};
+use crate::db::{create_user, load_user_by_code, load_user_by_email, load_user_by_id, AppState, UserRow};
 use crate::error::ApiError;
 use crate::roles;
 
@@ -39,12 +39,18 @@ pub struct LoginPayload {
     pub password: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForgotPasswordPayload {
+    pub identifier: String,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicUser {
     pub id: String,
     pub user_code: String,
-    pub email: String,
+    pub email: Option<String>,
     pub role: String,
     pub first_name: String,
     pub last_name: String,
@@ -95,7 +101,7 @@ fn sign_access(user: &UserRow) -> Result<String, jsonwebtoken::errors::Error> {
     let claims = Claims {
         id: user.id.clone(),
         user_code: user.user_code.clone(),
-        email: user.email.clone(),
+        email: user.email.clone().unwrap_or_default(),
         role: user.role.clone(),
         exp: (Utc::now().timestamp() + 15 * 60) as usize,
     };
@@ -286,13 +292,14 @@ pub async fn register(State(state): State<AppState>, headers: HeaderMap, Json(pa
         Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     };
 
+    let email = payload.email.trim().to_lowercase();
     match create_user(
         &state.backend,
         &code,
-        &payload.email.trim().to_lowercase(),
+        Some(&email),
         payload.first_name.trim(),
         payload.last_name.trim(),
-        national_id,
+        Some(national_id),
         &hashed,
         roles::PENDING,
         false,
@@ -304,7 +311,7 @@ pub async fn register(State(state): State<AppState>, headers: HeaderMap, Json(pa
                 crate::email::send_admin_registration_notification(crate::email::RegistrationInfo {
                     first_name: &user.first_name,
                     last_name: &user.last_name,
-                    email: &user.email,
+                    email: user.email.as_deref().unwrap_or_default(),
                     user_code: &user.user_code,
                     approval_token: &token,
                 })
@@ -421,6 +428,39 @@ pub async fn pending_status(State(state): State<AppState>, axum::extract::Path(u
         Err(_) => PendingStatus::NotFound,
     };
     Json(status).into_response()
+}
+
+/// Doesn't reset anything itself — there is no self-service reset flow.
+/// It looks the account up (by user code or email) and emails the admin
+/// a request to act on; the admin then sets a new password via the
+/// management panel's "Düzenle" action (`admin::update_user_route`).
+/// Always responds with the same success message whether or not a
+/// matching account was found, so this can't be used to enumerate
+/// registered user codes/emails.
+pub async fn forgot_password(State(state): State<AppState>, headers: HeaderMap, Json(payload): Json<ForgotPasswordPayload>) -> Response {
+    let rid = request_id(&headers);
+    let identifier = payload.identifier.trim();
+    if identifier.is_empty() {
+        return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
+    }
+    if !state
+        .rate_limiter
+        .check(&format!("forgot-password:{}", identifier.to_lowercase()), 5, Duration::from_secs(15 * 60))
+    {
+        return ApiError::new("RATE_LIMITED", "errors.rateLimited", rid).into_response();
+    }
+
+    let user = if identifier.contains('@') {
+        load_user_by_email(&state.backend, identifier).await.ok().flatten()
+    } else {
+        load_user_by_code(&state.backend, identifier).await.ok().flatten()
+    };
+
+    if let Some(user) = user {
+        crate::email::send_password_reset_request(&user.first_name, &user.last_name, &user.user_code, user.email.as_deref()).await;
+    }
+
+    Json(serde_json::json!({ "messageKey": "auth.forgotPasswordReceived" })).into_response()
 }
 
 pub async fn logout() -> Response {

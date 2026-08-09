@@ -146,8 +146,8 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                     user_code VARCHAR(20) UNIQUE NOT NULL,
                     first_name VARCHAR(100) NOT NULL,
                     last_name VARCHAR(100) NOT NULL,
-                    national_id VARCHAR(11) UNIQUE NOT NULL,
-                    email VARCHAR(255) UNIQUE NOT NULL,
+                    national_id VARCHAR(11) UNIQUE,
+                    email VARCHAR(255) UNIQUE,
                     password_hash VARCHAR(255) NOT NULL,
                     role VARCHAR(20) NOT NULL DEFAULT 'pending',
                     is_approved BOOLEAN NOT NULL DEFAULT false,
@@ -174,6 +174,16 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             )
             .execute(pool)
             .await?;
+            // national_id and email are optional for admin-created accounts
+            // (direct add from the management panel, no self-registration
+            // TC no./email on file) — a table from before that path existed
+            // may still carry the old NOT NULL constraints.
+            sqlx::query("ALTER TABLE users ALTER COLUMN national_id DROP NOT NULL")
+                .execute(pool)
+                .await?;
+            sqlx::query("ALTER TABLE users ALTER COLUMN email DROP NOT NULL")
+                .execute(pool)
+                .await?;
         }
         DbBackend::Sqlite(pool) => {
             sqlx::query(
@@ -183,8 +193,8 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                     user_code TEXT UNIQUE NOT NULL,
                     first_name TEXT NOT NULL,
                     last_name TEXT NOT NULL,
-                    national_id TEXT UNIQUE NOT NULL,
-                    email TEXT UNIQUE NOT NULL,
+                    national_id TEXT UNIQUE,
+                    email TEXT UNIQUE,
                     password_hash TEXT NOT NULL,
                     role TEXT NOT NULL DEFAULT 'pending',
                     is_approved INTEGER NOT NULL DEFAULT 0,
@@ -208,8 +218,8 @@ pub struct UserRow {
     pub user_code: String,
     pub first_name: String,
     pub last_name: String,
-    pub national_id: String,
-    pub email: String,
+    pub national_id: Option<String>,
+    pub email: Option<String>,
     pub password_hash: String,
     pub role: String,
     pub is_approved: bool,
@@ -223,8 +233,8 @@ struct PgUserRow {
     user_code: String,
     first_name: String,
     last_name: String,
-    national_id: String,
-    email: String,
+    national_id: Option<String>,
+    email: Option<String>,
     password_hash: String,
     role: String,
     is_approved: bool,
@@ -256,8 +266,8 @@ struct SqliteUserRow {
     user_code: String,
     first_name: String,
     last_name: String,
-    national_id: String,
-    email: String,
+    national_id: Option<String>,
+    email: Option<String>,
     password_hash: String,
     role: String,
     is_approved: i64,
@@ -363,10 +373,10 @@ pub async fn list_users(backend: &DbBackend) -> Result<Vec<UserRow>, sqlx::Error
 pub async fn create_user(
     backend: &DbBackend,
     user_code: &str,
-    email: &str,
+    email: Option<&str>,
     first_name: &str,
     last_name: &str,
-    national_id: &str,
+    national_id: Option<&str>,
     password_hash: &str,
     role: &str,
     is_approved: bool,
@@ -461,6 +471,71 @@ pub async fn update_user_flags(
         }
     }
     load_user_by_id(backend, id).await
+}
+
+/// Admin-driven profile edit (nickname/national ID/email/password reset).
+/// Distinct from `update_user_flags`: that one governs moderation state
+/// (approval/ban/role), this one governs the account's own identifying
+/// details.
+#[allow(clippy::too_many_arguments)]
+pub async fn update_user_profile(
+    backend: &DbBackend,
+    id: &str,
+    first_name: &str,
+    email: Option<&str>,
+    national_id: Option<&str>,
+    password_hash: &str,
+) -> Result<Option<UserRow>, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(uuid) = Uuid::parse_str(id) else {
+                return Ok(None);
+            };
+            sqlx::query(
+                "UPDATE users SET first_name = $1, email = $2, national_id = $3, password_hash = $4, updated_at = NOW() WHERE id = $5",
+            )
+            .bind(first_name)
+            .bind(email)
+            .bind(national_id)
+            .bind(password_hash)
+            .bind(uuid)
+            .execute(pool)
+            .await?;
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query(
+                "UPDATE users SET first_name = ?1, email = ?2, national_id = ?3, password_hash = ?4, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?5",
+            )
+            .bind(first_name)
+            .bind(email)
+            .bind(national_id)
+            .bind(password_hash)
+            .bind(id)
+            .execute(pool)
+            .await?;
+        }
+    }
+    load_user_by_id(backend, id).await
+}
+
+pub async fn load_user_by_email(backend: &DbBackend, email: &str) -> Result<Option<UserRow>, sqlx::Error> {
+    let email = email.trim().to_lowercase();
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let row = sqlx::query_as::<_, PgUserRow>(&format!("SELECT {USER_COLUMNS} FROM users WHERE email = $1"))
+                .bind(&email)
+                .fetch_optional(pool)
+                .await?;
+            Ok(row.map(UserRow::from))
+        }
+        DbBackend::Sqlite(pool) => {
+            let row = sqlx::query_as::<_, SqliteUserRow>(&format!("SELECT {USER_COLUMNS} FROM users WHERE email = ?1"))
+                .bind(&email)
+                .fetch_optional(pool)
+                .await?;
+            Ok(row.map(UserRow::from))
+        }
+    }
 }
 
 pub async fn delete_user(backend: &DbBackend, id: &str) -> Result<bool, sqlx::Error> {

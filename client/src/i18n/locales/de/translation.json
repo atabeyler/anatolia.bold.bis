@@ -38,7 +38,12 @@
     "registrationPendingMessage": "Anfrage erhalten. Benutzercode: {{code}} — wartet auf Genehmigung durch den Administrator…",
     "accountApproved": "Ihr Konto wurde genehmigt. Sie können sich jetzt anmelden.",
     "logout": "Abmelden",
-    "welcomeBack": "Angemeldet als {{name}}"
+    "welcomeBack": "Angemeldet als {{name}}",
+    "forgotPassword": "Passwort vergessen?",
+    "forgotPasswordIdentifier": "Benutzercode oder E-Mail",
+    "forgotPasswordSubmit": "Anfrage senden",
+    "forgotPasswordSuccess": "Ihre Anfrage wurde an den Administrator gesendet. Sie werden kontaktiert, sobald Ihr Passwort zurückgesetzt wurde.",
+    "backToLogin": "Zurück zur Anmeldung"
   },
   "errors": {
     "validation": "Bitte überprüfen Sie die Felder und versuchen Sie es erneut.",
@@ -87,5 +92,45 @@
     "aboutContent": "Anatolia B.I.S. ist eine Plattform für biometrischen Kandidatenabgleich und Identitätsprüfung, entwickelt von Bold Askeri Teknoloji ve Savunma Sanayi A.Ş. für autorisierte Institutionen. Das System basiert auf durch Menschen geprüften Kandidatenübereinstimmungen, nicht auf automatisierten Identitätsentscheidungen.\n\nProjektcode: BIS 200120401018",
     "missionContent": "MISSION\nAutorisierten Institutionen eine zuverlässige, überprüfbare und datenschutzorientierte biometrische Verifizierungsinfrastruktur bereitstellen.\n\nVISION\nDer institutionelle Standard für Verifizierungssysteme werden, die Entscheidungen Menschen statt Algorithmen überlassen und jede Aktion protokollieren.",
     "contactContent": "Organisation: Bold Askeri Teknoloji ve Savunma Sanayi A.Ş.\nE-Mail: info@boldkimya.com.tr\nTelefon: +90 532 217 07 76\n\n© 2026 Alle Rechte vorbehalten."
+  },
+  "admin": {
+    "openLabel": "Verwaltungspanel",
+    "panelTitle": "VERWALTUNGSPANEL",
+    "back": "Zurück",
+    "tabUsers": "BENUTZER",
+    "addUser": {
+      "heading": "NEUEN BENUTZER HINZUFÜGEN",
+      "userCode": "Benutzercode",
+      "password": "Passwort (min. 8 Zeichen)",
+      "nickname": "Spitzname (optional)",
+      "nationalId": "Ausweisnummer",
+      "email": "E-Mail (für Benachrichtigungen)",
+      "isAdmin": "Admin-Rechte",
+      "hint": "Wird eine E-Mail angegeben, erhält dieser Benutzer Genehmigungs-/Ablehnungs- und Kontobenachrichtigungen auch per E-Mail.",
+      "submit": "HINZUFÜGEN"
+    },
+    "badge": {
+      "admin": "ADMIN",
+      "pending": "AUSSTEHEND",
+      "banned": "GESPERRT"
+    },
+    "noEmail": "Keine E-Mail — Benachrichtigungen können nicht zugestellt werden",
+    "actions": {
+      "approve": "Genehmigen",
+      "reject": "Ablehnen",
+      "ban": "Sperren",
+      "unban": "Sperre aufheben",
+      "edit": "Bearbeiten",
+      "delete": "Löschen",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "newPassword": "Neues Passwort (optional)"
+    },
+    "confirmDelete": "Möchten Sie diesen Benutzer wirklich löschen?",
+    "loading": "Benutzer werden geladen…",
+    "empty": "Noch keine Benutzer.",
+    "loadError": "Benutzer konnten nicht geladen werden.",
+    "createSuccess": "Benutzer erstellt.",
+    "createError": "Benutzer konnte nicht erstellt werden."
   }
 }

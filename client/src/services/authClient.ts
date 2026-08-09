@@ -3,7 +3,7 @@ import { apiClient } from './apiClient';
 export interface PublicUser {
   id: string;
   userCode: string;
-  email: string;
+  email: string | null;
   role: string;
   firstName: string;
   lastName: string;
@@ -39,6 +39,10 @@ export async function refresh(): Promise<LoginResponse> {
 
 export async function logout(): Promise<void> {
   await apiClient.post('/v1/auth/logout');
+}
+
+export async function forgotPassword(identifier: string): Promise<void> {
+  await apiClient.post('/v1/auth/forgot-password', { identifier });
 }
 
 export async function me(): Promise<PublicUser> {

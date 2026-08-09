@@ -38,7 +38,12 @@
     "registrationPendingMessage": "Talebiniz alındı. Kullanıcı kodu: {{code}} — yönetici onayı bekleniyor…",
     "accountApproved": "Hesabınız onaylandı. Artık giriş yapabilirsiniz.",
     "logout": "Çıkış yap",
-    "welcomeBack": "{{name}} olarak giriş yapıldı"
+    "welcomeBack": "{{name}} olarak giriş yapıldı",
+    "forgotPassword": "Şifremi unuttum",
+    "forgotPasswordIdentifier": "Kullanıcı kodu veya e-posta",
+    "forgotPasswordSubmit": "Talebi gönder",
+    "forgotPasswordSuccess": "Talebiniz yöneticiye iletildi. Şifreniz sıfırlandığında sizinle iletişime geçilecektir.",
+    "backToLogin": "Girişe dön"
   },
   "errors": {
     "validation": "Lütfen alanları kontrol edip tekrar deneyin.",
@@ -87,5 +92,45 @@
     "aboutContent": "Anatolia B.I.S., Bold Askeri Teknoloji ve Savunma Sanayi A.Ş. tarafından yetkilendirilmiş kurumlar için geliştirilen bir biyometrik aday eşleştirme ve kimlik doğrulama platformudur. Sistem, otomatik kimlik kararı değil, insan onaylı aday değerlendirmesi esasına dayanır.\n\nProje kodu: BIS 200120401018",
     "missionContent": "MİSYON\nYetkilendirilmiş kurumlara güvenilir, denetlenebilir ve gizlilik odaklı bir biyometrik doğrulama altyapısı sunmak.\n\nVİZYON\nKararı algoritmaya değil insana bırakan ve her işlemi kayıt altına alan doğrulama sistemleri için kurumsal standart olmak.",
     "contactContent": "Kuruluş: Bold Askeri Teknoloji ve Savunma Sanayi A.Ş.\nE-posta: info@boldkimya.com.tr\nTelefon: +90 532 217 07 76\n\n© 2026 Tüm hakları saklıdır."
+  },
+  "admin": {
+    "openLabel": "Yönetim Paneli",
+    "panelTitle": "YÖNETİM PANELİ",
+    "back": "Geri",
+    "tabUsers": "KULLANICILAR",
+    "addUser": {
+      "heading": "YENİ KULLANICI EKLE",
+      "userCode": "Kullanıcı kodu",
+      "password": "Şifre (min 8 karakter)",
+      "nickname": "Rumuz (opsiyonel)",
+      "nationalId": "TC Kimlik No",
+      "email": "E-posta (bildirimler için)",
+      "isAdmin": "Admin yetkisi",
+      "hint": "E-posta girilirse, bu kullanıcıya onay/red ve hesap bildirimleri e-posta ile de iletilir.",
+      "submit": "EKLE"
+    },
+    "badge": {
+      "admin": "ADMIN",
+      "pending": "BEKLEMEDE",
+      "banned": "BANLI"
+    },
+    "noEmail": "E-posta yok — bildirimler iletilemez",
+    "actions": {
+      "approve": "Onayla",
+      "reject": "Reddet",
+      "ban": "Banla",
+      "unban": "Ban kaldır",
+      "edit": "Düzelt",
+      "delete": "Sil",
+      "save": "Kaydet",
+      "cancel": "Vazgeç",
+      "newPassword": "Yeni şifre (opsiyonel)"
+    },
+    "confirmDelete": "Bu kullanıcıyı silmek istediğinize emin misiniz?",
+    "loading": "Kullanıcılar yükleniyor…",
+    "empty": "Henüz kullanıcı yok.",
+    "loadError": "Kullanıcılar yüklenemedi.",
+    "createSuccess": "Kullanıcı oluşturuldu.",
+    "createError": "Kullanıcı oluşturulamadı."
   }
 }

@@ -9,7 +9,7 @@ import { playChimeIfEnabled } from '../lib/sound';
 import { apiErrorMessageKey } from '../services/apiClient';
 import * as authClient from '../services/authClient';
 
-type Mode = 'login' | 'register';
+type Mode = 'login' | 'register' | 'forgot';
 
 const USER_CODE_PATTERN = /^[A-Z0-9]{4,20}$/;
 const NATIONAL_ID_PATTERN = /^[0-9]{11}$/;
@@ -31,6 +31,8 @@ export function LoginPage() {
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [pendingCode, setPendingCode] = useState<string | null>(null);
   const [approvedMessage, setApprovedMessage] = useState(false);
+  const [forgotIdentifier, setForgotIdentifier] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -64,13 +66,16 @@ export function LoginPage() {
       if (mode === 'login') {
         await login(userCode.trim().toUpperCase(), password, rememberMe);
         playChimeIfEnabled();
-      } else {
+      } else if (mode === 'register') {
         const code = userCode.trim().toUpperCase();
         await register({ firstName, lastName, nationalId, email, password, userCode: code });
         setPendingCode(code);
         setMode('login');
         setPassword('');
         playChimeIfEnabled();
+      } else {
+        await authClient.forgotPassword(forgotIdentifier.trim());
+        setForgotSuccess(true);
       }
     } catch (err) {
       setErrorKey(apiErrorMessageKey(err));
@@ -113,28 +118,30 @@ export function LoginPage() {
       </div>
 
       <form className="auth-panel" onSubmit={handleSubmit}>
-        <div className="auth-mode-toggle">
-          <button
-            type="button"
-            className={mode === 'login' ? 'active' : ''}
-            onClick={() => {
-              setMode('login');
-              setErrorKey(null);
-            }}
-          >
-            {t('auth.signIn')}
-          </button>
-          <button
-            type="button"
-            className={mode === 'register' ? 'active' : ''}
-            onClick={() => {
-              setMode('register');
-              setErrorKey(null);
-            }}
-          >
-            {t('auth.signUp')}
-          </button>
-        </div>
+        {mode !== 'forgot' && (
+          <div className="auth-mode-toggle">
+            <button
+              type="button"
+              className={mode === 'login' ? 'active' : ''}
+              onClick={() => {
+                setMode('login');
+                setErrorKey(null);
+              }}
+            >
+              {t('auth.signIn')}
+            </button>
+            <button
+              type="button"
+              className={mode === 'register' ? 'active' : ''}
+              onClick={() => {
+                setMode('register');
+                setErrorKey(null);
+              }}
+            >
+              {t('auth.signUp')}
+            </button>
+          </div>
+        )}
 
         {mode === 'register' && (
           <div className="auth-field-row">
@@ -149,17 +156,19 @@ export function LoginPage() {
           </div>
         )}
 
-        <label className="auth-field">
-          <span>{t('auth.userCode')}</span>
-          <input
-            value={userCode}
-            onChange={(e) => setUserCode(e.target.value.toUpperCase())}
-            maxLength={20}
-            required
-            pattern={mode === 'register' ? USER_CODE_PATTERN.source : undefined}
-          />
-          {mode === 'register' && <small>{t('auth.userCodeHint')}</small>}
-        </label>
+        {mode !== 'forgot' && (
+          <label className="auth-field">
+            <span>{t('auth.userCode')}</span>
+            <input
+              value={userCode}
+              onChange={(e) => setUserCode(e.target.value.toUpperCase())}
+              maxLength={20}
+              required
+              pattern={mode === 'register' ? USER_CODE_PATTERN.source : undefined}
+            />
+            {mode === 'register' && <small>{t('auth.userCodeHint')}</small>}
+          </label>
+        )}
 
         {mode === 'register' && (
           <label className="auth-field">
@@ -181,17 +190,53 @@ export function LoginPage() {
           </label>
         )}
 
-        <label className="auth-field">
-          <span>{t('auth.password')}</span>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          {mode === 'register' && <small>{t('auth.passwordHint')}</small>}
-        </label>
+        {mode === 'forgot' && (
+          <label className="auth-field">
+            <span>{t('auth.forgotPasswordIdentifier')}</span>
+            <input value={forgotIdentifier} onChange={(e) => setForgotIdentifier(e.target.value)} required />
+          </label>
+        )}
+
+        {mode !== 'forgot' && (
+          <label className="auth-field">
+            <span>{t('auth.password')}</span>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            {mode === 'register' && <small>{t('auth.passwordHint')}</small>}
+          </label>
+        )}
 
         {mode === 'login' && (
-          <label className="auth-remember">
-            <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
-            <span>{t('auth.rememberMe')}</span>
-          </label>
+          <>
+            <label className="auth-remember">
+              <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+              <span>{t('auth.rememberMe')}</span>
+            </label>
+            <button
+              type="button"
+              className="auth-link-button"
+              onClick={() => {
+                setMode('forgot');
+                setErrorKey(null);
+                setForgotSuccess(false);
+              }}
+            >
+              {t('auth.forgotPassword')}
+            </button>
+          </>
+        )}
+
+        {mode === 'forgot' && (
+          <button
+            type="button"
+            className="auth-link-button"
+            onClick={() => {
+              setMode('login');
+              setErrorKey(null);
+              setForgotSuccess(false);
+            }}
+          >
+            {t('auth.backToLogin')}
+          </button>
         )}
 
         {errorKey && <p className="auth-message auth-message--error">{t(errorKey)}</p>}
@@ -201,10 +246,18 @@ export function LoginPage() {
             {t('auth.registrationPendingMessage', { code: pendingCode })}
           </p>
         )}
+        {forgotSuccess && <p className="auth-message auth-message--success">{t('auth.forgotPasswordSuccess')}</p>}
 
-        <button type="submit" className="auth-submit" disabled={submitting}>
-          {submitting ? t('auth.submitting') : mode === 'login' ? t('auth.submitLogin') : t('auth.submitRegister')}
-        </button>
+        {mode !== 'forgot' && (
+          <button type="submit" className="auth-submit" disabled={submitting}>
+            {submitting ? t('auth.submitting') : mode === 'login' ? t('auth.submitLogin') : t('auth.submitRegister')}
+          </button>
+        )}
+        {mode === 'forgot' && !forgotSuccess && (
+          <button type="submit" className="auth-submit" disabled={submitting}>
+            {submitting ? t('auth.submitting') : t('auth.forgotPasswordSubmit')}
+          </button>
+        )}
       </form>
     </div>
   );

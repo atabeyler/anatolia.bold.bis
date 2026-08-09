@@ -218,6 +218,7 @@ __marimo__/
 # Rust
 /server/target/
 **/*.rs.bk
+/server/data/
 
 # Node / frontend
 /client/node_modules/
