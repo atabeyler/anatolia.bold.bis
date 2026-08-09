@@ -34,7 +34,7 @@ export function DashboardPage() {
     setPastSearchesError(false);
     searchClient
       .listSearches()
-      .then(setPastSearches)
+      .then((page) => setPastSearches(page.items))
       .catch(() => setPastSearchesError(true));
   };
 

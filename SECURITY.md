@@ -5,7 +5,7 @@
 Report suspected vulnerabilities directly to the repository owner
 (info@boldkimya.com.tr) rather than opening a public issue.
 
-## Current state (Phase 3.5 — authentication hardening + audit trail)
+## Current state (Phase 3.7 — authentication hardening, audit trail, search/data correctness)
 
 Implemented controls:
 - Security response headers on every response: `X-Content-Type-Options`,
@@ -80,12 +80,25 @@ Implemented controls:
   Nothing ever `UPDATE`s or `DELETE`s an audit row. `GET /api/v1/audit`
   (server-side paginated/filtered) is restricted to `AUDITOR`,
   `SECURITY_ADMIN`, and `SYSTEM_ADMIN`. See `docs/SECURITY_ARCHITECTURE.md`.
+- **Transactional search + immutable review history**: a search and all
+  of its candidate results are written in one database transaction — a
+  failure rolls back rather than leaving a partial result set, and is
+  recorded as a `failed` search for traceability. Every confirm/reject
+  decision is appended to `verification_events` rather than overwriting
+  the previous one.
+- **Real probe-image validation**: magic-byte sniff plus an actual decode
+  (JPEG/PNG/WEBP only), a 10 MB size cap, dimension limits, and a
+  decompression-bomb guard — replacing a bare non-empty-bytes check. See
+  `docs/SECURITY_ARCHITECTURE.md`.
+- **Coordinate validation**: latitude/longitude are range-checked and
+  required to be a matched pair; malformed geolocation data is rejected
+  rather than silently stored.
 
 ## Planned (see `docs/ROADMAP.md` and `docs/SECURITY_ARCHITECTURE.md`)
 
-MFA, organization-scoped authorization, enterprise SSO, and real image/
-upload validation are designed but not yet implemented. Do not assume any
-of them are active until this document is updated to say otherwise.
+MFA, organization-scoped authorization, and enterprise SSO are designed
+but not yet implemented. Do not assume any of them are active until this
+document is updated to say otherwise.
 
 ## Rules enforced in this repository
 

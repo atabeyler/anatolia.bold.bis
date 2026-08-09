@@ -50,6 +50,11 @@
   },
   "errors": {
     "validation": "Lütfen alanları kontrol edip tekrar deneyin.",
+    "invalidCoordinates": "Konum koordinatları geçersiz veya eksik.",
+    "imageTooLarge": "Görsel dosyası çok büyük (azami 10 MB).",
+    "unsupportedImageType": "Desteklenmeyen görsel türü. JPEG, PNG veya WEBP kullanın.",
+    "imageDecodeFailed": "Görsel dosyası okunamadı. Dosya bozuk olabilir.",
+    "imageDimensionsInvalid": "Görsel boyutları bir prob fotoğrafı için geçerli değil.",
     "invalidCredentials": "Kullanıcı kodu veya şifre hatalı.",
     "accountBanned": "Hesabınız yasaklanmış.",
     "accountNotApproved": "Hesabınız henüz onaylanmadı. Lütfen yönetici onayını bekleyin.",

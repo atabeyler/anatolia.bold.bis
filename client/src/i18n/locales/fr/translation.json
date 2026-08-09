@@ -50,6 +50,11 @@
   },
   "errors": {
     "validation": "Veuillez vérifier les champs et réessayer.",
+    "invalidCoordinates": "Les coordonnées de localisation sont invalides ou incomplètes.",
+    "imageTooLarge": "Le fichier image est trop volumineux (maximum 10 Mo).",
+    "unsupportedImageType": "Type d'image non pris en charge. Utilisez JPEG, PNG ou WEBP.",
+    "imageDecodeFailed": "Le fichier image n'a pas pu être lu. Il est peut-être corrompu.",
+    "imageDimensionsInvalid": "Les dimensions de l'image ne sont pas valides pour une photo de sonde.",
     "invalidCredentials": "Code utilisateur ou mot de passe incorrect.",
     "accountBanned": "Votre compte a été banni.",
     "accountNotApproved": "Votre compte n'a pas encore été approuvé. Veuillez attendre l'approbation de l'administrateur.",

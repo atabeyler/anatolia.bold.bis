@@ -44,6 +44,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/:search_id/candidates",
             get(search::get_search_candidates_route),
+        )
+        .route(
+            "/:search_id/candidates/:candidate_id/history",
+            get(search::get_candidate_history_route),
         );
 
     let candidate_routes = Router::new()

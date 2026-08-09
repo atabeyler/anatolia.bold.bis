@@ -50,6 +50,11 @@
   },
   "errors": {
     "validation": "يرجى التحقق من الحقول والمحاولة مرة أخرى.",
+    "invalidCoordinates": "إحداثيات الموقع غير صالحة أو غير مكتملة.",
+    "imageTooLarge": "ملف الصورة كبير جدًا (الحد الأقصى 10 ميغابايت).",
+    "unsupportedImageType": "نوع صورة غير مدعوم. استخدم JPEG أو PNG أو WEBP.",
+    "imageDecodeFailed": "تعذّرت قراءة ملف الصورة. قد يكون تالفًا.",
+    "imageDimensionsInvalid": "أبعاد الصورة غير صالحة لصورة الفحص.",
     "invalidCredentials": "رمز المستخدم أو كلمة المرور غير صحيحة.",
     "accountBanned": "تم حظر حسابك.",
     "accountNotApproved": "لم تتم الموافقة على حسابك بعد. يرجى انتظار موافقة الإدارة.",

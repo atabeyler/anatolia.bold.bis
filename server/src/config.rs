@@ -12,12 +12,21 @@ const DEV_JWT_SECRET: &str = "anatolia-bis-local-access-secret-dev-only-not-for-
 const DEV_JWT_REFRESH_SECRET: &str = "anatolia-bis-local-refresh-secret-dev-only-not-for-prod";
 const DEV_APPROVAL_TOKEN_SECRET: &str = "anatolia-bis-local-approval-secret-dev-only-not-for-prod";
 
+/// Fallback when `SEARCH_DEFAULT_TOP_K` is unset.
+const DEFAULT_SEARCH_DEFAULT_TOP_K: i64 = 10;
+/// Fallback when `SEARCH_MAX_TOP_K` is unset. A client-requested `topK`
+/// above this is silently clamped down, never rejected — see
+/// `search::create_search_route`.
+const DEFAULT_SEARCH_MAX_TOP_K: i64 = 50;
+
 pub struct Config {
     pub port: u16,
     pub allowed_origins: Vec<String>,
     pub jwt_secret: String,
     pub jwt_refresh_secret: String,
     pub approval_token_secret: String,
+    pub search_default_top_k: i64,
+    pub search_max_top_k: i64,
 }
 
 /// True when this process should apply production security posture:
@@ -69,12 +78,26 @@ impl Config {
             production,
         );
 
+        let search_max_top_k = env::var("SEARCH_MAX_TOP_K")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(DEFAULT_SEARCH_MAX_TOP_K);
+        let search_default_top_k = env::var("SEARCH_DEFAULT_TOP_K")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(DEFAULT_SEARCH_DEFAULT_TOP_K)
+            .min(search_max_top_k);
+
         Self {
             port,
             allowed_origins,
             jwt_secret,
             jwt_refresh_secret,
             approval_token_secret,
+            search_default_top_k,
+            search_max_top_k,
         }
     }
 }

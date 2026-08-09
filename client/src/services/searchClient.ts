@@ -8,7 +8,19 @@ export interface SearchSummary {
   status: string;
   latitude: number | null;
   longitude: number | null;
+  topK: number | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  failureCode: string | null;
+  failureMessageKey: string | null;
   createdAt: string;
+}
+
+export interface SearchSummaryPage {
+  items: SearchSummary[];
+  page: number;
+  pageSize: number;
+  total: number;
 }
 
 export interface SearchCandidate {
@@ -47,8 +59,8 @@ export async function createSearch(
   return data;
 }
 
-export async function listSearches(): Promise<SearchSummary[]> {
-  const { data } = await apiClient.get<SearchSummary[]>('/v1/search');
+export async function listSearches(page = 1, pageSize = 50): Promise<SearchSummaryPage> {
+  const { data } = await apiClient.get<SearchSummaryPage>('/v1/search', { params: { page, pageSize } });
   return data;
 }
 

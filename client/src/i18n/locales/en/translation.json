@@ -50,6 +50,11 @@
   },
   "errors": {
     "validation": "Please check the fields and try again.",
+    "invalidCoordinates": "Location coordinates are invalid or incomplete.",
+    "imageTooLarge": "The image file is too large (maximum 10 MB).",
+    "unsupportedImageType": "Unsupported image type. Use JPEG, PNG, or WEBP.",
+    "imageDecodeFailed": "The image file could not be read. It may be corrupted.",
+    "imageDimensionsInvalid": "The image dimensions are not valid for a probe photo.",
     "invalidCredentials": "Invalid user code or password.",
     "accountBanned": "Your account has been banned.",
     "accountNotApproved": "Your account has not been approved yet. Please wait for admin approval.",
