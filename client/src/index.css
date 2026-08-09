@@ -12,6 +12,11 @@
   --color-panel-surface: rgba(6, 9, 20, 0.92);
   --color-panel-header: rgba(0, 20, 10, 0.5);
   --color-input-surface: rgba(0, 0, 0, 0.4);
+  /* Fully opaque, unlike --color-panel-surface: the top bar and footer
+     are fixed chrome over scrolling content, not a floating panel — any
+     transparency here lets scrolled-past text show through and read as
+     a rendering glitch rather than an intentional glass effect. */
+  --color-bar-surface: #0a0e1f;
 
   --font-heading: 'Orbitron', sans-serif;
   --font-mono: 'Share Tech Mono', 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
@@ -39,6 +44,7 @@
   --color-panel-surface: rgba(255, 255, 255, 0.96);
   --color-panel-header: rgba(226, 232, 240, 0.9);
   --color-input-surface: rgba(0, 0, 0, 0.04);
+  --color-bar-surface: #ffffff;
 
   color-scheme: light;
 }
@@ -147,14 +153,20 @@ body::before {
   max-width: 1100px;
   margin: 0 auto;
   /* Bottom padding clears the fixed footer on every screen (see
-     .app-footer); top padding clears whichever fixed element sits above
-     the content — the corner Menu button pre-auth, or the taller
-     .app-topbar once signed in (see .app-main--with-topbar). */
-  padding: 3.5rem 1.5rem 4.5rem;
+     .app-footer); top padding clears the corner Menu button pre-auth.
+     --footer-height is measured live by App.tsx (ResizeObserver) so this
+     stays correct even when the footer wraps onto extra lines on a
+     narrow screen or in a longer-text locale; the value below is only
+     the fallback used before the first measurement lands. */
+  padding: 3.5rem 1.5rem calc(var(--footer-height, 72px) + 1rem);
 }
 
 .app-main--with-topbar {
-  padding-top: 5.5rem;
+  /* --topbar-height is measured live the same way, for the same reason:
+     .app-topbar wraps onto two or three lines on phones and in German/
+     French/Russian/Arabic, and a fixed guess would let content start
+     underneath it. */
+  padding-top: calc(var(--topbar-height, 88px) + 1rem);
 }
 
 /* ── Menu / Settings overlays: terminal panel look ────────────── */
@@ -754,7 +766,7 @@ body::before {
   border-top: 1px solid var(--color-panel-border);
   box-shadow: 0 0 16px rgba(204, 68, 68, 0.25);
   padding: 0.7rem 1.5rem;
-  background: var(--color-panel-surface);
+  background: var(--color-bar-surface);
   color: var(--color-text-muted);
   font-size: 0.72rem;
   letter-spacing: 0.03em;
@@ -782,7 +794,7 @@ body::before {
   flex-wrap: wrap;
   gap: 1rem;
   padding: 0.6rem 1.5rem;
-  background: var(--color-panel-surface);
+  background: var(--color-bar-surface);
   border-bottom: 1px solid var(--color-panel-border);
   box-shadow: 0 0 16px rgba(204, 68, 68, 0.15);
 }

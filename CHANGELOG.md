@@ -4,6 +4,20 @@ Notable changes to Anatolia B.I.S., newest first.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-08-09
+
+- Added a sign-out button to the Management panel's top bar — it was
+  reachable everywhere else but missing there.
+- Renamed the Management-panel "Live Home Page" action to plain "Home" in
+  all six locales.
+- Fixed the top bar/footer clearance on narrow screens and in
+  longer-text locales: it was based on a fixed guess and could let page
+  content start underneath the bars once they wrapped onto extra lines.
+  Height is now measured live (ResizeObserver, plus a webfont-load and
+  window-resize correction pass) and kept in CSS custom properties.
+- Made the top bar and footer backgrounds fully opaque instead of
+  translucent, so scrolled content no longer shows faintly through them.
+
 ## [0.2.1] - 2026-08-09
 
 - Pinned the logo/brand/subtitle/session-actions header and the footer to
