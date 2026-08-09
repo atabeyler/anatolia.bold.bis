@@ -5,6 +5,10 @@
 Report suspected vulnerabilities directly to the repository owner
 (info@boldkimya.com.tr) rather than opening a public issue.
 
+See `docs/THREAT_MODEL.md` for what this system defends against (and
+what it deliberately does not yet) and `docs/DATA_FLOW.md` for how data
+moves through it.
+
 ## Current state (Phase 3.7 — authentication hardening, audit trail, search/data correctness)
 
 Implemented controls:
