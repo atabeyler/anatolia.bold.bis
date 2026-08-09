@@ -87,7 +87,7 @@ function App() {
         <header className="app-topbar" ref={topbarRef}>
           <div className="app-topbar__brand">
             <Logo compact />
-            <div className="app-topbar__brand-text">
+            <div>
               <div className="app-topbar__title">{brandMark(i18n.resolvedLanguage)}</div>
               <div className="app-topbar__subtitle">
                 {view === 'admin' ? t('admin.panelTitle') : t('search.subtitle')}

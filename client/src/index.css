@@ -823,18 +823,6 @@ body::before {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  min-width: 0;
-}
-
-.app-topbar__brand-text {
-  min-width: 0;
-}
-
-.app-topbar__title,
-.app-topbar__subtitle {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .app-topbar__title {
