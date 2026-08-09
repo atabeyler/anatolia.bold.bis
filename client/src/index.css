@@ -23,15 +23,18 @@
 
   /* Type scale — every font-size in this file resolves to one of these
      steps instead of a one-off rem value, so sizes stay comparable across
-     components. */
-  --text-2xs: 0.65rem;
-  --text-xs: 0.72rem;
-  --text-sm: 0.78rem;
-  --text-base: 0.85rem;
-  --text-md: 0.9rem;
-  --text-lg: 1rem;
-  --text-xl: 1.1rem;
-  --text-2xl: 1.2rem;
+     components. Each step is fluid (clamp between a floor and the values
+     above as a ceiling) so text and button labels shrink automatically on
+     narrow screens instead of overflowing, and grow back on wide ones —
+     no per-component breakpoint tuning needed. */
+  --text-2xs: clamp(0.58rem, 0.54rem + 0.2vw, 0.65rem);
+  --text-xs: clamp(0.64rem, 0.59rem + 0.25vw, 0.72rem);
+  --text-sm: clamp(0.7rem, 0.64rem + 0.3vw, 0.78rem);
+  --text-base: clamp(0.76rem, 0.69rem + 0.35vw, 0.85rem);
+  --text-md: clamp(0.8rem, 0.73rem + 0.35vw, 0.9rem);
+  --text-lg: clamp(0.88rem, 0.8rem + 0.4vw, 1rem);
+  --text-xl: clamp(0.95rem, 0.86rem + 0.45vw, 1.1rem);
+  --text-2xl: clamp(1.02rem, 0.92rem + 0.5vw, 1.2rem);
   --text-display: clamp(1.5rem, 6vw, 2.4rem);
 
   /* Letter-spacing scale — same idea, for tracking values. */
@@ -41,12 +44,6 @@
   --tracking-wide: 0.08em;
   --tracking-wider: 0.12em;
   --tracking-widest: 0.18em;
-
-  /* HUD-style cut corner (top-right / bottom-left) for buttons, inputs,
-     and cards where padding is tighter — matches sim's clipped controls.
-     Panels use plain rectangles with bracket corner accents instead (see
-     "HUD corner accents" below), matching sim's own panel treatment. */
-  --cut-sm: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
 
   color-scheme: dark;
 }
@@ -86,6 +83,7 @@ body {
   color: var(--color-text);
   font-family: var(--font-mono);
   position: relative;
+  overflow-x: hidden;
 }
 
 body::before {
@@ -124,7 +122,6 @@ body::before {
   background: transparent;
   color: var(--color-text-muted);
   border: 1px solid var(--color-border);
-  clip-path: var(--cut-sm);
   padding: 0.4rem 0.75rem;
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -152,7 +149,6 @@ body::before {
   background: transparent;
   color: var(--color-text);
   border: 1px solid var(--color-border);
-  clip-path: var(--cut-sm);
   padding: 0.3rem 0.6rem;
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -354,7 +350,6 @@ body::before {
   background: transparent;
   color: var(--color-text-muted);
   border: 1px solid rgba(79, 110, 247, 0.3);
-  clip-path: var(--cut-sm);
   padding: 0.4rem 0.75rem;
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -640,7 +635,6 @@ body::before {
   background: transparent;
   color: var(--color-text-muted);
   border: 1px solid rgba(200, 34, 34, 0.35);
-  clip-path: var(--cut-sm);
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: var(--text-base);
@@ -749,7 +743,6 @@ body::before {
   background: linear-gradient(135deg, rgba(79, 110, 247, 0.4), rgba(79, 110, 247, 0.2));
   color: #fff;
   border: 1px solid rgba(79, 110, 247, 0.6);
-  clip-path: var(--cut-sm);
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: var(--text-md);
@@ -918,68 +911,6 @@ body::before {
   50% { opacity: 0.08; }
 }
 
-.auth-submit,
-.admin-submit,
-.admin-icon-button,
-.admin-user-card,
-.auth-mode-toggle button,
-.app-header__nav-button,
-.app-header__session button,
-.overlay-secondary-button {
-  position: relative;
-}
-
-.auth-submit::before,
-.auth-submit::after,
-.admin-submit::before,
-.admin-submit::after,
-.admin-icon-button::before,
-.admin-icon-button::after,
-.admin-user-card::before,
-.admin-user-card::after,
-.auth-mode-toggle button::before,
-.auth-mode-toggle button::after,
-.app-header__nav-button::before,
-.app-header__nav-button::after,
-.app-header__session button::before,
-.app-header__session button::after,
-.overlay-secondary-button::before,
-.overlay-secondary-button::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.auth-submit::before,
-.admin-submit::before,
-.admin-icon-button::before,
-.admin-user-card::before,
-.auth-mode-toggle button::before,
-.app-header__nav-button::before,
-.app-header__session button::before,
-.overlay-secondary-button::before {
-  background:
-    linear-gradient(currentColor, currentColor) top left / 8px 2px no-repeat,
-    linear-gradient(currentColor, currentColor) top left / 2px 8px no-repeat,
-    linear-gradient(currentColor, currentColor) bottom right / 8px 2px no-repeat,
-    linear-gradient(currentColor, currentColor) bottom right / 2px 8px no-repeat;
-}
-
-.auth-submit::after,
-.admin-submit::after,
-.admin-icon-button::after,
-.admin-user-card::after,
-.auth-mode-toggle button::after,
-.app-header__nav-button::after,
-.app-header__session button::after,
-.overlay-secondary-button::after {
-  background:
-    linear-gradient(currentColor, currentColor) top right / 8px 2px no-repeat,
-    linear-gradient(currentColor, currentColor) top right / 2px 8px no-repeat,
-    linear-gradient(currentColor, currentColor) bottom left / 8px 2px no-repeat,
-    linear-gradient(currentColor, currentColor) bottom left / 2px 8px no-repeat;
-}
 
 /* ── Admin management panel ───────────────────────────────────── */
 
@@ -1108,7 +1039,6 @@ body::before {
   padding: 0.75rem;
   background: rgba(79, 110, 247, 0.15);
   border: 1px solid rgba(79, 110, 247, 0.6);
-  clip-path: var(--cut-sm);
   box-shadow: 0 0 10px rgba(79, 110, 247, 0.2);
   color: var(--color-accent-strong);
   font-family: var(--font-heading);
@@ -1135,7 +1065,6 @@ body::before {
 .admin-user-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  clip-path: var(--cut-sm);
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
   padding: 0.85rem 1rem;
 }
@@ -1224,7 +1153,6 @@ body::before {
   letter-spacing: var(--tracking-normal);
   background: transparent;
   border: 1px solid var(--color-border);
-  clip-path: var(--cut-sm);
   color: var(--color-text-muted);
   cursor: pointer;
 }
