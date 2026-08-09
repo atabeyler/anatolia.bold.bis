@@ -8,7 +8,7 @@
   --color-accent-strong: #6f8bff;
   --color-success: #00e887;
   --color-danger: #e05a5a;
-  --color-panel-border: #cc4444;
+  --color-panel-border: #c82222;
   --color-panel-surface: rgba(6, 9, 20, 0.92);
   --color-panel-header: rgba(0, 20, 10, 0.5);
   --color-input-surface: rgba(0, 0, 0, 0.4);
@@ -42,10 +42,10 @@
   --tracking-wider: 0.12em;
   --tracking-widest: 0.18em;
 
-  /* HUD-style cut corners (top-right / bottom-left) — the sim project's
-     signature panel/button silhouette. Two sizes: -lg for panels, -sm for
-     buttons/cards where padding is tighter. */
-  --cut-lg: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  /* HUD-style cut corner (top-right / bottom-left) for buttons, inputs,
+     and cards where padding is tighter — matches sim's clipped controls.
+     Panels use plain rectangles with bracket corner accents instead (see
+     "HUD corner accents" below), matching sim's own panel treatment. */
   --cut-sm: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
 
   color-scheme: dark;
@@ -209,8 +209,7 @@ body::before {
   max-height: 80vh;
   background: var(--color-panel-surface);
   border: 1px solid var(--color-panel-border);
-  clip-path: var(--cut-lg);
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(204, 68, 68, 0.18);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.8), 0 0 40px rgba(200, 34, 34, 0.2), 0 0 80px rgba(200, 34, 34, 0.03);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -404,7 +403,6 @@ body::before {
 .status-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  clip-path: var(--cut-lg);
   box-shadow: 0 0 16px rgba(79, 110, 247, 0.12);
   padding: 1rem 1.25rem;
   max-width: 320px;
@@ -621,8 +619,7 @@ body::before {
   max-width: 420px;
   background: var(--color-panel-surface);
   border: 1px solid var(--color-panel-border);
-  clip-path: var(--cut-lg);
-  box-shadow: 0 0 22px rgba(204, 68, 68, 0.16), inset 0 0 32px rgba(204, 68, 68, 0.04);
+  box-shadow: 0 0 40px rgba(200, 34, 34, 0.2), 0 0 80px rgba(200, 34, 34, 0.03), inset 0 0 30px rgba(200, 34, 34, 0.025), inset 0 1px 0 rgba(200, 34, 34, 0.4);
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
@@ -642,7 +639,7 @@ body::before {
   padding: 0.55rem;
   background: transparent;
   color: var(--color-text-muted);
-  border: 1px solid rgba(204, 68, 68, 0.35);
+  border: 1px solid rgba(200, 34, 34, 0.35);
   clip-path: var(--cut-sm);
   cursor: pointer;
   font-family: var(--font-mono);
@@ -654,8 +651,8 @@ body::before {
 .auth-mode-toggle button.active {
   color: var(--color-panel-border);
   border-color: var(--color-panel-border);
-  background: rgba(204, 68, 68, 0.12);
-  box-shadow: 0 0 10px rgba(204, 68, 68, 0.2);
+  background: rgba(200, 34, 34, 0.12);
+  box-shadow: 0 0 10px rgba(200, 34, 34, 0.2);
 }
 
 .auth-field-row {
@@ -680,7 +677,7 @@ body::before {
   background: var(--color-input-surface);
   color: var(--color-text);
   border: 1px solid transparent;
-  border-bottom: 1px solid rgba(204, 68, 68, 0.5);
+  border-bottom: 1px solid rgba(200, 34, 34, 0.5);
   padding: 0.5rem 0.6rem;
   font-family: var(--font-mono);
   font-size: var(--text-md);
@@ -785,7 +782,7 @@ body::before {
   justify-content: center;
   gap: 0.4rem;
   border-top: 1px solid var(--color-panel-border);
-  box-shadow: 0 0 16px rgba(204, 68, 68, 0.25);
+  box-shadow: 0 0 16px rgba(200, 34, 34, 0.25);
   padding: 0.7rem 1.5rem;
   background: var(--color-bar-surface);
   color: var(--color-text-muted);
@@ -817,7 +814,7 @@ body::before {
   padding: 0.6rem 1.5rem;
   background: var(--color-bar-surface);
   border-bottom: 1px solid var(--color-panel-border);
-  box-shadow: 0 0 16px rgba(204, 68, 68, 0.15);
+  box-shadow: 0 0 16px rgba(200, 34, 34, 0.15);
 }
 
 .app-topbar__brand {
@@ -849,10 +846,11 @@ body::before {
 }
 
 /* ── HUD corner accents ───────────────────────────────────────────
-   The clip-path corner cut alone reads as too thin — sim's panels and
-   buttons emphasize the cut edge itself with a thicker highlight line.
-   Two sizes, matching --cut-lg/--cut-sm: a bar rotated 45° laid exactly
-   over each diagonal, at the top-right and bottom-left corners. */
+   sim's panels are plain rectangles (no clip-path) whose corners are
+   picked out by small L-shaped brackets that blink independently —
+   not a cut edge. Matched here: top-right and bottom-left brackets,
+   each a 2-sided border on a transparent square, glowing via
+   drop-shadow and blinking out of phase with each other. */
 
 .auth-panel,
 .admin-panel,
@@ -877,29 +875,38 @@ body::before {
 .status-card::after {
   content: '';
   position: absolute;
-  width: 22px;
-  height: 3px;
-  background: var(--accent-color);
-  box-shadow: 0 0 6px var(--accent-color);
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  filter: drop-shadow(0 0 4px var(--accent-color));
   pointer-events: none;
+  animation: corner-blink 4s ease-in-out infinite;
 }
 
 .auth-panel::before,
 .admin-panel::before,
 .overlay-panel::before,
 .status-card::before {
-  top: 5.5px;
-  right: -4px;
-  transform: rotate(45deg);
+  top: -1px;
+  right: -1px;
+  border-top-color: var(--accent-color);
+  border-right-color: var(--accent-color);
 }
 
 .auth-panel::after,
 .admin-panel::after,
 .overlay-panel::after,
 .status-card::after {
-  bottom: 5.5px;
-  left: -4px;
-  transform: rotate(45deg);
+  bottom: -1px;
+  left: -1px;
+  border-bottom-color: var(--accent-color);
+  border-left-color: var(--accent-color);
+  animation-delay: 2s;
+}
+
+@keyframes corner-blink {
+  0%, 46%, 54%, 100% { opacity: 0.85; }
+  50% { opacity: 0.08; }
 }
 
 .auth-submit,
@@ -993,7 +1000,6 @@ body::before {
 .admin-panel {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  clip-path: var(--cut-lg);
   box-shadow: 0 0 18px rgba(79, 110, 247, 0.1);
   padding: 1.25rem;
 }
