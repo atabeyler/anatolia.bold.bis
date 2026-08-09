@@ -73,6 +73,7 @@
     "sessionExpired": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
     "unauthorized": "Bitte melden Sie sich an, um fortzufahren.",
     "forbidden": "Sie sind dazu nicht berechtigt.",
+    "lastAdminProtected": "Dies ist das letzte aktive Systemadministrator-Konto und kann nicht gesperrt oder gelöscht werden.",
     "notFound": "Nicht gefunden.",
     "internal": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut."
   },
@@ -146,6 +147,7 @@
       "newPassword": "Neues Passwort (optional)"
     },
     "confirmDelete": "Möchten Sie diesen Benutzer wirklich löschen?",
+    "confirmBan": "Möchten Sie diesen Benutzer wirklich sperren? Dadurch wird er sofort überall abgemeldet.",
     "loading": "Benutzer werden geladen…",
     "empty": "Noch keine Benutzer.",
     "loadError": "Benutzer konnten nicht geladen werden.",

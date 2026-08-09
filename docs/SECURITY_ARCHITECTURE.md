@@ -149,6 +149,43 @@ reporting.
   `ALLOW_MOCK_BIOMETRICS=true` — without it, the app refuses to start,
   rather than silently serving deterministic-hash "matches" as if they
   were real biometric comparisons.
+- **Last-admin protection** (`server/src/admin.rs`
+  `would_remove_last_admin`): `ban_user` and `delete_user_route` both check
+  `db::count_active_system_admins` before acting and refuse
+  (`409 Conflict`, `LAST_ADMIN_PROTECTED`) if the target is the only
+  active `SYSTEM_ADMIN` remaining. Without this, an admin could ban or
+  delete themselves (or every other admin, one call at a time) and leave
+  the platform with no way to administer itself short of the seed-admin
+  bootstrap — which the next bullet also closes off by default.
+- **Self-disabling admin bootstrap**: `admin::seed_admin` now checks
+  `count_active_system_admins` after the seed-token comparison succeeds;
+  if any active admin already exists, it refuses (`403 Forbidden`) even
+  though the token is correct and the requested `ADMIN_USER_CODE` is new.
+  `BOOTSTRAP_ENABLED=true` is a deliberate, explicit override for
+  recovery. This closes a real window: previously, anyone who obtained
+  `ADMIN_SEED_TOKEN` after go-live (e.g. through a leaked deployment
+  config) could mint themselves an additional `SYSTEM_ADMIN` account
+  indefinitely.
+- **Request-ID validation** (`server/src/error.rs::request_id`, now the
+  single shared implementation used by `admin`/`audit`/`auth`/`search`
+  instead of four independent copies): a client-supplied `x-request-id`
+  is only trusted if it is 1–128 ASCII letters/digits/`-`/`_`; anything
+  else — oversized, empty, or containing other characters — is replaced
+  with a generated UUID before it is echoed back or written into an audit
+  record.
+- **Database constraints on `search_candidates`/`searches`**: a unique
+  index on `search_candidates (search_id, candidate_id)` makes "a
+  candidate appears at most once per search" a database-enforced
+  invariant rather than one relying solely on `create_search_with_candidates`
+  never inserting a duplicate; indexes on `searches (created_at,
+  case_reference, requested_by)` match the columns `list_searches_page`
+  actually filters and sorts by.
+- **Readiness endpoint** (`GET /api/health/ready`,
+  `server/src/routes/health.rs`): distinct from the existing liveness
+  check (`GET /api/health`, which never touches the database and stays
+  `200` through a database outage), this runs a trivial query against the
+  real backend and returns `503` if it fails — the check an orchestrator
+  or load balancer should actually gate traffic on.
 
 ## Not yet implemented
 

@@ -13,11 +13,12 @@ use crate::auth::{
     Claims,
 };
 use crate::db::{
-    create_user, delete_user, list_users as load_users, load_user_by_id,
-    revoke_all_sessions_for_user, update_user_flags, update_user_profile, AppState,
+    count_active_system_admins, create_user, delete_user, list_users as load_users,
+    load_user_by_id, revoke_all_sessions_for_user, update_user_flags, update_user_profile,
+    AppState,
 };
 use crate::email::escape_html;
-use crate::error::ApiError;
+use crate::error::{request_id, ApiError};
 use crate::roles;
 
 #[derive(Debug, Deserialize)]
@@ -91,14 +92,6 @@ fn require_admin(state: &AppState, headers: &HeaderMap) -> Option<Response> {
 /// this — this just re-decodes it to get the identity to attribute to.
 fn actor_claims(state: &AppState, headers: &HeaderMap) -> Option<Claims> {
     auth_user_from_headers(headers, &state.secrets.jwt_secret)
-}
-
-fn request_id(headers: &HeaderMap) -> String {
-    headers
-        .get("x-request-id")
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_string)
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
 }
 
 pub async fn list_users(State(state): State<AppState>, headers: HeaderMap) -> Response {
@@ -365,6 +358,21 @@ pub async fn reject_user(
     }
 }
 
+/// Refuses to ban/delete a `SYSTEM_ADMIN` account when it is the only
+/// active one left — otherwise the platform could lock itself out of its
+/// own administration with no way back short of re-running the
+/// `seed-admin` bootstrap (which itself requires a still-set
+/// `ADMIN_SEED_TOKEN`).
+async fn would_remove_last_admin(state: &AppState, target: &crate::db::UserRow) -> bool {
+    if target.role != roles::SYSTEM_ADMIN || target.is_banned {
+        return false;
+    }
+    count_active_system_admins(&state.backend)
+        .await
+        .map(|count| count <= 1)
+        .unwrap_or(false)
+}
+
 pub async fn ban_user(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -375,6 +383,12 @@ pub async fn ban_user(
         return denied;
     }
     let rid = request_id(&headers);
+    if let Some(target) = load_user_by_id(&state.backend, &id).await.ok().flatten() {
+        if would_remove_last_admin(&state, &target).await {
+            return ApiError::new("LAST_ADMIN_PROTECTED", "errors.lastAdminProtected", rid)
+                .into_response();
+        }
+    }
     match update_user_flags(
         &state.backend,
         &id,
@@ -437,6 +451,12 @@ pub async fn delete_user_route(
         return denied;
     }
     let rid = request_id(&headers);
+    if let Some(target) = load_user_by_id(&state.backend, &id).await.ok().flatten() {
+        if would_remove_last_admin(&state, &target).await {
+            return ApiError::new("LAST_ADMIN_PROTECTED", "errors.lastAdminProtected", rid)
+                .into_response();
+        }
+    }
     match delete_user(&state.backend, &id).await {
         Ok(true) => {
             AuditRecorder::new(action::USER_DELETED, audit_result::SUCCESS, rid)
@@ -456,6 +476,13 @@ pub async fn delete_user_route(
 /// `ADMIN_SEED_TOKEN`, `ADMIN_USER_CODE`, `ADMIN_PASSWORD`, `ADMIN_EMAIL`
 /// to all be set — see docs/ENVIRONMENT.md. Without a seeded admin,
 /// nothing in the application can be administered.
+///
+/// Self-disables once at least one active `SYSTEM_ADMIN` exists: an
+/// attacker who somehow learns `ADMIN_SEED_TOKEN` after the platform is
+/// already running should not be able to mint themselves a fresh admin
+/// account under a different `ADMIN_USER_CODE`. Set
+/// `BOOTSTRAP_ENABLED=true` to explicitly re-open it for a deliberate
+/// recovery (e.g. every admin account was lost).
 pub async fn seed_admin(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let rid = request_id(&headers);
     if !state
@@ -472,6 +499,21 @@ pub async fn seed_admin(State(state): State<AppState>, headers: HeaderMap) -> Re
     if expected.is_empty() || !constant_time_eq(provided, &expected) {
         AuditRecorder::new(action::ADMIN_SEED_FAILED, audit_result::DENIED, rid.clone())
             .headers(&headers)
+            .save(&state)
+            .await;
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
+
+    let bootstrap_explicitly_enabled = std::env::var("BOOTSTRAP_ENABLED").as_deref() == Ok("true");
+    if !bootstrap_explicitly_enabled
+        && count_active_system_admins(&state.backend)
+            .await
+            .unwrap_or(0)
+            > 0
+    {
+        AuditRecorder::new(action::ADMIN_SEED_FAILED, audit_result::DENIED, rid.clone())
+            .headers(&headers)
+            .metadata(json!({ "reason": "already_bootstrapped" }))
             .save(&state)
             .await;
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();

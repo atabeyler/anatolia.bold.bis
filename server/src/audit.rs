@@ -16,7 +16,7 @@ use crate::auth::{require_role, Claims};
 use crate::db::{
     insert_audit_event, list_audit_events, AppState, AuditEventFilter, AuditEventRow, NewAuditEvent,
 };
-use crate::error::ApiError;
+use crate::error::{request_id, ApiError};
 use crate::roles;
 
 pub mod action {
@@ -194,14 +194,6 @@ impl AuditRecorder {
 const VIEW_ROLES: &[&str] = &[roles::AUDITOR, roles::SECURITY_ADMIN, roles::SYSTEM_ADMIN];
 const DEFAULT_PAGE_SIZE: i64 = 50;
 const MAX_PAGE_SIZE: i64 = 200;
-
-fn request_id(headers: &HeaderMap) -> String {
-    headers
-        .get("x-request-id")
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_string)
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
-}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

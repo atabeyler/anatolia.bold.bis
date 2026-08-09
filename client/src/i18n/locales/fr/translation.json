@@ -73,6 +73,7 @@
     "sessionExpired": "Votre session a expiré. Veuillez vous reconnecter.",
     "unauthorized": "Veuillez vous connecter pour continuer.",
     "forbidden": "Vous n'avez pas la permission de faire cela.",
+    "lastAdminProtected": "Il s'agit du dernier compte administrateur système actif ; il ne peut pas être banni ni supprimé.",
     "notFound": "Introuvable.",
     "internal": "Une erreur est survenue. Veuillez réessayer."
   },
@@ -146,6 +147,7 @@
       "newPassword": "Nouveau mot de passe (facultatif)"
     },
     "confirmDelete": "Voulez-vous vraiment supprimer cet utilisateur ?",
+    "confirmBan": "Voulez-vous vraiment bannir cet utilisateur ? Il sera immédiatement déconnecté partout.",
     "loading": "Chargement des utilisateurs…",
     "empty": "Aucun utilisateur pour le moment.",
     "loadError": "Échec du chargement des utilisateurs.",

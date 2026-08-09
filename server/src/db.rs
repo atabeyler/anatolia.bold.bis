@@ -319,6 +319,33 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             sqlx::query("ALTER TABLE searches ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION")
                 .execute(pool)
                 .await?;
+            // A candidate should only ever appear once per search — the
+            // unique index makes that a database-enforced invariant rather
+            // than one relying solely on `create_search_with_candidates`
+            // never inserting a duplicate. `search` history/filtering reads
+            // by `created_at`, `case_reference`, and `requested_by` (see
+            // `list_searches_page`), so all three get an index.
+            sqlx::query(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_search_candidates_search_candidate \
+                 ON search_candidates (search_id, candidate_id)",
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query(
+                "CREATE INDEX IF NOT EXISTS idx_searches_created_at ON searches (created_at)",
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query(
+                "CREATE INDEX IF NOT EXISTS idx_searches_case_reference ON searches (case_reference)",
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query(
+                "CREATE INDEX IF NOT EXISTS idx_searches_requested_by ON searches (requested_by)",
+            )
+            .execute(pool)
+            .await?;
 
             // Append-only review history: `search_candidates.status`
             // (above) is a convenience "current status" column, but the
@@ -553,6 +580,27 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 )
                 "#,
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_search_candidates_search_candidate \
+                 ON search_candidates (search_id, candidate_id)",
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query(
+                "CREATE INDEX IF NOT EXISTS idx_searches_created_at ON searches (created_at)",
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query(
+                "CREATE INDEX IF NOT EXISTS idx_searches_case_reference ON searches (case_reference)",
+            )
+            .execute(pool)
+            .await?;
+            sqlx::query(
+                "CREATE INDEX IF NOT EXISTS idx_searches_requested_by ON searches (requested_by)",
             )
             .execute(pool)
             .await?;
@@ -870,6 +918,30 @@ pub async fn load_user_by_id(
             .fetch_optional(pool)
             .await?;
             Ok(row.map(UserRow::from))
+        }
+    }
+}
+
+/// Counts non-banned `SYSTEM_ADMIN` accounts — used to refuse an action
+/// (ban/delete) that would leave the platform with zero administrators
+/// able to sign in and undo it.
+pub async fn count_active_system_admins(backend: &DbBackend) -> Result<i64, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let (count,): (i64,) =
+                sqlx::query_as("SELECT COUNT(*) FROM users WHERE role = $1 AND is_banned = false")
+                    .bind(crate::roles::SYSTEM_ADMIN)
+                    .fetch_one(pool)
+                    .await?;
+            Ok(count)
+        }
+        DbBackend::Sqlite(pool) => {
+            let (count,): (i64,) =
+                sqlx::query_as("SELECT COUNT(*) FROM users WHERE role = ?1 AND is_banned = 0")
+                    .bind(crate::roles::SYSTEM_ADMIN)
+                    .fetch_one(pool)
+                    .await?;
+            Ok(count)
         }
     }
 }

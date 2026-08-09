@@ -14,7 +14,7 @@ use crate::db::{
     record_failed_search, record_review_decision, AppState, CandidateRow, SearchCandidateRow,
     SearchRow, VerificationEventRow,
 };
-use crate::error::ApiError;
+use crate::error::{request_id, ApiError};
 use crate::roles;
 
 const SEARCH_ROLES: &[&str] = &[
@@ -35,14 +35,6 @@ const VIEW_ROLES: &[&str] = &[
     roles::AUDITOR,
 ];
 const DEFAULT_PAGE_SIZE: i64 = 50;
-
-fn request_id(headers: &HeaderMap) -> String {
-    headers
-        .get("x-request-id")
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_string)
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
-}
 
 fn search_json(search: &SearchRow) -> serde_json::Value {
     json!({

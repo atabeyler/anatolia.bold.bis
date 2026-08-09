@@ -106,6 +106,26 @@ Implemented controls:
   a conscious acknowledgment, not a silent default. Any `BIOMETRIC_PROVIDER`
   value other than `mock` is a hard startup failure everywhere, since no
   other implementation exists yet. See `docs/SECURITY_ARCHITECTURE.md`.
+- **Last-admin protection**: `POST /api/v1/admin/users/{id}/ban` and
+  `DELETE /api/v1/admin/users/{id}` both refuse to act on the only active
+  `SYSTEM_ADMIN` account (`409 Conflict`, `LAST_ADMIN_PROTECTED`) — the
+  platform can never lock itself out of its own administration through the
+  admin panel.
+- **Self-disabling admin bootstrap**: `POST /api/v1/admin/seed-admin`
+  refuses to create a further admin once one already exists, even with a
+  correct `ADMIN_SEED_TOKEN` and a different identity — closing the window
+  where a leaked seed token could mint an extra admin account after initial
+  bootstrap. `BOOTSTRAP_ENABLED=true` explicitly re-opens it for a
+  deliberate recovery.
+- **Request-ID validation**: a client-supplied `x-request-id` header is
+  bounded to 128 ASCII letters/digits/`-`/`_` before it is echoed into
+  responses or written into audit records; anything outside that is
+  replaced with a generated UUID rather than passed through.
+- **Database constraints**: a unique index on
+  `search_candidates (search_id, candidate_id)` makes "one candidate per
+  search" a database-enforced invariant, plus indexes on
+  `searches (created_at, case_reference, requested_by)` for the columns
+  search history is actually filtered/sorted by.
 
 ## Planned (see `docs/ROADMAP.md` and `docs/SECURITY_ARCHITECTURE.md`)
 

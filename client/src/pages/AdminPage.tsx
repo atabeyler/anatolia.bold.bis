@@ -35,6 +35,7 @@ export function AdminPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>(EMPTY_EDIT_FORM);
   const [editMessage, setEditMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const loadUsers = () => {
     setLoadError(false);
@@ -50,9 +51,12 @@ export function AdminPage() {
 
   const runAction = async (id: string, action: () => Promise<void>) => {
     setBusyId(id);
+    setActionError(null);
     try {
       await action();
       loadUsers();
+    } catch (error) {
+      setActionError(t(apiErrorMessageKey(error, 'errors.internal')) ?? '');
     } finally {
       setBusyId(null);
     }
@@ -203,6 +207,7 @@ export function AdminPage() {
       </section>
 
       <section className="admin-user-list">
+        {actionError && <p className="status-card__line status-card__line--offline">{actionError}</p>}
         {users === null && !loadError && <p className="status-card__line">{t('admin.loading')}</p>}
         {loadError && <p className="status-card__line status-card__line--offline">{t('admin.loadError')}</p>}
         {users !== null && users.length === 0 && <p className="status-card__line">{t('admin.empty')}</p>}
@@ -258,7 +263,11 @@ export function AdminPage() {
                       type="button"
                       className="admin-icon-button admin-icon-button--ban"
                       disabled={isBusy}
-                      onClick={() => runAction(user.id, () => adminClient.banUser(user.id))}
+                      onClick={() => {
+                        if (window.confirm(t('admin.confirmBan') ?? '')) {
+                          runAction(user.id, () => adminClient.banUser(user.id));
+                        }
+                      }}
                     >
                       {t('admin.actions.ban')}
                     </button>

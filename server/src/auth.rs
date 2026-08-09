@@ -19,7 +19,7 @@ use crate::db::{
     revoke_all_sessions_for_user, revoke_session, revoke_session_family, rotate_session,
     set_registration_tracking_token, update_user_password, AppState, UserRow,
 };
-use crate::error::ApiError;
+use crate::error::{request_id, ApiError};
 use crate::roles;
 
 const PASSWORD_RESET_PURPOSE: &str = "password_reset";
@@ -372,14 +372,6 @@ pub fn require_role(state: &AppState, headers: &HeaderMap, allowed: &[&str]) -> 
     auth_user_from_headers(headers, &state.secrets.jwt_secret)
         .map(|claims| allowed.contains(&claims.role.as_str()))
         .unwrap_or(false)
-}
-
-fn request_id(headers: &HeaderMap) -> String {
-    headers
-        .get("x-request-id")
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_string)
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
 }
 
 fn unauthorized(headers: &HeaderMap) -> Response {
