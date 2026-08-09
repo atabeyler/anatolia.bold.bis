@@ -9,6 +9,7 @@ import { AdminPage } from './pages/AdminPage';
 import { AuditPage } from './pages/AuditPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 
 const ADMIN_ROLES = ['SYSTEM_ADMIN', 'SECURITY_ADMIN'];
 const AUDIT_ROLES = ['SYSTEM_ADMIN', 'SECURITY_ADMIN', 'AUDITOR'];
@@ -20,6 +21,9 @@ function App() {
   const { status, user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [view, setView] = useState<View | null>(null);
+  const [resetToken, setResetToken] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get('resetToken'),
+  );
   const isAdmin = !!user && ADMIN_ROLES.includes(user.role);
   const canViewAudit = !!user && AUDIT_ROLES.includes(user.role);
   const signedIn = status === 'signed-in';
@@ -80,6 +84,35 @@ function App() {
       window.removeEventListener('resize', measure);
     };
   }, [signedIn]);
+
+  const clearResetToken = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('resetToken');
+    window.history.replaceState({}, '', url.toString());
+    setResetToken(null);
+  };
+
+  if (resetToken) {
+    return (
+      <div className="app-shell">
+        <div className="app-nav-fixed">
+          <button type="button" className="app-header__nav-button" onClick={() => setMenuOpen(true)}>
+            ☰ {t('menu.openLabel')}
+          </button>
+        </div>
+        <div className="app-main">
+          <ResetPasswordPage token={resetToken} onDone={clearResetToken} />
+        </div>
+        <footer className="app-footer" ref={footerRef}>
+          <span className="footer-bar-text">
+            {t('footer.legalCode')} · <span className="footer-bar-company">{t('footer.legalCompany')}</span>
+            <span className="footer-bar-rights">{t('footer.legalRights')}</span>
+          </span>
+        </footer>
+        {menuOpen && <MenuOverlay onClose={() => setMenuOpen(false)} />}
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">

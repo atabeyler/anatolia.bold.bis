@@ -104,13 +104,32 @@ own refresh cookie.
 #### `POST /api/v1/auth/forgot-password`
 
 Request: `{ "identifier": "..." }` (user code or email). Rate-limited per
-identifier (5 / 15 min). Does not reset anything itself — there is no
-self-service reset flow. If the identifier matches an account, emails
-`ADMIN_EMAIL` a request to act on; an admin then sets a new password via
-`PATCH /api/v1/admin/users/{id}`. Always responds **`200 OK`**
+identifier (5 / 15 min). If the identifier matches an account **with an
+email on file**, issues a single-use, hashed, 1-hour password-reset token
+and emails the account holder a link
+(`{APP_URL}/?resetToken={rawToken}`) to `POST
+/api/v1/auth/reset-password` themselves. If the account has no email on
+file (e.g. an admin-created account), falls back to emailing `ADMIN_EMAIL`
+a request to act on, with an admin then setting a new password via `PATCH
+/api/v1/admin/users/{id}`. Always responds **`200 OK`**
 (`{ "messageKey": "auth.forgotPasswordReceived" }`) whether or not a
 matching account was found, so it can't be used to enumerate registered
 user codes/emails.
+
+#### `POST /api/v1/auth/reset-password`
+
+Request: `{ "token": "...", "newPassword": "..." }`. Completes a
+self-service reset using the raw token from the emailed reset link. The
+token is looked up by its SHA-256 hash (the raw value is never stored) and
+must be unconsumed, have `purpose = "password_reset"`, and not be expired
+(1 hour TTL); it is consumed atomically before the password is changed, so
+it can never be replayed. On success, sets the new password (validated
+against the same password policy as registration), revokes **every**
+active session for the account, and records an
+`AUTH_PASSWORD_RESET_COMPLETED` audit event. Responds **`200 OK`**
+(`{ "messageKey": "auth.passwordResetSuccess" }`) on success or **`400
+Bad Request`** (`errors.invalidResetToken` or `errors.validation`) if the
+token or new password is invalid.
 
 #### `GET /api/v1/auth/registration-status/{trackingToken}`
 

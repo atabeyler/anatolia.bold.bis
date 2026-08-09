@@ -46,10 +46,20 @@
     "forgotPasswordIdentifier": "User code or email",
     "forgotPasswordSubmit": "Send request",
     "forgotPasswordSuccess": "Your request has been sent to the administrator. You will be contacted once your password has been reset.",
-    "backToLogin": "Back to sign in"
+    "backToLogin": "Back to sign in",
+    "passwordResetSuccess": "Your password has been reset. You can now sign in with your new password.",
+    "resetPassword": {
+      "title": "Set a new password",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm new password",
+      "submit": "Set new password",
+      "success": "Your password has been reset. You can now sign in with your new password.",
+      "mismatch": "The passwords do not match."
+    }
   },
   "errors": {
     "validation": "Please check the fields and try again.",
+    "invalidResetToken": "This password reset link is invalid or has expired.",
     "invalidCoordinates": "Location coordinates are invalid or incomplete.",
     "imageTooLarge": "The image file is too large (maximum 10 MB).",
     "unsupportedImageType": "Unsupported image type. Use JPEG, PNG, or WEBP.",

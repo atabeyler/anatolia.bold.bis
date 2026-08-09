@@ -120,6 +120,30 @@ pub async fn send_approval_email(first_name: &str, last_name: &str, email: &str,
     .await;
 }
 
+/// Sent directly to the account holder — only possible when the account
+/// has an email on file. Distinct from `send_password_reset_request`
+/// (below), which notifies the admin instead, for accounts without one.
+pub async fn send_password_reset_email(
+    first_name: &str,
+    last_name: &str,
+    email: &str,
+    reset_link: &str,
+) {
+    let text = format!(
+        "Dear {first_name} {last_name},\n\nA password reset was requested for your Anatolia B.I.S. account. \
+         If this was you, set a new password here (valid 1 hour):\n\n{reset_link}\n\n\
+         If you did not request this, you can ignore this email — your password will not change.\n\n\
+         Bold Askeri Teknoloji ve Savunma Sanayi A.Ş."
+    );
+    deliver(
+        email,
+        "Anatolia B.I.S. — Password reset request",
+        &text,
+        None,
+    )
+    .await;
+}
+
 pub async fn send_password_reset_request(
     first_name: &str,
     last_name: &str,

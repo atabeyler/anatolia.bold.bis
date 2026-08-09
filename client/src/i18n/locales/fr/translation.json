@@ -46,9 +46,19 @@
     "forgotPasswordIdentifier": "Code utilisateur ou e-mail",
     "forgotPasswordSubmit": "Envoyer la demande",
     "forgotPasswordSuccess": "Votre demande a été envoyée à l'administrateur. Vous serez contacté une fois votre mot de passe réinitialisé.",
-    "backToLogin": "Retour à la connexion"
+    "backToLogin": "Retour à la connexion",
+    "passwordResetSuccess": "Votre mot de passe a été réinitialisé. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.",
+    "resetPassword": {
+      "title": "Définir un nouveau mot de passe",
+      "newPassword": "Nouveau mot de passe",
+      "confirmPassword": "Confirmer le nouveau mot de passe",
+      "submit": "Définir le nouveau mot de passe",
+      "success": "Votre mot de passe a été réinitialisé. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.",
+      "mismatch": "Les mots de passe ne correspondent pas."
+    }
   },
   "errors": {
+    "invalidResetToken": "Ce lien de réinitialisation du mot de passe est invalide ou a expiré.",
     "validation": "Veuillez vérifier les champs et réessayer.",
     "invalidCoordinates": "Les coordonnées de localisation sont invalides ou incomplètes.",
     "imageTooLarge": "Le fichier image est trop volumineux (maximum 10 Mo).",

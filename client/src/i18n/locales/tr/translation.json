@@ -46,9 +46,19 @@
     "forgotPasswordIdentifier": "Kullanıcı kodu veya e-posta",
     "forgotPasswordSubmit": "Talebi gönder",
     "forgotPasswordSuccess": "Talebiniz yöneticiye iletildi. Şifreniz sıfırlandığında sizinle iletişime geçilecektir.",
-    "backToLogin": "Girişe dön"
+    "backToLogin": "Girişe dön",
+    "passwordResetSuccess": "Şifreniz sıfırlandı. Artık yeni şifrenizle giriş yapabilirsiniz.",
+    "resetPassword": {
+      "title": "Yeni şifre belirle",
+      "newPassword": "Yeni şifre",
+      "confirmPassword": "Yeni şifreyi onayla",
+      "submit": "Yeni şifreyi belirle",
+      "success": "Şifreniz sıfırlandı. Artık yeni şifrenizle giriş yapabilirsiniz.",
+      "mismatch": "Şifreler eşleşmiyor."
+    }
   },
   "errors": {
+    "invalidResetToken": "Bu şifre sıfırlama bağlantısı geçersiz veya süresi dolmuş.",
     "validation": "Lütfen alanları kontrol edip tekrar deneyin.",
     "invalidCoordinates": "Konum koordinatları geçersiz veya eksik.",
     "imageTooLarge": "Görsel dosyası çok büyük (azami 10 MB).",

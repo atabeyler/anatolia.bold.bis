@@ -46,9 +46,19 @@
     "forgotPasswordIdentifier": "Benutzercode oder E-Mail",
     "forgotPasswordSubmit": "Anfrage senden",
     "forgotPasswordSuccess": "Ihre Anfrage wurde an den Administrator gesendet. Sie werden kontaktiert, sobald Ihr Passwort zurückgesetzt wurde.",
-    "backToLogin": "Zurück zur Anmeldung"
+    "backToLogin": "Zurück zur Anmeldung",
+    "passwordResetSuccess": "Ihr Passwort wurde zurückgesetzt. Sie können sich jetzt mit Ihrem neuen Passwort anmelden.",
+    "resetPassword": {
+      "title": "Neues Passwort festlegen",
+      "newPassword": "Neues Passwort",
+      "confirmPassword": "Neues Passwort bestätigen",
+      "submit": "Neues Passwort festlegen",
+      "success": "Ihr Passwort wurde zurückgesetzt. Sie können sich jetzt mit Ihrem neuen Passwort anmelden.",
+      "mismatch": "Die Passwörter stimmen nicht überein."
+    }
   },
   "errors": {
+    "invalidResetToken": "Dieser Link zum Zurücksetzen des Passworts ist ungültig oder abgelaufen.",
     "validation": "Bitte überprüfen Sie die Felder und versuchen Sie es erneut.",
     "invalidCoordinates": "Die Standortkoordinaten sind ungültig oder unvollständig.",
     "imageTooLarge": "Die Bilddatei ist zu groß (maximal 10 MB).",

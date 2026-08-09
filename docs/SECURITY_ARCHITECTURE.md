@@ -63,6 +63,20 @@ reporting.
   hash with `consumed_at`/`result` — a link works exactly once, whether
   it succeeds or fails, and reuse is rejected even though the JWT itself
   would still verify.
+- **Self-service password reset** (`server/src/auth.rs`
+  `forgot_password`/`reset_password`): for accounts with an email on file,
+  `forgot-password` issues a single-use, hashed, 1-hour-TTL token (reusing
+  the `approval_tokens` table with `purpose = "password_reset"`, distinct
+  from registration-approval tokens) and emails a reset link directly to
+  the account holder; accounts without an email keep the existing
+  admin-notification fallback. `reset-password` looks the token up by
+  hash, requires the matching purpose, an unconsumed state, and an
+  unexpired TTL, and consumes it atomically **before** the password is
+  changed — a concurrent replay of the same raw token can never land
+  twice. On success it revokes every active session for the account
+  (`revoke_all_sessions_for_user`), forcing re-authentication on every
+  other signed-in device, and records an `AUTH_PASSWORD_RESET_COMPLETED`
+  audit event.
 - **Registration-status enumeration protection**: `POST
   /api/v1/auth/register` returns a random, unguessable
   `registrationTrackingToken` (stored on the user row, not derived from

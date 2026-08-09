@@ -1138,6 +1138,38 @@ pub async fn update_user_profile(
     load_user_by_id(backend, id).await
 }
 
+/// Sets a user's password hash only — used by the self-service password
+/// reset flow (`auth::reset_password`), distinct from `update_user_profile`
+/// (an admin editing an account's identifying details).
+pub async fn update_user_password(
+    backend: &DbBackend,
+    id: &str,
+    password_hash: &str,
+) -> Result<Option<UserRow>, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(uuid) = Uuid::parse_str(id) else {
+                return Ok(None);
+            };
+            sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
+                .bind(password_hash)
+                .bind(uuid)
+                .execute(pool)
+                .await?;
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query(
+                "UPDATE users SET password_hash = ?1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?2",
+            )
+            .bind(password_hash)
+            .bind(id)
+            .execute(pool)
+            .await?;
+        }
+    }
+    load_user_by_id(backend, id).await
+}
+
 pub async fn load_user_by_email(
     backend: &DbBackend,
     email: &str,
