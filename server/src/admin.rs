@@ -25,7 +25,8 @@ pub struct BanPayload {
 pub struct CreateUserPayload {
     pub user_code: String,
     pub password: String,
-    pub nickname: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
     pub national_id: String,
     pub email: String,
     pub is_admin: bool,
@@ -125,7 +126,8 @@ pub async fn create_user_route(State(state): State<AppState>, headers: HeaderMap
         return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
     }
 
-    let nickname = payload.nickname.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or(&code).to_string();
+    let first_name = payload.first_name.as_deref().map(str::trim).filter(|s| !s.is_empty()).unwrap_or(&code).to_string();
+    let last_name = payload.last_name.as_deref().map(str::trim).unwrap_or("").to_string();
 
     let hashed = match hash(&payload.password, bcrypt::DEFAULT_COST) {
         Ok(v) => v,
@@ -133,7 +135,7 @@ pub async fn create_user_route(State(state): State<AppState>, headers: HeaderMap
     };
     let role = if payload.is_admin { roles::SYSTEM_ADMIN } else { roles::DEFAULT_APPROVED_ROLE };
 
-    match create_user(&state.backend, &code, Some(&email), &nickname, "", Some(national_id), &hashed, role, true).await {
+    match create_user(&state.backend, &code, Some(&email), &first_name, &last_name, Some(national_id), &hashed, role, true).await {
         Ok(Some(user)) => Json(json!({ "user": user_json(&user) })).into_response(),
         Ok(None) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
         Err(err) if err.to_string().to_lowercase().contains("unique") => {

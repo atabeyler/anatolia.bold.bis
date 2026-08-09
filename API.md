@@ -120,16 +120,17 @@ links require a `SYSTEM_ADMIN` or `SECURITY_ADMIN` bearer token.
 - `GET /api/v1/admin/users` — list all users.
 - `POST /api/v1/admin/users` — admin creates a user directly (immediately
   approved, no self-registration/approval round trip). Body:
-  `{ "userCode": "...", "password": "...", "nickname": "...", "nationalId": "...", "email": "...", "isAdmin": false }`.
-  `nationalId` (11 digits) and `email` are required; `nickname` is
-  optional (falls back to the user code). Password only requires a
-  minimum of 8 characters (the admin chooses it, not the account's
-  eventual owner — contrast with `register`'s stronger policy). `isAdmin:
-  true` grants `SYSTEM_ADMIN` instead of the default `OPERATOR` role.
-  `409 Conflict` if the user code, national ID, or email is already taken.
+  `{ "userCode": "...", "password": "...", "firstName": "...", "lastName": "...", "nationalId": "...", "email": "...", "isAdmin": false }`.
+  `nationalId` (11 digits) and `email` are required; `firstName` and
+  `lastName` are optional (`firstName` falls back to the user code,
+  `lastName` to empty). Password only requires a minimum of 8 characters
+  (the admin chooses it, not the account's eventual owner — contrast with
+  `register`'s stronger policy). `isAdmin: true` grants `SYSTEM_ADMIN`
+  instead of the default `OPERATOR` role. `409 Conflict` if the user code,
+  national ID, or email is already taken.
 - `PATCH /api/v1/admin/users/{id}` — admin edits an existing account's
-  nickname, national ID, email, and/or resets its password. Body:
-  `{ "nickname": "...", "nationalId": "...", "email": "...", "password": "..." }`,
+  nickname (first name), national ID, email, and/or resets its password.
+  Body: `{ "nickname": "...", "nationalId": "...", "email": "...", "password": "..." }`,
   all fields optional — anything omitted or empty is left unchanged.
   `409 Conflict` if the new national ID or email collides with another
   account.

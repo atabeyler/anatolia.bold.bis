@@ -30,7 +30,8 @@ export function AdminPage({ onGoHome }: AdminPageProps) {
 
   const [userCode, setUserCode] = useState('');
   const [password, setPassword] = useState('');
-  const [nickname, setNickname] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [nationalId, setNationalId] = useState('');
   const [email, setEmail] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
@@ -71,14 +72,16 @@ export function AdminPage({ onGoHome }: AdminPageProps) {
       await adminClient.createUser({
         userCode: userCode.trim(),
         password,
-        nickname: nickname.trim() || undefined,
+        firstName: firstName.trim() || undefined,
+        lastName: lastName.trim() || undefined,
         nationalId: nationalId.trim(),
         email: email.trim(),
         isAdmin,
       });
       setUserCode('');
       setPassword('');
-      setNickname('');
+      setFirstName('');
+      setLastName('');
       setNationalId('');
       setEmail('');
       setIsAdmin(false);
@@ -159,6 +162,22 @@ export function AdminPage({ onGoHome }: AdminPageProps) {
               onChange={(event) => setUserCode(event.target.value)}
               required
             />
+            <div className="admin-name-stack">
+              <input
+                type="text"
+                placeholder={t('auth.firstName') ?? ''}
+                value={firstName}
+                onChange={(event) => setFirstName(event.target.value)}
+              />
+              <input
+                type="text"
+                placeholder={t('auth.lastName') ?? ''}
+                value={lastName}
+                onChange={(event) => setLastName(event.target.value)}
+              />
+            </div>
+          </div>
+          <div className="admin-form-row">
             <input
               type="password"
               placeholder={t('admin.addUser.password') ?? ''}
@@ -166,14 +185,6 @@ export function AdminPage({ onGoHome }: AdminPageProps) {
               onChange={(event) => setPassword(event.target.value)}
               minLength={8}
               required
-            />
-          </div>
-          <div className="admin-form-row">
-            <input
-              type="text"
-              placeholder={t('admin.addUser.nickname') ?? ''}
-              value={nickname}
-              onChange={(event) => setNickname(event.target.value)}
             />
             <input
               type="text"

@@ -16,7 +16,8 @@ export interface AdminUser {
 export interface CreateUserPayload {
   userCode: string;
   password: string;
-  nickname?: string;
+  firstName?: string;
+  lastName?: string;
   nationalId: string;
   email: string;
   isAdmin: boolean;
