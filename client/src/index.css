@@ -786,19 +786,42 @@ body::before {
   background: var(--color-bar-surface);
 }
 
-.app-footer__text {
-  margin: 0;
-  max-width: 100%;
+/* Matched to sim's FooterBar/.footer-bar-text exactly, including the
+   fluid clamp() font-size (grows/shrinks with viewport) and the wrap
+   breakpoint below 720px. */
+.footer-bar-text {
+  font-family: var(--font-mono);
+  font-size: clamp(9px, 1vw, 14px);
+  letter-spacing: 0.15em;
   color: var(--color-success);
   text-shadow: 0 0 6px var(--color-success), 0 0 16px rgba(0, 232, 135, 0.6);
-  font-size: var(--text-xs);
-  letter-spacing: var(--tracking-snug);
+  line-height: 1.15;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
   text-align: center;
-  line-height: 1.2;
+  max-width: 100%;
+  white-space: nowrap;
 }
 
-.app-footer__separator {
-  color: var(--color-border);
+.footer-bar-company,
+.footer-bar-rights {
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .footer-bar-text {
+    white-space: normal;
+    flex-wrap: wrap;
+    gap: 0.2em;
+    line-height: 1.05;
+  }
+
+  .footer-bar-company,
+  .footer-bar-rights {
+    white-space: normal;
+  }
 }
 
 /* ── Top bar (signed-in screens only, pinned to the viewport) ──
