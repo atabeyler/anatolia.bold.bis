@@ -258,6 +258,11 @@ returns **`400 Bad Request`** with one of these codes:
 | `IMAGE_DECODE_FAILED` | Right magic bytes, but the file doesn't actually decode (corrupted/truncated). |
 | `IMAGE_DIMENSIONS_INVALID` | Below the minimum size, above the maximum size, or above the total-pixel decompression-bomb guard. |
 
+A passing image is also sanitized: what reaches the biometric provider is
+a fresh re-encode of the decoded pixel data, not the original upload
+bytes, which strips any EXIF/XMP metadata (GPS coordinates, device
+make/model, capture timestamp) the original file carried.
+
 Runs the `BiometricProvider` (currently `MockBiometricProvider` — see
 CLAUDE.md) over every known candidate. The search row and every one of its
 candidate results are written in a single database transaction (see

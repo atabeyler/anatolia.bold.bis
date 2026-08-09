@@ -136,6 +136,20 @@ Implemented controls:
   search" a database-enforced invariant, plus indexes on
   `searches (created_at, case_reference, requested_by)` for the columns
   search history is actually filtered/sorted by.
+- **Centralized authorization policy**: role-to-action decisions live as
+  named functions in `server/src/permission.rs`
+  (`can_create_search`/`can_view_search`/`can_review_candidate`/
+  `can_view_audit_log`/`can_administer_users`) rather than a role list
+  re-declared next to each handler, so a permission has exactly one
+  definition. See `docs/SECURITY_ARCHITECTURE.md`.
+- **Probe-image EXIF stripping**: a validated probe image is re-encoded
+  from its decoded pixel data before use, dropping EXIF/XMP metadata
+  (GPS coordinates, device identifiers, capture timestamp) the original
+  upload carried. See `docs/SECURITY_ARCHITECTURE.md`.
+- **Cross-tab sign-out sync**: logging out in one browser tab notifies
+  every other open tab of the same origin via `BroadcastChannel`, so a
+  stale access token doesn't linger in another tab after logout. See
+  `docs/SECURITY_ARCHITECTURE.md`.
 
 ## Planned (see `docs/ROADMAP.md` and `docs/SECURITY_ARCHITECTURE.md`)
 

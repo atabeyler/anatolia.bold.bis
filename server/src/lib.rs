@@ -8,6 +8,7 @@ pub mod email;
 pub mod error;
 pub mod image_validation;
 pub mod middleware;
+pub mod permission;
 pub mod ratelimit;
 pub mod roles;
 pub mod routes;

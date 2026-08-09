@@ -368,9 +368,13 @@ pub fn auth_user_from_headers(headers: &HeaderMap, secret: &str) -> Option<Claim
     decode_access_token(&bearer_token(headers)?, secret)
 }
 
-pub fn require_role(state: &AppState, headers: &HeaderMap, allowed: &[&str]) -> bool {
+/// `allowed` is one of the named policy functions in `crate::permission`
+/// (e.g. `permission::can_view_audit_log`) rather than an inline role list,
+/// so the set of roles permitted to perform an action is defined in exactly
+/// one place.
+pub fn require_role(state: &AppState, headers: &HeaderMap, allowed: fn(&str) -> bool) -> bool {
     auth_user_from_headers(headers, &state.secrets.jwt_secret)
-        .map(|claims| allowed.contains(&claims.role.as_str()))
+        .map(|claims| allowed(claims.role.as_str()))
         .unwrap_or(false)
 }
 

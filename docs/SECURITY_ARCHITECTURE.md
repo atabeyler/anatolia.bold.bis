@@ -207,6 +207,31 @@ what these controls defend against.
   `200` through a database outage), this runs a trivial query against the
   real backend and returns `503` if it fails — the check an orchestrator
   or load balancer should actually gate traffic on.
+- **Centralized authorization policy** (`server/src/permission.rs`): every
+  "which roles may do X" decision is a single named function
+  (`can_create_search`, `can_view_search`, `can_review_candidate`,
+  `can_view_audit_log`, `can_administer_users`) instead of a role list
+  re-declared next to each handler. `auth::require_role` takes one of
+  these functions rather than an inline slice, so a permission has exactly
+  one definition and cannot silently drift between call sites (e.g. one
+  handler's role list gaining `AUDITOR` while another's doesn't, without
+  anyone intending that).
+- **Probe-image EXIF/XMP stripping**
+  (`image_validation::validate_and_sanitize_probe_image`): validation now
+  returns a sanitized re-encode of the decoded pixel data (always to PNG)
+  rather than the original upload bytes. A phone-camera JPEG's EXIF block
+  can carry GPS coordinates, device make/model, and a capture timestamp —
+  none of which should travel with the image into anything that processes
+  it downstream. Re-encoding drops that metadata unconditionally, since
+  the `image` crate's encoders never write EXIF/XMP chunks back out; no
+  separate metadata-scrubbing pass is needed.
+- **Cross-tab sign-out sync** (`client/src/services/authBroadcast.ts`,
+  used from `AuthContext`): logging out (or `logout-all`) posts a message
+  on a same-origin `BroadcastChannel` so every other open tab clears its
+  in-memory access token and returns to the signed-out state immediately,
+  instead of only discovering the session is gone on its next failed
+  request. Degrades to no cross-tab sync (not a crash) on a runtime
+  without `BroadcastChannel` support.
 
 ## Not yet implemented
 

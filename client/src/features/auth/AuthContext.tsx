@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { setAccessToken } from '../../services/apiClient';
+import { createAuthBroadcastChannel, isSignedOutMessage, postSignedOut } from '../../services/authBroadcast';
 import * as authClient from '../../services/authClient';
 import type { PublicUser, RegisterPayload } from '../../services/authClient';
 
@@ -24,6 +25,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [rememberedUserCode, setRememberedUserCode] = useState(
     () => localStorage.getItem(REMEMBERED_USER_CODE_KEY) ?? '',
   );
+  const broadcastRef = useRef<BroadcastChannel | null>(null);
+
+  useEffect(() => {
+    const channel = createAuthBroadcastChannel();
+    broadcastRef.current = channel;
+    if (!channel) {
+      return;
+    }
+    const handleMessage = (event: MessageEvent) => {
+      if (!isSignedOutMessage(event.data)) {
+        return;
+      }
+      setAccessToken(null);
+      setUser(null);
+      setStatus('signed-out');
+    };
+    channel.addEventListener('message', handleMessage);
+    return () => {
+      channel.removeEventListener('message', handleMessage);
+      channel.close();
+      broadcastRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     // A refresh cookie from a previous visit, if any, silently restores
@@ -63,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(null);
     setUser(null);
     setStatus('signed-out');
+    postSignedOut(broadcastRef.current);
   }, []);
 
   const logoutAll = useCallback(async () => {
@@ -70,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(null);
     setUser(null);
     setStatus('signed-out');
+    postSignedOut(broadcastRef.current);
   }, []);
 
   const value = useMemo(
