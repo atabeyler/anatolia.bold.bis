@@ -4,7 +4,7 @@ use axum::routing::{delete, get, post};
 use axum::Router;
 
 use crate::db::AppState;
-use crate::{admin, audit, auth, search};
+use crate::{admin, audit, auth, mfa, search};
 
 pub fn router(state: AppState) -> Router {
     let auth_routes = Router::new()
@@ -18,7 +18,16 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/registration-status/:tracking_token",
             get(auth::registration_status),
-        );
+        )
+        .route("/mfa/enroll", post(mfa::enroll))
+        .route("/mfa/enroll/confirm", post(mfa::enroll_confirm))
+        .route("/mfa/disable", post(mfa::disable))
+        .route("/mfa/challenge/enroll", post(mfa::challenge_enroll))
+        .route(
+            "/mfa/challenge/enroll/confirm",
+            post(mfa::challenge_enroll_confirm),
+        )
+        .route("/mfa/challenge/verify", post(mfa::challenge_verify));
 
     let admin_routes = Router::new()
         .route("/seed-admin", post(admin::seed_admin))
@@ -30,6 +39,7 @@ pub fn router(state: AppState) -> Router {
         .route("/users/:id/reject", post(admin::reject_user))
         .route("/users/:id/ban", post(admin::ban_user))
         .route("/users/:id/unban", post(admin::unban_user))
+        .route("/users/:id/mfa-reset", post(admin::mfa_reset_route))
         .route(
             "/users/:id",
             delete(admin::delete_user_route).patch(admin::update_user_route),

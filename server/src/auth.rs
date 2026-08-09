@@ -177,7 +177,7 @@ fn is_production() -> bool {
     crate::config::is_production()
 }
 
-fn cookie_value(token: &str, headers: &HeaderMap) -> String {
+pub(crate) fn cookie_value(token: &str, headers: &HeaderMap) -> String {
     let same_site = if !is_production() {
         "Strict"
     } else if is_cross_origin_request(headers) {
@@ -517,7 +517,7 @@ pub async fn register(
 /// Issues an access token plus a brand-new session (family id, hashed
 /// refresh token stored server-side, raw refresh token only ever placed
 /// in the HttpOnly cookie).
-async fn issue_session(
+pub(crate) async fn issue_session(
     state: &AppState,
     user: &UserRow,
     headers: &HeaderMap,
@@ -631,6 +631,50 @@ pub async fn login(
             .save(&state)
             .await;
         return ApiError::new("FORBIDDEN", "errors.accountNotApproved", rid).into_response();
+    }
+
+    // MFA gate: an account with MFA enabled must complete a TOTP/recovery
+    // challenge before a session is issued; a privileged role that has not
+    // yet enrolled cannot obtain a session at all until it does — see
+    // mfa.rs for why this is fail-closed rather than a frontend-only
+    // redirect. Neither branch below issues an access/refresh token pair.
+    match crate::mfa::login_mfa_outcome(&state, &user).await {
+        crate::mfa::LoginMfaOutcome::NotRequired => {}
+        crate::mfa::LoginMfaOutcome::ChallengeRequired => {
+            let token =
+                match crate::mfa::sign_challenge_token(&state, &user.id, crate::mfa::PURPOSE_LOGIN)
+                {
+                    Ok(token) => token,
+                    Err(_) => {
+                        return ApiError::new("INTERNAL_ERROR", "errors.internal", rid)
+                            .into_response()
+                    }
+                };
+            return Json(serde_json::json!({
+                "mfaRequired": true,
+                "mfaToken": token,
+                "userCode": user.user_code,
+            }))
+            .into_response();
+        }
+        crate::mfa::LoginMfaOutcome::EnrollmentRequired => {
+            let token = match crate::mfa::sign_challenge_token(
+                &state,
+                &user.id,
+                crate::mfa::PURPOSE_ENROLLMENT,
+            ) {
+                Ok(token) => token,
+                Err(_) => {
+                    return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response()
+                }
+            };
+            return Json(serde_json::json!({
+                "mfaEnrollmentRequired": true,
+                "mfaToken": token,
+                "userCode": user.user_code,
+            }))
+            .into_response();
+        }
     }
 
     let (access_token, refresh_token) = match issue_session(&state, &user, &headers).await {

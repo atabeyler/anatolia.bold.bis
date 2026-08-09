@@ -55,6 +55,18 @@
       "submit": "Définir le nouveau mot de passe",
       "success": "Votre mot de passe a été réinitialisé. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.",
       "mismatch": "Les mots de passe ne correspondent pas."
+    },
+    "mfa": {
+      "challengeIntro": "Entrez le code à 6 chiffres de votre application d'authentification ou un code de récupération.",
+      "enrollIntro": "Votre rôle nécessite une authentification multifacteur. Ajoutez la clé ci-dessous dans une application d'authentification, puis saisissez le code à 6 chiffres généré.",
+      "manualEntryKey": "Clé de saisie manuelle",
+      "codeLabel": "Code de vérification",
+      "verifyCode": "Vérifier",
+      "recoveryCodesTitle": "Enregistrez vos codes de récupération",
+      "recoveryCodesIntro": "Chaque code peut être utilisé une fois pour vous connecter si vous perdez l'accès à votre application d'authentification. Conservez-les en lieu sûr — ils ne seront plus affichés.",
+      "recoveryCodesWarning": "Ces codes ne seront affichés qu'une seule fois.",
+      "recoveryCodesAcknowledge": "J'ai enregistré ces codes",
+      "disabled": "L'authentification multifacteur a été désactivée sur votre compte."
     }
   },
   "errors": {
@@ -75,7 +87,10 @@
     "forbidden": "Vous n'avez pas la permission de faire cela.",
     "lastAdminProtected": "Il s'agit du dernier compte administrateur système actif ; il ne peut pas être banni ni supprimé.",
     "notFound": "Introuvable.",
-    "internal": "Une erreur est survenue. Veuillez réessayer."
+    "internal": "Une erreur est survenue. Veuillez réessayer.",
+    "invalidMfaCode": "Ce code est invalide ou a expiré. Veuillez réessayer.",
+    "mfaEnrollmentNotStarted": "Démarrez l'inscription MFA avant de confirmer un code.",
+    "mfaNotEnabled": "L'authentification multifacteur n'est pas activée sur ce compte."
   },
   "settings": {
     "openLabel": "Paramètres",
@@ -157,7 +172,8 @@
       "previous": "Précédent",
       "next": "Suivant",
       "pageOf": "Page {{page}} sur {{totalPages}}"
-    }
+    },
+    "mfaResetComplete": "L'authentification multifacteur a été réinitialisée pour ce compte."
   },
   "search": {
     "subtitle": "RECHERCHE BIOMÉTRIQUE",

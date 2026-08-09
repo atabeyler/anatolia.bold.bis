@@ -473,6 +473,37 @@ pub async fn unban_user(
     }
 }
 
+/// `POST /api/v1/admin/users/:id/mfa-reset` — removes a target account's
+/// MFA credential and recovery codes entirely, forcing re-enrollment on
+/// its next login. For an account whose role requires MFA
+/// (`MFA_REQUIRED_ROLES`), this is the recovery path when a device/secret
+/// is lost — the account cannot re-enroll itself without first logging
+/// in, and it cannot log in without MFA, so an administrator must clear
+/// the credential first.
+pub async fn mfa_reset_route(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(denied) = require_admin(&state, &headers) {
+        return denied;
+    }
+    let rid = request_id(&headers);
+    let Some(target) = load_user_by_id(&state.backend, &id).await.ok().flatten() else {
+        return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response();
+    };
+    if crate::mfa::admin_reset(&state, &target.id).await.is_err() {
+        return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response();
+    }
+    AuditRecorder::new(action::MFA_RESET_BY_ADMIN, audit_result::SUCCESS, rid)
+        .actor_opt(actor_claims(&state, &headers).as_ref())
+        .headers(&headers)
+        .resource("user", &target.id)
+        .save(&state)
+        .await;
+    Json(json!({ "messageKey": "admin.mfaResetComplete" })).into_response()
+}
+
 pub async fn delete_user_route(
     State(state): State<AppState>,
     Path(id): Path<String>,

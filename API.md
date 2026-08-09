@@ -104,6 +104,19 @@ Unauthorized`** (`errors.invalidCredentials`) on a wrong code/password.
 **`403 Forbidden`** if the account is banned (`errors.accountBanned`) or
 not yet approved (`errors.accountNotApproved`).
 
+If the account has MFA enabled, or its role is listed in
+`MFA_REQUIRED_ROLES` and has never enrolled, a correct password does
+**not** issue a session. Instead the response is **`200 OK`** with one of:
+
+- `{ "mfaRequired": true, "mfaToken": "...", "userCode": "..." }` — MFA is
+  already enabled; complete login with `POST /api/v1/auth/mfa/challenge/verify`.
+- `{ "mfaEnrollmentRequired": true, "mfaToken": "...", "userCode": "..." }`
+  — this role requires MFA but none is enrolled yet; complete enrollment
+  with `POST /api/v1/auth/mfa/challenge/enroll` +
+  `POST /api/v1/auth/mfa/challenge/enroll/confirm`.
+
+See "Multi-factor authentication (MFA)" below.
+
 #### `POST /api/v1/auth/refresh`
 
 Reads the refresh cookie, validates it against the matching session
@@ -171,6 +184,71 @@ existed. Response:
 Requires `Authorization: Bearer <accessToken>`. Returns the caller's own
 public profile.
 
+### Multi-factor authentication (MFA)
+
+TOTP-based (RFC 6238), implemented in `server/src/mfa.rs`. Two independent
+flows:
+
+- **Voluntary** — any authenticated user may enroll, confirm, or disable
+  MFA on their own account.
+- **Login-time challenge** — `mfaToken` values returned by `POST
+  /api/v1/auth/login` (see above). These are short-lived (10 minutes),
+  single-purpose JWTs signed with a dedicated `MFA_TOKEN_SECRET`; by
+  themselves they grant no access — completing the flow still requires a
+  correct TOTP/recovery code (or, for first-time mandatory enrollment,
+  completing enrollment itself). No code path issues an access/refresh
+  token pair for an MFA-gated account without MFA actually being
+  satisfied — this is deliberately fail-closed, not a frontend-only
+  redirect.
+
+#### `POST /api/v1/auth/mfa/enroll`
+
+Requires `Authorization: Bearer <accessToken>`. Generates a new TOTP
+secret, stores it as pending (not yet active), and returns
+`{ "secret": "...", "otpauthUrl": "otpauth://..." }` for a manual-entry
+key or QR code. Re-calling this replaces any not-yet-confirmed pending
+secret.
+
+#### `POST /api/v1/auth/mfa/enroll/confirm`
+
+Request: `{ "code": "..." }`. Verifies the code against the pending
+secret; on success activates MFA and returns
+`{ "recoveryCodes": ["...", ...] }` — 10 single-use codes, shown this one
+time only (only their hashes are stored). **`401 Unauthorized`**
+(`errors.invalidMfaCode`) on a wrong code; **`409 Conflict`**
+(`errors.mfaEnrollmentNotStarted`) if `enroll` was never called.
+
+#### `POST /api/v1/auth/mfa/disable`
+
+Request: `{ "password": "...", "code": "..." }`. Requires both the
+account's current password and a valid TOTP/recovery code, so a stolen
+access token alone cannot turn MFA off. Deletes the credential and all
+recovery codes. If the account's role is in `MFA_REQUIRED_ROLES`, the next
+login will require re-enrollment.
+
+#### `POST /api/v1/auth/mfa/challenge/enroll`
+
+Request: `{ "mfaToken": "..." }` (from a `mfaEnrollmentRequired` login
+response). Same as `enroll` above but authorized by the challenge token
+instead of a bearer token — used when a required role has no MFA yet.
+
+#### `POST /api/v1/auth/mfa/challenge/enroll/confirm`
+
+Request: `{ "mfaToken": "...", "code": "..." }`. Confirms enrollment
+**and** completes the login that triggered it in the same response:
+`{ "accessToken": "...", "user": { ... }, "recoveryCodes": ["...", ...] }`,
+plus the refresh cookie.
+
+#### `POST /api/v1/auth/mfa/challenge/verify`
+
+Request: `{ "mfaToken": "...", "code": "..." }` (from a `mfaRequired`
+login response). Verifies a TOTP or recovery code for an account that
+already has MFA enabled and, on success, completes login:
+`{ "accessToken": "...", "user": { ... } }`, plus the refresh cookie. Rate
+limited per account (8 / 15 min) independent of the login rate limits
+already applied when the password was checked. **`401 Unauthorized`**
+(`errors.invalidMfaCode`) on a wrong code.
+
 ### Administration
 
 All `/api/v1/admin/*` routes except `seed-admin` and the email-approval
@@ -218,6 +296,13 @@ links require a `SYSTEM_ADMIN` or `SECURITY_ADMIN` bearer token.
   Immediately revokes all of the user's active sessions, not just future
   logins.
 - `POST /api/v1/admin/users/{id}/unban`
+- `POST /api/v1/admin/users/{id}/mfa-reset` — removes a target account's
+  MFA credential and recovery codes entirely, forcing re-enrollment on its
+  next login. This is the recovery path when an account with a
+  MFA-required role loses its device/secret: it cannot re-enroll itself
+  without first logging in, and it cannot log in without MFA, so an
+  administrator must clear the credential first. Records a
+  `MFA_RESET_BY_ADMIN` audit event.
 - `DELETE /api/v1/admin/users/{id}` — **soft delete**: marks the account
   `deleted_at` and revokes all of its active sessions rather than removing
   the row, so past `searches`/`verification_events`/`audit_events` rows

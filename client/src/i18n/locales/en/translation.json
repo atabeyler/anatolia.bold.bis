@@ -55,6 +55,18 @@
       "submit": "Set new password",
       "success": "Your password has been reset. You can now sign in with your new password.",
       "mismatch": "The passwords do not match."
+    },
+    "mfa": {
+      "challengeIntro": "Enter the 6-digit code from your authenticator app, or a recovery code.",
+      "enrollIntro": "Your role requires multi-factor authentication. Add the key below to an authenticator app, then enter the 6-digit code it generates.",
+      "manualEntryKey": "Manual entry key",
+      "codeLabel": "Verification code",
+      "verifyCode": "Verify",
+      "recoveryCodesTitle": "Save your recovery codes",
+      "recoveryCodesIntro": "Each code can be used once to sign in if you lose access to your authenticator app. Store them somewhere safe — they will not be shown again.",
+      "recoveryCodesWarning": "This is the only time these codes will be displayed.",
+      "recoveryCodesAcknowledge": "I have saved these codes",
+      "disabled": "Multi-factor authentication has been disabled on your account."
     }
   },
   "errors": {
@@ -75,7 +87,10 @@
     "forbidden": "You do not have permission to do that.",
     "lastAdminProtected": "This is the last active system administrator account and cannot be banned or deleted.",
     "notFound": "Not found.",
-    "internal": "Something went wrong. Please try again."
+    "internal": "Something went wrong. Please try again.",
+    "invalidMfaCode": "That code is invalid or has expired. Please try again.",
+    "mfaEnrollmentNotStarted": "Start MFA enrollment before confirming a code.",
+    "mfaNotEnabled": "Multi-factor authentication is not enabled on this account."
   },
   "settings": {
     "openLabel": "Settings",
@@ -157,7 +172,8 @@
       "previous": "Previous",
       "next": "Next",
       "pageOf": "Page {{page}} of {{totalPages}}"
-    }
+    },
+    "mfaResetComplete": "Multi-factor authentication has been reset for this account."
   },
   "search": {
     "subtitle": "BIOMETRIC SEARCH",

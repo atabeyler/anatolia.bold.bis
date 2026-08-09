@@ -3,108 +3,683 @@
   "info": {
     "title": "Anatolia B.I.S. API",
     "version": "1.0.0",
-    "description": "Machine-readable companion to API.md. See API.md for full prose documentation (request/response shapes, rate limits, error codes) — this file exists primarily so server/tests/openapi_drift.rs can catch a route that was added to, or removed from, server/src/routes/mod.rs without a matching documentation update. Kept intentionally lightweight rather than exhaustively typed."
+    "description": "Machine-readable companion to API.md. See API.md for full prose documentation (request/response shapes, rate limits, error codes) \u2014 this file exists primarily so server/tests/openapi_drift.rs can catch a route that was added to, or removed from, server/src/routes/mod.rs without a matching documentation update. Kept intentionally lightweight rather than exhaustively typed."
   },
   "paths": {
     "/api/health": {
-      "get": { "summary": "Liveness check", "responses": { "200": { "description": "OK" } } }
+      "get": {
+        "summary": "Liveness check",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
     },
     "/api/health/ready": {
-      "get": { "summary": "Readiness check (touches the database)", "responses": { "200": { "description": "Ready" }, "503": { "description": "Not ready" } } }
+      "get": {
+        "summary": "Readiness check (touches the database)",
+        "responses": {
+          "200": {
+            "description": "Ready"
+          },
+          "503": {
+            "description": "Not ready"
+          }
+        }
+      }
     },
     "/api/v1/users/me": {
-      "get": { "summary": "Caller's own public profile", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "401": { "description": "Unauthorized" } } }
+      "get": {
+        "summary": "Caller's own public profile",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
     },
     "/api/v1/audit": {
-      "get": { "summary": "Paginated, filtered audit trail (AUDITOR/SECURITY_ADMIN/SYSTEM_ADMIN)", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" } } }
+      "get": {
+        "summary": "Paginated, filtered audit trail (AUDITOR/SECURITY_ADMIN/SYSTEM_ADMIN)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
     },
     "/api/v1/auth/register": {
-      "post": { "summary": "Register a new pending account", "responses": { "201": { "description": "Created" }, "409": { "description": "Conflict" } } }
+      "post": {
+        "summary": "Register a new pending account",
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        }
+      }
     },
     "/api/v1/auth/login": {
-      "post": { "summary": "Login, issues access token + refresh cookie", "responses": { "200": { "description": "OK" }, "401": { "description": "Invalid credentials" }, "403": { "description": "Banned or not approved" } } }
+      "post": {
+        "summary": "Login, issues access token + refresh cookie",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          },
+          "403": {
+            "description": "Banned or not approved"
+          }
+        }
+      }
     },
     "/api/v1/auth/refresh": {
-      "post": { "summary": "Rotate refresh cookie, issue new access token", "responses": { "200": { "description": "OK" }, "401": { "description": "Unauthorized" } } }
+      "post": {
+        "summary": "Rotate refresh cookie, issue new access token",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
     },
     "/api/v1/auth/forgot-password": {
-      "post": { "summary": "Request a password-reset email", "responses": { "200": { "description": "OK (always, to avoid enumeration)" } } }
+      "post": {
+        "summary": "Request a password-reset email",
+        "responses": {
+          "200": {
+            "description": "OK (always, to avoid enumeration)"
+          }
+        }
+      }
     },
     "/api/v1/auth/reset-password": {
-      "post": { "summary": "Complete a self-service password reset", "responses": { "200": { "description": "OK" }, "400": { "description": "Invalid token or password" } } }
+      "post": {
+        "summary": "Complete a self-service password reset",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Invalid token or password"
+          }
+        }
+      }
     },
     "/api/v1/auth/logout": {
-      "post": { "summary": "Revoke the current session", "responses": { "200": { "description": "OK" } } }
+      "post": {
+        "summary": "Revoke the current session",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
     },
     "/api/v1/auth/logout-all": {
-      "post": { "summary": "Revoke every session for the caller", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } }
+      "post": {
+        "summary": "Revoke every session for the caller",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
     },
     "/api/v1/auth/registration-status/{trackingToken}": {
-      "get": { "summary": "Poll registration status by tracking token", "responses": { "200": { "description": "OK" } } }
+      "get": {
+        "summary": "Poll registration status by tracking token",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
     },
     "/api/v1/admin/seed-admin": {
-      "post": { "summary": "One-time bootstrap of the first SYSTEM_ADMIN", "responses": { "200": { "description": "Already seeded" }, "201": { "description": "Created" }, "403": { "description": "Self-disabled" } } }
+      "post": {
+        "summary": "One-time bootstrap of the first SYSTEM_ADMIN",
+        "responses": {
+          "200": {
+            "description": "Already seeded"
+          },
+          "201": {
+            "description": "Created"
+          },
+          "403": {
+            "description": "Self-disabled"
+          }
+        }
+      }
     },
     "/api/v1/admin/users": {
-      "get": { "summary": "Paginated user list (masked national IDs)", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" } } },
-      "post": { "summary": "Admin-creates a user directly", "security": [{ "bearerAuth": [] }], "responses": { "201": { "description": "Created" }, "403": { "description": "Forbidden" }, "409": { "description": "Conflict" } } }
+      "get": {
+        "summary": "Paginated user list (masked national IDs)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      },
+      "post": {
+        "summary": "Admin-creates a user directly",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        }
+      }
     },
     "/api/v1/admin/users/{id}": {
-      "patch": { "summary": "Edit an account's profile fields / reset password", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" }, "409": { "description": "Conflict" } } },
-      "delete": { "summary": "Soft-delete an account", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "404": { "description": "Not found" }, "409": { "description": "Last-admin protected" } } }
+      "patch": {
+        "summary": "Edit an account's profile fields / reset password",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Soft-delete an account",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Last-admin protected"
+          }
+        }
+      }
     },
     "/api/v1/admin/users/{id}/approve": {
-      "post": { "summary": "Approve a pending registration", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" } } }
+      "post": {
+        "summary": "Approve a pending registration",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
     },
     "/api/v1/admin/users/{id}/reject": {
-      "post": { "summary": "Delete a pending registration", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" } } }
+      "post": {
+        "summary": "Delete a pending registration",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
     },
     "/api/v1/admin/users/{id}/ban": {
-      "post": { "summary": "Ban a user and revoke all sessions", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" }, "409": { "description": "Last-admin protected" } } }
+      "post": {
+        "summary": "Ban a user and revoke all sessions",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "409": {
+            "description": "Last-admin protected"
+          }
+        }
+      }
     },
     "/api/v1/admin/users/{id}/unban": {
-      "post": { "summary": "Lift a ban", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" } } }
+      "post": {
+        "summary": "Lift a ban",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
     },
     "/api/v1/admin/review/{token}": {
-      "get": { "summary": "HTML approve/reject page for a registration-notification email link", "responses": { "200": { "description": "OK (HTML)" } } }
+      "get": {
+        "summary": "HTML approve/reject page for a registration-notification email link",
+        "responses": {
+          "200": {
+            "description": "OK (HTML)"
+          }
+        }
+      }
     },
     "/api/v1/admin/quick-approve/{token}": {
-      "post": { "summary": "Consume the review page's approve action", "responses": { "200": { "description": "OK (HTML)" } } }
+      "post": {
+        "summary": "Consume the review page's approve action",
+        "responses": {
+          "200": {
+            "description": "OK (HTML)"
+          }
+        }
+      }
     },
     "/api/v1/admin/quick-reject/{token}": {
-      "post": { "summary": "Consume the review page's reject action", "responses": { "200": { "description": "OK (HTML)" } } }
+      "post": {
+        "summary": "Consume the review page's reject action",
+        "responses": {
+          "200": {
+            "description": "OK (HTML)"
+          }
+        }
+      }
     },
     "/api/v1/search/face": {
-      "post": { "summary": "Submit a probe image, get ranked scored candidates", "security": [{ "bearerAuth": [] }], "requestBody": { "content": { "multipart/form-data": { "schema": { "type": "object" } } } }, "responses": { "200": { "description": "OK" }, "400": { "description": "Validation error" }, "403": { "description": "Forbidden" } } }
+      "post": {
+        "summary": "Submit a probe image, get ranked scored candidates",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
     },
     "/api/v1/search": {
-      "get": { "summary": "Paginated search history", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" } } }
+      "get": {
+        "summary": "Paginated search history",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
     },
     "/api/v1/search/{searchId}": {
-      "get": { "summary": "One search's metadata", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" }, "404": { "description": "Not found" } } }
+      "get": {
+        "summary": "One search's metadata",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
     },
     "/api/v1/search/{searchId}/candidates": {
-      "get": { "summary": "A search's ranked candidates", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" } } }
+      "get": {
+        "summary": "A search's ranked candidates",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
     },
     "/api/v1/search/{searchId}/candidates/{candidateId}/history": {
-      "get": { "summary": "Full immutable review history for one candidate within one search", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" } } }
+      "get": {
+        "summary": "Full immutable review history for one candidate within one search",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
     },
     "/api/v1/candidates/{candidateId}": {
-      "get": { "summary": "A candidate's static details", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" }, "404": { "description": "Not found" } } }
+      "get": {
+        "summary": "A candidate's static details",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
     },
     "/api/v1/candidates/{candidateId}/verify": {
-      "post": { "summary": "Record a confirm decision (REVIEWER/SECURITY_ADMIN/SYSTEM_ADMIN)", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" }, "404": { "description": "Not found" } } }
+      "post": {
+        "summary": "Record a confirm decision (REVIEWER/SECURITY_ADMIN/SYSTEM_ADMIN)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
     },
     "/api/v1/candidates/{candidateId}/reject": {
-      "post": { "summary": "Record a reject decision (REVIEWER/SECURITY_ADMIN/SYSTEM_ADMIN)", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" }, "404": { "description": "Not found" } } }
+      "post": {
+        "summary": "Record a reject decision (REVIEWER/SECURITY_ADMIN/SYSTEM_ADMIN)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
     },
     "/api/v1/candidates/{candidateId}/inconclusive": {
-      "post": { "summary": "Record an inconclusive decision (REVIEWER/SECURITY_ADMIN/SYSTEM_ADMIN)", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" }, "403": { "description": "Forbidden" }, "404": { "description": "Not found" } } }
+      "post": {
+        "summary": "Record an inconclusive decision (REVIEWER/SECURITY_ADMIN/SYSTEM_ADMIN)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/enroll": {
+      "post": {
+        "summary": "Begin voluntary TOTP MFA enrollment for the caller",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pending TOTP secret + otpauth URL"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/enroll/confirm": {
+      "post": {
+        "summary": "Confirm voluntary TOTP MFA enrollment with a code",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Enrollment confirmed; returns one-time recovery codes"
+          },
+          "401": {
+            "description": "Invalid code"
+          },
+          "409": {
+            "description": "Enrollment was never started"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/disable": {
+      "post": {
+        "summary": "Disable MFA on the caller's own account (requires password + code)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Invalid password or code"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/challenge/enroll": {
+      "post": {
+        "summary": "Begin mandatory login-time MFA enrollment (role requires MFA, none enrolled yet)",
+        "responses": {
+          "200": {
+            "description": "Pending TOTP secret + otpauth URL"
+          },
+          "401": {
+            "description": "Invalid or expired MFA challenge token"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/challenge/enroll/confirm": {
+      "post": {
+        "summary": "Complete mandatory login-time MFA enrollment and finish login",
+        "responses": {
+          "200": {
+            "description": "Login completed; returns access token + one-time recovery codes"
+          },
+          "401": {
+            "description": "Invalid code or challenge token"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/challenge/verify": {
+      "post": {
+        "summary": "Complete login for an account with MFA already enabled",
+        "responses": {
+          "200": {
+            "description": "Login completed; returns access token"
+          },
+          "401": {
+            "description": "Invalid code or challenge token"
+          },
+          "429": {
+            "description": "Too many attempts"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{id}/mfa-reset": {
+      "post": {
+        "summary": "Administratively reset (remove) a target account's MFA credential",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
     }
   },
   "components": {
     "securitySchemes": {
-      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" }
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
     }
   }
 }

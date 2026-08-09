@@ -44,8 +44,13 @@ Implemented incrementally. Nothing below Phase 3.7 is implemented yet.
       addition to the existing per-account window)
 - [x] CORS method list includes `PATCH`; CSP and Permissions-Policy
       headers; HSTS restricted to production
-- [ ] MFA, organization/unit-scoped authorization (tracked separately —
-      see the milestones below)
+- [x] TOTP MFA (`server/src/mfa.rs`), mandatory by default for
+      `SYSTEM_ADMIN`/`SECURITY_ADMIN`/`REVIEWER` (`MFA_REQUIRED_ROLES`),
+      voluntary for other roles; fail-closed login-time challenge, hashed
+      recovery codes, admin reset endpoint — see
+      `docs/SECURITY_ARCHITECTURE.md`
+- [ ] Organization/unit-scoped authorization (tracked separately — see the
+      milestones below)
 
 ## Phase 3.6 — Audit trail
 

@@ -55,6 +55,18 @@
       "submit": "Yeni şifreyi belirle",
       "success": "Şifreniz sıfırlandı. Artık yeni şifrenizle giriş yapabilirsiniz.",
       "mismatch": "Şifreler eşleşmiyor."
+    },
+    "mfa": {
+      "challengeIntro": "Kimlik doğrulama uygulamanızdaki 6 haneli kodu veya bir kurtarma kodunu girin.",
+      "enrollIntro": "Rolünüz çok faktörlü kimlik doğrulama gerektiriyor. Aşağıdaki anahtarı bir kimlik doğrulama uygulamasına ekleyin, ardından uygulamanın oluşturduğu 6 haneli kodu girin.",
+      "manualEntryKey": "Manuel giriş anahtarı",
+      "codeLabel": "Doğrulama kodu",
+      "verifyCode": "Doğrula",
+      "recoveryCodesTitle": "Kurtarma kodlarınızı kaydedin",
+      "recoveryCodesIntro": "Kimlik doğrulama uygulamanıza erişiminizi kaybederseniz her kod bir kez kullanılarak giriş yapmanızı sağlar. Bu kodları güvenli bir yerde saklayın — tekrar gösterilmeyecektir.",
+      "recoveryCodesWarning": "Bu kodlar yalnızca bu kez gösterilmektedir.",
+      "recoveryCodesAcknowledge": "Bu kodları kaydettim",
+      "disabled": "Hesabınızda çok faktörlü kimlik doğrulama devre dışı bırakıldı."
     }
   },
   "errors": {
@@ -75,7 +87,10 @@
     "forbidden": "Bu işlem için yetkiniz yok.",
     "lastAdminProtected": "Bu, son aktif sistem yöneticisi hesabıdır ve yasaklanamaz veya silinemez.",
     "notFound": "Bulunamadı.",
-    "internal": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
+    "internal": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
+    "invalidMfaCode": "Bu kod geçersiz veya süresi dolmuş. Lütfen tekrar deneyin.",
+    "mfaEnrollmentNotStarted": "Bir kodu onaylamadan önce MFA kaydına başlayın.",
+    "mfaNotEnabled": "Bu hesapta çok faktörlü kimlik doğrulama etkin değil."
   },
   "settings": {
     "openLabel": "Ayarlar",
@@ -157,7 +172,8 @@
       "previous": "Önceki",
       "next": "Sonraki",
       "pageOf": "Sayfa {{page}} / {{totalPages}}"
-    }
+    },
+    "mfaResetComplete": "Bu hesap için çok faktörlü kimlik doğrulama sıfırlandı."
   },
   "search": {
     "subtitle": "BİYOMETRİK ARAMA",

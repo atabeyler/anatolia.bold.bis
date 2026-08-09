@@ -32,6 +32,13 @@ pub mod action {
     pub const AUTH_PASSWORD_RESET_REQUESTED: &str = "AUTH_PASSWORD_RESET_REQUESTED";
     pub const AUTH_PASSWORD_RESET_COMPLETED: &str = "AUTH_PASSWORD_RESET_COMPLETED";
 
+    // MFA
+    pub const MFA_ENABLED: &str = "MFA_ENABLED";
+    pub const MFA_DISABLED: &str = "MFA_DISABLED";
+    pub const MFA_CHALLENGE_FAILED: &str = "MFA_CHALLENGE_FAILED";
+    pub const MFA_RECOVERY_CODE_USED: &str = "MFA_RECOVERY_CODE_USED";
+    pub const MFA_RESET_BY_ADMIN: &str = "MFA_RESET_BY_ADMIN";
+
     // Registration
     pub const REGISTRATION_CREATED: &str = "REGISTRATION_CREATED";
     pub const REGISTRATION_APPROVED: &str = "REGISTRATION_APPROVED";

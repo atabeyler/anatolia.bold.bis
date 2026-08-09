@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Logo } from './components/Logo';
 import { MenuOverlay } from './components/MenuOverlay';
+import { RecoveryCodesModal } from './components/RecoveryCodesModal';
 import { useAuth } from './features/auth/AuthContext';
 import { brandMark } from './lib/brand';
 import { AdminPage } from './pages/AdminPage';
@@ -18,7 +19,7 @@ type View = 'dashboard' | 'admin' | 'audit';
 
 function App() {
   const { t, i18n } = useTranslation();
-  const { status, user, logout } = useAuth();
+  const { status, user, logout, pendingRecoveryCodes, acknowledgeRecoveryCodes } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [view, setView] = useState<View | null>(null);
   const [resetToken, setResetToken] = useState<string | null>(
@@ -198,6 +199,9 @@ function App() {
       </footer>
 
       {menuOpen && <MenuOverlay onClose={() => setMenuOpen(false)} />}
+      {pendingRecoveryCodes && (
+        <RecoveryCodesModal codes={pendingRecoveryCodes} onAcknowledge={acknowledgeRecoveryCodes} />
+      )}
     </div>
   );
 }

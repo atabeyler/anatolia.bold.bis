@@ -168,12 +168,17 @@ Implemented controls:
 - **OpenAPI drift guard**: `docs/openapi.json` plus
   `server/tests/openapi_drift.rs`, which fails if a documented route stops
   matching a real one.
+- **TOTP multi-factor authentication**: `server/src/mfa.rs`, mandatory by
+  default for `SYSTEM_ADMIN`/`SECURITY_ADMIN`/`REVIEWER`
+  (`MFA_REQUIRED_ROLES`), voluntary for other roles. Fail-closed: no
+  access/refresh token pair is ever issued to an MFA-gated account without
+  MFA actually being satisfied first — see `docs/SECURITY_ARCHITECTURE.md`.
 
 ## Planned (see `docs/ROADMAP.md` and `docs/SECURITY_ARCHITECTURE.md`)
 
-MFA, organization-scoped authorization, and enterprise SSO are designed
-but not yet implemented. Do not assume any of them are active until this
-document is updated to say otherwise.
+Organization-scoped authorization and enterprise SSO are designed but not
+yet implemented. Do not assume either is active until this document is
+updated to say otherwise.
 
 ## Rules enforced in this repository
 

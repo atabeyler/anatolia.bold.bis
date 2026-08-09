@@ -17,6 +17,8 @@ use crate::ratelimit::{InMemoryRateLimiter, RateLimiterBackend};
 // (`crate::db::AuditEventRow`, etc.) don't need to change.
 mod audit;
 pub use audit::*;
+mod mfa;
+pub use mfa::*;
 
 #[derive(Clone)]
 pub enum DbBackend {
@@ -32,6 +34,7 @@ pub struct Secrets {
     pub jwt_secret: String,
     pub jwt_refresh_secret: String,
     pub approval_token_secret: String,
+    pub mfa_token_secret: String,
 }
 
 /// Search tuning resolved once at startup by `Config::from_env`.
@@ -47,6 +50,9 @@ pub struct AppState {
     pub rate_limiter: Arc<dyn RateLimiterBackend>,
     pub secrets: Arc<Secrets>,
     pub search_limits: Arc<SearchLimits>,
+    /// Roles that must have MFA enabled before they can complete login —
+    /// see `mfa.rs`. Configured via `MFA_REQUIRED_ROLES`.
+    pub mfa_required_roles: Arc<Vec<String>>,
 }
 
 impl AppState {
@@ -76,11 +82,13 @@ impl AppState {
                 jwt_secret: config.jwt_secret.clone(),
                 jwt_refresh_secret: config.jwt_refresh_secret.clone(),
                 approval_token_secret: config.approval_token_secret.clone(),
+                mfa_token_secret: config.mfa_token_secret.clone(),
             }),
             search_limits: Arc::new(SearchLimits {
                 default_top_k: config.search_default_top_k,
                 max_top_k: config.search_max_top_k,
             }),
+            mfa_required_roles: Arc::new(config.mfa_required_roles.clone()),
         })
     }
 
@@ -103,11 +111,19 @@ impl AppState {
                 jwt_secret: "test-access-secret-not-for-prod-use-only".to_string(),
                 jwt_refresh_secret: "test-refresh-secret-not-for-prod-use-only".to_string(),
                 approval_token_secret: "test-approval-secret-not-for-prod-use-only".to_string(),
+                mfa_token_secret: "test-mfa-secret-not-for-prod-use-only".to_string(),
             }),
             search_limits: Arc::new(SearchLimits {
                 default_top_k: 10,
                 max_top_k: 50,
             }),
+            // Empty by default so existing integration tests (most of
+            // which log in as SYSTEM_ADMIN/SECURITY_ADMIN/REVIEWER to
+            // exercise admin/audit/review endpoints) are not forced
+            // through MFA enrollment. `server/tests/mfa.rs` builds its own
+            // state with required roles set to exercise the mandatory
+            // flow directly.
+            mfa_required_roles: Arc::new(Vec::new()),
         }
     }
 }
@@ -494,6 +510,8 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                 .execute(pool)
                 .await?;
 
+            mfa::migrate_pg(pool).await?;
+
             seed_mock_candidates_pg(pool).await?;
         }
         DbBackend::Sqlite(pool) => {
@@ -739,6 +757,8 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             sqlx::query("CREATE INDEX IF NOT EXISTS idx_audit_events_case_reference ON audit_events (case_reference)")
                 .execute(pool)
                 .await?;
+
+            mfa::migrate_sqlite(pool).await?;
 
             seed_mock_candidates_sqlite(pool).await?;
         }

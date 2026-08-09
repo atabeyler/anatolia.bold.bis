@@ -260,11 +260,33 @@ what these controls defend against.
   already were, closing the one previously-deliberate exception noted
   under "Not yet implemented" below.
 
+- **Multi-factor authentication (TOTP)**: `server/src/mfa.rs`. RFC
+  6238-compliant TOTP, gated for `SYSTEM_ADMIN`/`SECURITY_ADMIN`/`REVIEWER`
+  by default (`MFA_REQUIRED_ROLES`), voluntary for every other role. An
+  account with MFA enabled never receives an access/refresh token pair
+  from `POST /api/v1/auth/login` directly — login instead returns a
+  short-lived, single-purpose challenge token (signed with its own
+  `MFA_TOKEN_SECRET`, distinct from the JWT/refresh/approval secrets) that
+  by itself grants no access. A required role with no enrollment yet
+  cannot obtain a session at all until enrollment is completed through
+  that same challenge-token flow — this is enforced server-side (no code
+  path skips it), not a frontend-only redirect. Recovery codes are
+  high-entropy, single-use, and stored hashed (never their raw value); the
+  TOTP secret itself is stored as-is (verification needs to recompute a
+  code from it) but is never returned by any route after enrollment is
+  confirmed, logged, or placed in an audit event. `MFA_ENABLED`,
+  `MFA_DISABLED`, `MFA_CHALLENGE_FAILED`, `MFA_RECOVERY_CODE_USED`, and
+  `MFA_RESET_BY_ADMIN` are recorded in the audit trail. An administrator
+  can reset (remove) a target account's MFA credential
+  (`POST /api/v1/admin/users/{id}/mfa-reset`) — the recovery path when a
+  MFA-required account loses its device, since it cannot self-recover
+  without first logging in.
+
 ## Not yet implemented
 
-MFA, organization/unit-scoped authorization, and enterprise SSO are
-planned (see `docs/ROADMAP.md`) but not present in the codebase yet. Do
-not assume any of them are active. National IDs are masked in every API
+Organization/unit-scoped authorization and enterprise SSO are planned
+(see `docs/ROADMAP.md`) but not present in the codebase yet. Do not
+assume either is active. National IDs are masked in every API
 response but are still stored in plaintext in the database;
 encryption-at-rest requires a key-management and existing-data migration
 decision the repository owner hasn't made yet (see item 32 in

@@ -62,7 +62,26 @@ eşleşme bu dosyanın sonunda listelidir.
    (`server/tests/password_reset.rs`, 3 test) ve frontend
    (`ResetPasswordPage`, `App.tsx` `resetToken` query-param yönlendirmesi, 6
    dilde i18n) tamamlandı ve doğrulandı.
-10. [ ] MFA altyapısı ekle — TOTP altyapısı **yapılmadı**.
+10. [x] MFA altyapısı ekle — TOTP tabanlı MFA eklendi (`server/src/mfa.rs`,
+    `server/src/db/mfa.rs`). Varsayılan olarak `SYSTEM_ADMIN`/
+    `SECURITY_ADMIN`/`REVIEWER` rolleri için zorunlu (`MFA_REQUIRED_ROLES`
+    ile yapılandırılabilir), diğer roller için gönüllü. Login akışı
+    MFA etkinse veya rol zorunlu kılıyorsa hiçbir zaman doğrudan session
+    vermiyor — kısa ömürlü, tek amaçlı bir challenge token (ayrı
+    `MFA_TOKEN_SECRET`) dönüyor; bu token tek başına hiçbir erişim
+    sağlamıyor. Recovery code'lar hash'li saklanıyor (`mfa_recovery_codes`),
+    TOTP secret hiçbir zaman loglanmıyor/audit'e yazılmıyor/enrollment
+    onaylandıktan sonra API'den dönmüyor. Admin reset endpoint'i
+    (`POST /api/v1/admin/users/{id}/mfa-reset`) eklendi. Backend
+    (`server/tests/mfa.rs`, 4 entegrasyon testi + `mfa.rs`/`config.rs`
+    birim testleri) ve frontend (login akışına gömülü challenge/enrollment
+    adımı, `RecoveryCodesModal`, 6 dilde çeviri) tamamlandı ve doğrulandı.
+    **Eksik kalan:** ayrı bir "hesap ayarları" ekranından gönüllü
+    enrollment/disable için frontend UI yok — backend endpoint'leri
+    (`/mfa/enroll`, `/mfa/enroll/confirm`, `/mfa/disable`) gerçek ve test
+    edilmiş, ancak henüz hiçbir sayfadan çağrılmıyor; bu oturumda bilinçli
+    olarak ertelendi (mevcut sayfalarda bir "hesap ayarları" konsepti henüz
+    yok, bunu eklemek ayrı bir UI çalışması).
 11. [~] Role değişiminde JWT stale yetki sorunu — ban anında session revoke
     var (Milestone A). Role **downgrade** anında session revoke / auth_version
     increment **yapılmadı**. Bu oturumda tekrar değerlendirildi ve

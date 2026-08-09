@@ -14,9 +14,14 @@ type Mode = 'login' | 'register' | 'forgot';
 const USER_CODE_PATTERN = /^[A-Z0-9]{4,20}$/;
 const NATIONAL_ID_PATTERN = /^[0-9]{11}$/;
 
+type MfaStep =
+  | { kind: 'challenge'; mfaToken: string }
+  | { kind: 'enroll'; mfaToken: string; secret: string; otpauthUrl: string };
+
 export function LoginPage() {
   const { t, i18n } = useTranslation();
-  const { login, register, rememberedUserCode } = useAuth();
+  const { login, completeMfaChallenge, beginMfaEnrollmentChallenge, completeMfaEnrollmentChallenge, register, rememberedUserCode } =
+    useAuth();
   const geolocation = useGeolocation();
 
   const [mode, setMode] = useState<Mode>('login');
@@ -34,6 +39,8 @@ export function LoginPage() {
   const [approvedMessage, setApprovedMessage] = useState(false);
   const [forgotIdentifier, setForgotIdentifier] = useState('');
   const [forgotSuccess, setForgotSuccess] = useState(false);
+  const [mfaStep, setMfaStep] = useState<MfaStep | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -66,8 +73,20 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       if (mode === 'login') {
-        await login(userCode.trim().toUpperCase(), password, rememberMe);
-        playChimeIfEnabled();
+        const step = await login(userCode.trim().toUpperCase(), password, rememberMe);
+        if (step.type === 'signedIn') {
+          playChimeIfEnabled();
+        } else if (step.type === 'mfaChallenge') {
+          setMfaStep({ kind: 'challenge', mfaToken: step.mfaToken });
+        } else {
+          const enrollment = await beginMfaEnrollmentChallenge(step.mfaToken);
+          setMfaStep({
+            kind: 'enroll',
+            mfaToken: step.mfaToken,
+            secret: enrollment.secret,
+            otpauthUrl: enrollment.otpauthUrl,
+          });
+        }
       } else if (mode === 'register') {
         const code = userCode.trim().toUpperCase();
         const trackingToken = await register({ firstName, lastName, nationalId, email, password, userCode: code });
@@ -85,6 +104,79 @@ export function LoginPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleMfaSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (!mfaStep) {
+      return;
+    }
+    setErrorKey(null);
+    setSubmitting(true);
+    try {
+      if (mfaStep.kind === 'challenge') {
+        await completeMfaChallenge(mfaStep.mfaToken, mfaCode.trim(), rememberMe);
+      } else {
+        await completeMfaEnrollmentChallenge(mfaStep.mfaToken, mfaCode.trim(), rememberMe);
+      }
+      playChimeIfEnabled();
+      setMfaStep(null);
+      setMfaCode('');
+    } catch (err) {
+      setErrorKey(apiErrorMessageKey(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (mfaStep) {
+    return (
+      <div className="auth-shell">
+        <Logo />
+        <div className="auth-brand">
+          <h1 className="auth-brand__title">{brandMark(i18n.resolvedLanguage)}</h1>
+        </div>
+        <form className="auth-panel" onSubmit={handleMfaSubmit}>
+          <p className="auth-mfa-intro">
+            {mfaStep.kind === 'challenge' ? t('auth.mfa.challengeIntro') : t('auth.mfa.enrollIntro')}
+          </p>
+          {mfaStep.kind === 'enroll' && (
+            <div className="auth-mfa-enroll">
+              <label className="auth-field">
+                <span>{t('auth.mfa.manualEntryKey')}</span>
+                <input value={mfaStep.secret} readOnly onFocus={(e) => e.currentTarget.select()} />
+              </label>
+              <small className="auth-mfa-enroll__url">{mfaStep.otpauthUrl}</small>
+            </div>
+          )}
+          <label className="auth-field">
+            <span>{t('auth.mfa.codeLabel')}</span>
+            <input
+              value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value.replace(/[^0-9A-Za-z-]/g, ''))}
+              maxLength={11}
+              autoFocus
+              required
+            />
+          </label>
+          {errorKey && <p className="auth-message auth-message--error">{t(errorKey)}</p>}
+          <button type="submit" className="auth-submit" disabled={submitting}>
+            {submitting ? t('auth.submitting') : t('auth.mfa.verifyCode')}
+          </button>
+          <button
+            type="button"
+            className="auth-link-button"
+            onClick={() => {
+              setMfaStep(null);
+              setMfaCode('');
+              setErrorKey(null);
+            }}
+          >
+            {t('auth.backToLogin')}
+          </button>
+        </form>
+      </div>
+    );
   }
 
   const locationLine =

@@ -55,6 +55,18 @@
       "submit": "Neues Passwort festlegen",
       "success": "Ihr Passwort wurde zurückgesetzt. Sie können sich jetzt mit Ihrem neuen Passwort anmelden.",
       "mismatch": "Die Passwörter stimmen nicht überein."
+    },
+    "mfa": {
+      "challengeIntro": "Geben Sie den 6-stelligen Code aus Ihrer Authenticator-App oder einen Wiederherstellungscode ein.",
+      "enrollIntro": "Ihre Rolle erfordert eine Multi-Faktor-Authentifizierung. Fügen Sie den folgenden Schlüssel in eine Authenticator-App ein und geben Sie dann den generierten 6-stelligen Code ein.",
+      "manualEntryKey": "Manueller Eingabeschlüssel",
+      "codeLabel": "Bestätigungscode",
+      "verifyCode": "Bestätigen",
+      "recoveryCodesTitle": "Speichern Sie Ihre Wiederherstellungscodes",
+      "recoveryCodesIntro": "Jeder Code kann einmal verwendet werden, um sich anzumelden, falls Sie den Zugriff auf Ihre Authenticator-App verlieren. Bewahren Sie sie sicher auf — sie werden nicht erneut angezeigt.",
+      "recoveryCodesWarning": "Diese Codes werden nur dieses eine Mal angezeigt.",
+      "recoveryCodesAcknowledge": "Ich habe diese Codes gespeichert",
+      "disabled": "Die Multi-Faktor-Authentifizierung wurde für Ihr Konto deaktiviert."
     }
   },
   "errors": {
@@ -75,7 +87,10 @@
     "forbidden": "Sie sind dazu nicht berechtigt.",
     "lastAdminProtected": "Dies ist das letzte aktive Systemadministrator-Konto und kann nicht gesperrt oder gelöscht werden.",
     "notFound": "Nicht gefunden.",
-    "internal": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut."
+    "internal": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
+    "invalidMfaCode": "Dieser Code ist ungültig oder abgelaufen. Bitte versuchen Sie es erneut.",
+    "mfaEnrollmentNotStarted": "Starten Sie die MFA-Registrierung, bevor Sie einen Code bestätigen.",
+    "mfaNotEnabled": "Die Multi-Faktor-Authentifizierung ist für dieses Konto nicht aktiviert."
   },
   "settings": {
     "openLabel": "Einstellungen",
@@ -157,7 +172,8 @@
       "previous": "Zurück",
       "next": "Weiter",
       "pageOf": "Seite {{page}} von {{totalPages}}"
-    }
+    },
+    "mfaResetComplete": "Die Multi-Faktor-Authentifizierung wurde für dieses Konto zurückgesetzt."
   },
   "search": {
     "subtitle": "BIOMETRISCHE SUCHE",

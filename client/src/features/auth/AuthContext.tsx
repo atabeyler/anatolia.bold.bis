@@ -3,15 +3,33 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { setAccessToken } from '../../services/apiClient';
 import { createAuthBroadcastChannel, isSignedOutMessage, postSignedOut } from '../../services/authBroadcast';
 import * as authClient from '../../services/authClient';
-import type { PublicUser, RegisterPayload } from '../../services/authClient';
+import { isMfaChallenge, isMfaEnrollmentRequired } from '../../services/authClient';
+import type { LoginOutcome, MfaEnrollmentStart, PublicUser, RegisterPayload } from '../../services/authClient';
 
 const REMEMBERED_USER_CODE_KEY = 'anatolia_remembered_user_code';
+
+// What the caller (LoginPage) must do next after `login()` resolves —
+// either the session is already established, or an MFA step must be
+// completed first (see server/src/mfa.rs for why no session is issued
+// until then).
+export type LoginStep =
+  | { type: 'signedIn' }
+  | { type: 'mfaChallenge'; mfaToken: string }
+  | { type: 'mfaEnrollmentRequired'; mfaToken: string };
 
 interface AuthContextValue {
   user: PublicUser | null;
   status: 'loading' | 'signed-out' | 'signed-in';
   rememberedUserCode: string;
-  login: (userCode: string, password: string, rememberMe: boolean) => Promise<void>;
+  login: (userCode: string, password: string, rememberMe: boolean) => Promise<LoginStep>;
+  completeMfaChallenge: (mfaToken: string, code: string, rememberMe: boolean) => Promise<void>;
+  beginMfaEnrollmentChallenge: (mfaToken: string) => Promise<MfaEnrollmentStart>;
+  completeMfaEnrollmentChallenge: (mfaToken: string, code: string, rememberMe: boolean) => Promise<void>;
+  // Shown once, immediately after MFA enrollment completes — see the
+  // `RecoveryCodesModal` rendered in App.tsx. Cleared by
+  // `acknowledgeRecoveryCodes` once the operator confirms they were saved.
+  pendingRecoveryCodes: string[] | null;
+  acknowledgeRecoveryCodes: () => void;
   register: (payload: RegisterPayload) => Promise<string>;
   logout: () => Promise<void>;
   logoutAll: () => Promise<void>;
@@ -25,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [rememberedUserCode, setRememberedUserCode] = useState(
     () => localStorage.getItem(REMEMBERED_USER_CODE_KEY) ?? '',
   );
+  const [pendingRecoveryCodes, setPendingRecoveryCodes] = useState<string[] | null>(null);
   const broadcastRef = useRef<BroadcastChannel | null>(null);
 
   useEffect(() => {
@@ -66,19 +85,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
-  const login = useCallback(async (userCode: string, password: string, rememberMe: boolean) => {
-    const { accessToken, user: loggedInUser } = await authClient.login(userCode, password);
+  const applySession = useCallback((accessToken: string, sessionUser: PublicUser, rememberMe: boolean) => {
     setAccessToken(accessToken);
-    setUser(loggedInUser);
+    setUser(sessionUser);
     setStatus('signed-in');
     if (rememberMe) {
-      localStorage.setItem(REMEMBERED_USER_CODE_KEY, loggedInUser.userCode);
-      setRememberedUserCode(loggedInUser.userCode);
+      localStorage.setItem(REMEMBERED_USER_CODE_KEY, sessionUser.userCode);
+      setRememberedUserCode(sessionUser.userCode);
     } else {
       localStorage.removeItem(REMEMBERED_USER_CODE_KEY);
       setRememberedUserCode('');
     }
   }, []);
+
+  const login = useCallback(
+    async (userCode: string, password: string, rememberMe: boolean): Promise<LoginStep> => {
+      const outcome: LoginOutcome = await authClient.login(userCode, password);
+      if (isMfaChallenge(outcome)) {
+        return { type: 'mfaChallenge', mfaToken: outcome.mfaToken };
+      }
+      if (isMfaEnrollmentRequired(outcome)) {
+        return { type: 'mfaEnrollmentRequired', mfaToken: outcome.mfaToken };
+      }
+      applySession(outcome.accessToken, outcome.user, rememberMe);
+      return { type: 'signedIn' };
+    },
+    [applySession],
+  );
+
+  const completeMfaChallenge = useCallback(
+    async (mfaToken: string, code: string, rememberMe: boolean) => {
+      const { accessToken, user: sessionUser } = await authClient.mfaChallengeVerify(mfaToken, code);
+      applySession(accessToken, sessionUser, rememberMe);
+    },
+    [applySession],
+  );
+
+  const beginMfaEnrollmentChallenge = useCallback(
+    async (mfaToken: string) => authClient.mfaChallengeEnroll(mfaToken),
+    [],
+  );
+
+  const completeMfaEnrollmentChallenge = useCallback(
+    async (mfaToken: string, code: string, rememberMe: boolean) => {
+      const { accessToken, user: sessionUser, recoveryCodes } = await authClient.mfaChallengeEnrollConfirm(
+        mfaToken,
+        code,
+      );
+      setPendingRecoveryCodes(recoveryCodes ?? []);
+      applySession(accessToken, sessionUser, rememberMe);
+    },
+    [applySession],
+  );
+
+  const acknowledgeRecoveryCodes = useCallback(() => setPendingRecoveryCodes(null), []);
 
   const register = useCallback(async (payload: RegisterPayload) => authClient.register(payload), []);
 
@@ -99,8 +159,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, status, rememberedUserCode, login, register, logout, logoutAll }),
-    [user, status, rememberedUserCode, login, register, logout, logoutAll],
+    () => ({
+      user,
+      status,
+      rememberedUserCode,
+      login,
+      completeMfaChallenge,
+      beginMfaEnrollmentChallenge,
+      completeMfaEnrollmentChallenge,
+      pendingRecoveryCodes,
+      acknowledgeRecoveryCodes,
+      register,
+      logout,
+      logoutAll,
+    }),
+    [
+      user,
+      status,
+      rememberedUserCode,
+      login,
+      completeMfaChallenge,
+      beginMfaEnrollmentChallenge,
+      completeMfaEnrollmentChallenge,
+      pendingRecoveryCodes,
+      acknowledgeRecoveryCodes,
+      register,
+      logout,
+      logoutAll,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

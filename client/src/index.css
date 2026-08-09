@@ -646,6 +646,34 @@ body::before {
   text-underline-offset: 2px;
 }
 
+.auth-mfa-intro {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
+}
+
+.auth-mfa-enroll__url {
+  word-break: break-all;
+  color: var(--color-text-muted);
+}
+
+.mfa-recovery-codes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.4rem;
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  list-style: none;
+  font-family: var(--font-mono, monospace);
+  background: rgba(79, 110, 247, 0.08);
+  border: 1px solid rgba(79, 110, 247, 0.3);
+}
+
+.mfa-recovery-codes__warning {
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
 .auth-message {
   margin: 0;
   padding: 0.6rem 0.75rem;

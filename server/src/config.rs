@@ -11,6 +11,11 @@ const MIN_SECRET_BYTES: usize = 32;
 const DEV_JWT_SECRET: &str = "anatolia-bis-local-access-secret-dev-only-not-for-prod";
 const DEV_JWT_REFRESH_SECRET: &str = "anatolia-bis-local-refresh-secret-dev-only-not-for-prod";
 const DEV_APPROVAL_TOKEN_SECRET: &str = "anatolia-bis-local-approval-secret-dev-only-not-for-prod";
+const DEV_MFA_TOKEN_SECRET: &str = "anatolia-bis-local-mfa-secret-dev-only-not-for-prod";
+
+/// Roles required to have MFA enabled before login can complete, when
+/// `MFA_REQUIRED_ROLES` is unset — see `mfa.rs`.
+const DEFAULT_MFA_REQUIRED_ROLES: &[&str] = &["SYSTEM_ADMIN", "SECURITY_ADMIN", "REVIEWER"];
 
 /// Fallback when `SEARCH_DEFAULT_TOP_K` is unset.
 const DEFAULT_SEARCH_DEFAULT_TOP_K: i64 = 10;
@@ -25,12 +30,19 @@ pub struct Config {
     pub jwt_secret: String,
     pub jwt_refresh_secret: String,
     pub approval_token_secret: String,
+    pub mfa_token_secret: String,
     pub search_default_top_k: i64,
     pub search_max_top_k: i64,
     /// Which `BiometricProvider` implementation to run — see
     /// `biometric.rs`. Only `"mock"` exists today; any other value is a
     /// hard startup failure until a real provider ships.
     pub biometric_provider: String,
+    /// Roles that must enroll in TOTP MFA before they can complete login —
+    /// see `mfa.rs`. `MFA_REQUIRED_ROLES` (comma-separated); defaults to
+    /// `SYSTEM_ADMIN,SECURITY_ADMIN,REVIEWER`. An empty value
+    /// (`MFA_REQUIRED_ROLES=`) disables mandatory MFA entirely — voluntary
+    /// enrollment remains available to every role regardless.
+    pub mfa_required_roles: Vec<String>,
 }
 
 /// True when this process should apply production security posture:
@@ -81,6 +93,20 @@ impl Config {
             DEV_APPROVAL_TOKEN_SECRET,
             production,
         );
+        let mfa_token_secret = resolve_secret("MFA_TOKEN_SECRET", DEV_MFA_TOKEN_SECRET, production);
+
+        let mfa_required_roles = match env::var("MFA_REQUIRED_ROLES") {
+            Ok(value) => value
+                .split(',')
+                .map(str::trim)
+                .filter(|role| !role.is_empty())
+                .map(str::to_string)
+                .collect(),
+            Err(_) => DEFAULT_MFA_REQUIRED_ROLES
+                .iter()
+                .map(|role| role.to_string())
+                .collect(),
+        };
 
         let search_max_top_k = env::var("SEARCH_MAX_TOP_K")
             .ok()
@@ -102,9 +128,11 @@ impl Config {
             jwt_secret,
             jwt_refresh_secret,
             approval_token_secret,
+            mfa_token_secret,
             search_default_top_k,
             search_max_top_k,
             biometric_provider,
+            mfa_required_roles,
         }
     }
 }
@@ -250,5 +278,34 @@ mod tests {
         let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
         env::set_var("BIOMETRIC_PROVIDER", "onnx");
         resolve_biometric_provider(false);
+    }
+
+    #[test]
+    fn mfa_required_roles_defaults_to_the_three_privileged_roles() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        env::remove_var("MFA_REQUIRED_ROLES");
+        let config = Config::from_env();
+        assert_eq!(
+            config.mfa_required_roles,
+            vec!["SYSTEM_ADMIN", "SECURITY_ADMIN", "REVIEWER"]
+        );
+    }
+
+    #[test]
+    fn mfa_required_roles_parses_a_custom_comma_separated_list() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        env::set_var("MFA_REQUIRED_ROLES", "SYSTEM_ADMIN, OPERATOR");
+        let config = Config::from_env();
+        env::remove_var("MFA_REQUIRED_ROLES");
+        assert_eq!(config.mfa_required_roles, vec!["SYSTEM_ADMIN", "OPERATOR"]);
+    }
+
+    #[test]
+    fn mfa_required_roles_empty_value_disables_mandatory_mfa() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        env::set_var("MFA_REQUIRED_ROLES", "");
+        let config = Config::from_env();
+        env::remove_var("MFA_REQUIRED_ROLES");
+        assert!(config.mfa_required_roles.is_empty());
     }
 }
