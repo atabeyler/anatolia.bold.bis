@@ -4,6 +4,13 @@ Notable changes to Anatolia B.I.S., newest first.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-09
+
+- Pinned the logo/brand/subtitle/session-actions header and the footer to
+  the viewport on signed-in screens (Dashboard, Management panel), instead
+  of letting them scroll away with page content. Added a compact variant
+  of the animated logo mark for the persistent top bar.
+
 ## [0.2.0] - 2026-08-09
 
 - Restricted the search/candidate view endpoints (`GET /api/v1/search`,
