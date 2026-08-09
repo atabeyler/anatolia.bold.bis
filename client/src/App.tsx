@@ -112,9 +112,6 @@ function App() {
             ) : (
               user && (
                 <div className="app-header__session">
-                  <span className="app-header__welcome">
-                    {t('auth.welcomeBack', { name: `${user.firstName} ${user.lastName}` })}
-                  </span>
                   {isAdmin && (
                     <button type="button" onClick={() => setView('admin')} aria-label={t('admin.openLabel')}>
                       <span aria-hidden="true">⚙</span> <span className="topbar-label">{t('admin.openLabel')}</span>

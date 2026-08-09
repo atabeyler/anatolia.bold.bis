@@ -829,8 +829,9 @@ body::before {
   font-family: var(--font-heading);
   font-weight: 800;
   font-size: var(--text-lg);
-  letter-spacing: var(--tracking-wide);
-  color: var(--color-text);
+  letter-spacing: var(--tracking-widest);
+  color: var(--color-success);
+  text-shadow: 0 0 16px rgba(0, 232, 135, 0.6), 0 0 32px rgba(0, 232, 135, 0.3);
 }
 
 .app-topbar__subtitle {
@@ -838,6 +839,7 @@ body::before {
   font-size: var(--text-2xs);
   letter-spacing: var(--tracking-wider);
   color: var(--color-panel-border);
+  text-align: center;
 }
 
 .app-topbar__actions {
@@ -850,12 +852,9 @@ body::before {
 
 /* Below this width the topbar can't fit full labels alongside the logo
    without wrapping, so button text collapses to icon-only (the icon
-   glyph stays, --aria-label carries the full label for a11y) and the
-   subtitle/welcome-name text — decorative on a phone — hides outright.
-   The bar itself stays a single row at every width (see .app-topbar). */
+   glyph stays, aria-label carries the full label for a11y). The bar
+   itself stays a single row at every width (see .app-topbar). */
 @media (max-width: 640px) {
-  .app-topbar__subtitle,
-  .app-header__welcome,
   .topbar-label {
     display: none;
   }
