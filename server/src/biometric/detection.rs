@@ -16,13 +16,23 @@
 //! decodes images as BGR by default). Since this codebase decodes images as
 //! RGB, the R and B channels are swapped when building the input tensor.
 
+#[cfg(feature = "onnx-provider")]
 use ort::session::Session;
+#[cfg(feature = "onnx-provider")]
 use ort::value::Tensor;
 
 pub const INPUT_SIZE: u32 = 640;
+// Only read by `FaceDetector::detect` (gated below) and by the NMS/IoU
+// unit tests, which are kept unconditional since they're pure math with
+// no `ort` dependency — hence `allow(dead_code)` when the feature (and
+// so `detect`) isn't compiled, rather than gating these too.
+#[cfg_attr(not(feature = "onnx-provider"), allow(dead_code))]
 const STRIDES: [u32; 3] = [8, 16, 32];
+#[cfg_attr(not(feature = "onnx-provider"), allow(dead_code))]
 const SCORE_THRESHOLD: f32 = 0.9;
+#[cfg_attr(not(feature = "onnx-provider"), allow(dead_code))]
 const NMS_IOU_THRESHOLD: f32 = 0.3;
+#[cfg_attr(not(feature = "onnx-provider"), allow(dead_code))]
 const PRE_NMS_TOP_K: usize = 5000;
 
 /// A detected face in the coordinate space of the image that was passed to
@@ -40,10 +50,12 @@ pub struct FaceBox {
     pub landmarks: [(f32, f32); 5],
 }
 
+#[cfg(feature = "onnx-provider")]
 pub struct FaceDetector {
     session: Session,
 }
 
+#[cfg(feature = "onnx-provider")]
 impl FaceDetector {
     pub fn load(model_path: &std::path::Path) -> Result<Self, ort::Error> {
         let session = Session::builder()?.commit_from_file(model_path)?;
@@ -147,6 +159,7 @@ impl FaceDetector {
     }
 }
 
+#[cfg(feature = "onnx-provider")]
 fn build_input_tensor(rgb: &[u8], width: u32, height: u32) -> Tensor<f32> {
     let resized = resize_bilinear_rgb(rgb, width, height, INPUT_SIZE, INPUT_SIZE);
     let size = INPUT_SIZE as usize;
@@ -201,6 +214,7 @@ pub fn resize_bilinear_rgb(src: &[u8], src_w: u32, src_h: u32, dst_w: u32, dst_h
     out
 }
 
+#[cfg_attr(not(feature = "onnx-provider"), allow(dead_code))]
 fn iou(a: &FaceBox, b: &FaceBox) -> f32 {
     let ax2 = a.x + a.width;
     let ay2 = a.y + a.height;
@@ -221,6 +235,7 @@ fn iou(a: &FaceBox, b: &FaceBox) -> f32 {
     }
 }
 
+#[cfg_attr(not(feature = "onnx-provider"), allow(dead_code))]
 fn non_max_suppression(boxes: Vec<FaceBox>, iou_threshold: f32) -> Vec<FaceBox> {
     let mut kept: Vec<FaceBox> = Vec::new();
     'outer: for candidate in boxes {

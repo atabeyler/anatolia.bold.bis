@@ -14,17 +14,22 @@
 //! vector; OpenCV only L2-normalizes it inside `match()`, not inside
 //! `feature()`, so normalization is done explicitly here before storing.
 
+#[cfg(feature = "onnx-provider")]
 use ort::session::Session;
+#[cfg(feature = "onnx-provider")]
 use ort::value::Tensor;
 
+#[cfg(feature = "onnx-provider")]
 use super::alignment::ALIGNED_SIZE;
 
 pub const EMBEDDING_DIM: usize = 128;
 
+#[cfg(feature = "onnx-provider")]
 pub struct EmbeddingProvider {
     session: Session,
 }
 
+#[cfg(feature = "onnx-provider")]
 impl EmbeddingProvider {
     pub fn load(model_path: &std::path::Path) -> Result<Self, ort::Error> {
         let session = Session::builder()?.commit_from_file(model_path)?;

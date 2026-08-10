@@ -181,8 +181,10 @@ eşleşme bu dosyanın sonunda listelidir.
     geri yazmadığından bu tek başına yeterli bir temizleme adımı.
 16. [x] Latitude/longitude validation — aralık + eşleşen çift zorunluluğu.
     (Milestone C)
-17. [ ] Face quality pipeline (`FaceDetector`/`FaceAligner`/
-    `FaceQualityEvaluator`/`EmbeddingProvider` interface'leri) — **yapılmadı**.
+17. [x] Face quality pipeline (`FaceDetector`/`FaceAligner`/
+    `FaceQualityEvaluator`/`EmbeddingProvider` interface'leri) —
+    `server/src/biometric/{detection,alignment,quality,embedding}.rs`.
+    Detaylar için madde 19-22'ye bakın (aynı iş, aynı oturumda tamamlandı).
 18. [x] Raw image retention — probe görüntüleri zaten hiçbir zaman
     diskte/veritabanında saklanmıyor (`search.rs`, `image_validation.rs`);
     yalnızca türetilen skorlar kalıcı hale geliyor. Bu, mümkün olan en
@@ -218,6 +220,20 @@ eşleşme bu dosyanın sonunda listelidir.
     içermeyen) test görüntüleriyle doğrulanabildi — repo kuralı gereği
     gerçek biyometrik veri/fotoğraf hiçbir zaman ortama girmediği için,
     gerçek bir yüzle uçtan uca doğrulama yapılamadı. (Milestone D)
+    **Prod incident + düzeltme**: bu madde ilk yapıldığında `ort`
+    bağımlılığı normal (opsiyonel olmayan) bir dependency olarak
+    eklenmişti — bu, Render'ın standart Rust build image'ında `ort`'un
+    önceden derlenmiş native shim'inin ihtiyaç duyduğu glibc/libstdc++
+    sembolleri (`__isoc23_strtoll` ailesi vb.) eksik olduğu için
+    production deploy'unu tamamen kırdı (link hatası), `BIOMETRIC_PROVIDER`
+    varsayılan olarak `mock` olmasına ve bu kodun hiç çalışmamasına
+    rağmen. Düzeltme: `ort`/`ndarray` artık `optional = true`, gerçek
+    ONNX kodu (`FaceDetector`, `EmbeddingProvider`, `models`,
+    `onnx_provider`) `onnx-provider` adlı bir Cargo feature'ının arkasına
+    alındı, varsayılan build'de derlenmiyor. Gerçek biyometrik motoru
+    kullanmak isteyen bir deployment `cargo build --release --features
+    onnx-provider` ile açıkça derlemeli — bkz. `docs/ENVIRONMENT.md`.
+    Feature olmadan `BIOMETRIC_PROVIDER=onnx` net bir startup panic.
 21. [x] Embedding storage (`biometric_templates` tablosu) —
     `server/src/db/biometric.rs`. Embedding'ler JSON float array olarak
     saklanıyor (pgvector extension'ının her deployment'ta bulunacağı

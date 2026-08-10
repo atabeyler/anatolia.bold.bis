@@ -231,6 +231,18 @@ what these controls defend against.
   embedding, run through ONNX Runtime (`ort`), behind the same
   `BiometricProvider` trait the mock implements — callers (`search.rs`,
   `candidates.rs`) never branch on which one is active.
+  - **Gated behind a Cargo feature, off by default**: the `ort`-dependent
+    code (`biometric::detection::FaceDetector`,
+    `biometric::embedding::EmbeddingProvider`, `biometric::models`,
+    `biometric::onnx_provider`) only compiles under the `onnx-provider`
+    Cargo feature — see `docs/ENVIRONMENT.md`. This exists because
+    `ort`'s prebuilt native shim needs glibc/libstdc++ symbols not
+    present on every build host (confirmed missing on Render's standard
+    Rust build image), and a plain, non-optional dependency there broke
+    the production deploy outright even though it defaults to the mock
+    provider and never runs this code. A binary built without the
+    feature treats `BIOMETRIC_PROVIDER=onnx` as a clear startup panic,
+    not a silent fallback.
   - **Model provenance and fail-closed loading** (`biometric/models.rs`):
     both models come from the OpenCV Zoo
     (`github.com/opencv/opencv_zoo`) — YuNet (`face_detection_yunet_2023mar.onnx`,

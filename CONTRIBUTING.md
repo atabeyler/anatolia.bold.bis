@@ -23,6 +23,12 @@ cargo test
 cargo clippy --all-targets -- -D warnings
 cargo run
 cargo bench   # performance benchmarks — see benches/biometric_pipeline.rs
+
+# Real ONNX biometric provider (YuNet/SFace) is behind an opt-in Cargo
+# feature, off by default — see docs/ENVIRONMENT.md for why. Only
+# needed if you're working on server/src/biometric/onnx_provider.rs
+# itself or want to run with BIOMETRIC_PROVIDER=onnx locally:
+cargo build --release --features onnx-provider
 ```
 
 Frontend:

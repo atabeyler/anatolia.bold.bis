@@ -3,6 +3,30 @@
 See `.env.example` for a copyable template. Never commit a real `.env`
 file — only placeholders belong in the repository.
 
+## Backend build-time Cargo features
+
+`server/Cargo.toml` defines one opt-in feature: **`onnx-provider`**,
+which compiles in the real `BiometricProvider` implementation (YuNet
+detection + SFace embedding via ONNX Runtime — see `server/src/biometric/onnx_provider.rs`).
+It is **off by default** — the standard `cargo build --release` (and
+Render's `buildCommand` in `render.yaml`) does not include it. This is
+deliberate, not an oversight: the `ort` crate's prebuilt native shim
+requires glibc/libstdc++ symbols (the ISO C23 `__isoc23_strtoll` family
+and others) that are not present on every build host, and were missing
+on Render's standard Rust build image specifically — enabling this
+feature there made the release build fail to link entirely, even though
+`BIOMETRIC_PROVIDER` defaults to `"mock"` and never touches this code
+at runtime. Enable it explicitly only on a build host you've confirmed
+can link `ort` successfully:
+
+```bash
+cargo build --release --features onnx-provider
+```
+
+Running a binary built *without* this feature with `BIOMETRIC_PROVIDER=onnx`
+set is a clear, immediate startup panic (not a silent fallback to mock) —
+see the `BIOMETRIC_PROVIDER` row below.
+
 ## Backend (`server/`)
 
 Critical — the cloud/Postgres deploy refuses to start (or immediately
@@ -39,7 +63,7 @@ Everything else:
 | `TRUST_PROXY` | Set to `true` only when this deployment sits behind a reverse proxy you control that sets `X-Forwarded-For` itself. Governs whether login rate limiting and session `ip_address` records trust that header at all — an untrusted deployment ignores it entirely rather than trusting an attacker-controlled value. Defaults to the same value as "is this production" (Render always fronts the app with a trusted proxy); explicitly `false` disables it even in production if you know your deploy has no such proxy. | No |
 | `GIT_COMMIT_SHA` | Build-time only (not a runtime env var). Passed as a Docker build arg when `.git` isn't available in the build context; `server/build.rs` falls back to reading the checkout's own commit directly otherwise. | No |
 | `SEARCH_DEFAULT_TOP_K`, `SEARCH_MAX_TOP_K` | How many ranked candidates a search returns when the client doesn't request a specific count, and the hard ceiling a client-requested `topK` is clamped to (never rejected outright — see `POST /api/v1/search/face` in `API.md`). Default `10` / `50`. | No |
-| `BIOMETRIC_PROVIDER` | Selects the `BiometricProvider` implementation (`server/src/biometric/`). `"mock"` (default, no real face comparison) or `"onnx"` (real YuNet detection + SFace embedding via ONNX Runtime — see `docs/ROADMAP.md` Phase 4). Any other value is a hard startup failure in every environment. `"onnx"` downloads and SHA-256-verifies its models at startup; a network failure or hash mismatch is a hard startup panic, never a silent fallback to the mock provider. See `ALLOW_MOCK_BIOMETRICS` above for the mock provider's additional production requirement. | No |
+| `BIOMETRIC_PROVIDER` | Selects the `BiometricProvider` implementation (`server/src/biometric/`). `"mock"` (default, no real face comparison) or `"onnx"` (real YuNet detection + SFace embedding via ONNX Runtime — see `docs/ROADMAP.md` Phase 4). Any other value is a hard startup failure in every environment. `"onnx"` downloads and SHA-256-verifies its models at startup; a network failure or hash mismatch is a hard startup panic, never a silent fallback to the mock provider. **Requires the binary to have been built with `cargo build --features onnx-provider`** — see the note below; without it, `BIOMETRIC_PROVIDER=onnx` is a startup panic explaining the missing feature. See `ALLOW_MOCK_BIOMETRICS` above for the mock provider's additional production requirement. | No |
 | `MODEL_CACHE_DIR` | Local cache directory `BIOMETRIC_PROVIDER=onnx` downloads/verifies its ONNX model files into. Defaults to `./data/models`. | No |
 | `METRICS_TOKEN` | Optional bearer token gating `GET /metrics`. Unset (the default) leaves the endpoint open — the conventional Prometheus scrape posture, since nothing exported there is PII (fixed-cardinality labels only: HTTP method, route template, status code, provider name — never a raw path, user id, or IP). Compared in constant time, same as other secret comparisons in this codebase. | No |
 | `BOOTSTRAP_ENABLED` | Explicitly re-opens `POST /api/v1/admin/seed-admin` after it has already self-disabled (see the `ADMIN_SEED_TOKEN` row above). Set to `true` only for a deliberate recovery — e.g. every `SYSTEM_ADMIN` account was lost — and unset it again immediately afterward. | No |

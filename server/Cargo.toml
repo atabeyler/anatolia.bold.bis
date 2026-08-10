@@ -35,12 +35,24 @@ totp-rs = { version = "6.0.0", features = ["gen_secret", "otpauth"] }
 aes-gcm = "0.11.0"
 base64 = "0.23.1"
 hmac = "0.13.0"
-ort = { version = "2.0.0-rc.13", default-features = false, features = ["download-binaries", "ndarray", "std", "tls-rustls"] }
-ndarray = "0.17.2"
+ort = { version = "2.0.0-rc.13", default-features = false, features = ["download-binaries", "ndarray", "std", "tls-rustls"], optional = true }
+ndarray = { version = "0.17.2", optional = true }
 async-trait = "0.1.92"
 strsim = "0.11.1"
 metrics = "0.24.6"
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
+
+[features]
+# Compiles in the real ONNX Runtime biometric provider (YuNet/SFace, see
+# src/biometric/onnx_provider.rs). Off by default: `ort`'s prebuilt C++
+# shim requires glibc/libstdc++ symbols (e.g. the ISO C23 __isoc23_strtoll
+# family) that are not present on every build host — notably Render's
+# standard Rust build image, where this feature made the release build
+# fail to link entirely, even though BIOMETRIC_PROVIDER defaults to
+# "mock" and never touches this code at runtime. Enable explicitly
+# (`cargo build --release --features onnx-provider`) only on a build host
+# confirmed to link `ort` successfully. See docs/ENVIRONMENT.md.
+onnx-provider = ["dep:ort", "dep:ndarray"]
 
 [dev-dependencies]
 criterion = { version = "0.8.2", features = ["async_tokio", "html_reports"] }

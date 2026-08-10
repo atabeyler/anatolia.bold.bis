@@ -100,6 +100,7 @@ impl AppState {
         migrate(&backend).await?;
         let biometric_provider: Arc<dyn crate::biometric::BiometricProvider> =
             match config.biometric_provider.as_str() {
+                #[cfg(feature = "onnx-provider")]
                 "onnx" => Arc::new(
                     crate::biometric::OnnxBiometricProvider::initialize()
                         .await
@@ -110,6 +111,14 @@ impl AppState {
                                  falling back to the mock provider"
                             )
                         }),
+                ),
+                #[cfg(not(feature = "onnx-provider"))]
+                "onnx" => panic!(
+                    "BIOMETRIC_PROVIDER=onnx but this binary was built without the \
+                     \"onnx-provider\" Cargo feature; rebuild with \
+                     `cargo build --features onnx-provider` on a build host that can link \
+                     `ort`, or use BIOMETRIC_PROVIDER=mock — refusing to silently fall back \
+                     to the mock provider"
                 ),
                 _ => Arc::new(crate::biometric::MockBiometricProvider),
             };

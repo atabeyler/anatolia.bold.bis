@@ -20,7 +20,9 @@
 pub mod alignment;
 pub mod detection;
 pub mod embedding;
+#[cfg(feature = "onnx-provider")]
 pub mod models;
+#[cfg(feature = "onnx-provider")]
 pub mod onnx_provider;
 pub mod quality;
 
@@ -31,6 +33,7 @@ use std::hash::{Hash, Hasher};
 use crate::db::{AppState, CandidateRow};
 
 pub use detection::FaceBox;
+#[cfg(feature = "onnx-provider")]
 pub use onnx_provider::OnnxBiometricProvider;
 
 pub struct ScoredCandidate {
