@@ -4,12 +4,18 @@
 //! `docs/SECURITY_ARCHITECTURE.md` for what this pipeline does and does
 //! not guarantee.
 //!
-//! Known, documented limitation: `ort::Session::run` is a synchronous,
-//! CPU-bound call. It currently runs directly on the async executor
-//! thread rather than being offloaded to a dedicated blocking pool (e.g.
-//! `tokio::task::spawn_blocking`) — under concurrent load this can starve
-//! other requests on the same worker thread. This is a real performance
-//! gap, not something this module claims to have solved.
+//! `process_image`'s detect/align/embed pipeline is synchronous,
+//! CPU-bound work (`ort::Session::run` blocks the calling thread), so
+//! `search`/`enroll` run it via `tokio::task::block_in_place` rather than
+//! directly on the async executor — that hands the current worker thread
+//! over to blocking work and lets Tokio spin up a replacement worker for
+//! other tasks, instead of starving them. This requires the
+//! multi-threaded runtime (`rt-multi-thread`, already enabled in
+//! `Cargo.toml`) and panics if called from a current-thread runtime.
+//! `spawn_blocking` was not used here because `BiometricProvider::search`/
+//! `enroll` take `&self`, not an owned `Arc<Self>`, so the closure cannot
+//! satisfy `spawn_blocking`'s `'static` bound without unsafe lifetime
+//! extension.
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -138,8 +144,9 @@ impl BiometricProvider for OnnxBiometricProvider {
         let (width, height) = (decoded.width(), decoded.height());
         let rgb = decoded.into_raw();
 
-        let (probe_embedding, _confidence) =
-            self.process_image(&rgb, width, height, MIN_SEARCH_CONFIDENCE)?;
+        let (probe_embedding, _confidence) = tokio::task::block_in_place(|| {
+            self.process_image(&rgb, width, height, MIN_SEARCH_CONFIDENCE)
+        })?;
 
         let matches = search_top_k(
             &state.backend,
@@ -172,8 +179,9 @@ impl BiometricProvider for OnnxBiometricProvider {
         let (width, height) = (decoded.width(), decoded.height());
         let rgb = decoded.into_raw();
 
-        let (embedding, confidence) =
-            self.process_image(&rgb, width, height, MIN_ENROLLMENT_CONFIDENCE)?;
+        let (embedding, confidence) = tokio::task::block_in_place(|| {
+            self.process_image(&rgb, width, height, MIN_ENROLLMENT_CONFIDENCE)
+        })?;
 
         Ok(EnrollmentResult {
             embedding,
