@@ -34,7 +34,13 @@ pub struct SessionRow {
     pub revoked_at: Option<String>,
     pub user_agent: Option<String>,
     pub ip_address: Option<String>,
-    pub rotation_counter: i64,
+    // Matches the Postgres column's actual width (`INTEGER`, 32-bit) —
+    // sqlx's Postgres decoder rejects a struct field wider than the
+    // column it reads from (unlike SQLite, which is untyped and would
+    // have accepted `i64` here without complaint, hiding this on every
+    // SQLite-backed test run). A session realistically never rotates
+    // anywhere near i32::MAX times, so this is not a real capacity limit.
+    pub rotation_counter: i32,
     pub created_by: Option<String>,
 }
 
