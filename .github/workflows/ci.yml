@@ -25,7 +25,7 @@ jobs:
       - run: cargo test
       - name: Dependency vulnerability scan (cargo-audit)
         run: |
-          cargo install --locked cargo-audit --version ^0.21 || true
+          cargo install --locked cargo-audit || true
           cargo audit --deny warnings
 
   frontend:
