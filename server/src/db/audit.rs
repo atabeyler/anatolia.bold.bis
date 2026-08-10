@@ -26,7 +26,7 @@
 //! deleted row breaks the chain from that point forward — see
 //! `verify_chain` and `GET /api/v1/audit/integrity`.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, SubsecRound, Utc};
 use sha2::{Digest, Sha256};
 use sqlx::{FromRow, PgPool, SqlitePool};
 use uuid::Uuid;
@@ -140,6 +140,22 @@ pub struct NewAuditEvent<'a> {
 /// new row's hash) and `verify_chain` (recomputing an existing row's hash
 /// to check it) must build this identically, or every row would appear
 /// tampered.
+/// Fixed, backend-independent timestamp text: exactly 6 fractional
+/// digits (microsecond precision), RFC 3339 with a literal `Z`. Used
+/// everywhere a timestamp becomes part of a hash input or gets stored —
+/// `to_rfc3339()`'s adaptive precision (as many digits as the value
+/// happens to need, up to nanoseconds) does not survive a Postgres round
+/// trip: `timestamptz` only stores microsecond precision, so a value
+/// computed with `Utc::now()`'s full nanosecond resolution and formatted
+/// via `to_rfc3339()` before storage produces a *different* string than
+/// the same value reformatted after being read back — silently breaking
+/// every recomputed hash. Truncating to a fixed precision before it is
+/// ever used for hashing makes the string stable across that round trip
+/// on every backend.
+fn canonical_timestamp(timestamp: &DateTime<Utc>) -> String {
+    timestamp.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string()
+}
+
 fn canonical_event_string(
     previous_hash: &str,
     timestamp: &DateTime<Utc>,
@@ -148,7 +164,7 @@ fn canonical_event_string(
     const SEP: char = '\u{1}';
     [
         previous_hash,
-        &timestamp.to_rfc3339(),
+        &canonical_timestamp(timestamp),
         event.actor_user_id.unwrap_or(""),
         event.actor_user_code.unwrap_or(""),
         event.actor_role.unwrap_or(""),
@@ -176,7 +192,14 @@ pub async fn insert_audit_event(
     backend: &DbBackend,
     event: NewAuditEvent<'_>,
 ) -> Result<(), sqlx::Error> {
-    let timestamp = Utc::now();
+    // Truncated to the same microsecond precision `canonical_timestamp`
+    // formats with, *before* it is used for hashing or storage — not just
+    // at formatting time — so the value handed to Postgres already sits
+    // exactly on a microsecond boundary. That removes any dependency on
+    // whether Postgres's own storage would truncate or round a
+    // higher-precision value the same way `canonical_timestamp` does; there
+    // is nothing left for it to do either way.
+    let timestamp = Utc::now().trunc_subsecs(6);
     match backend {
         DbBackend::Postgres(pool) => {
             let mut tx = pool.begin().await?;
@@ -251,7 +274,7 @@ pub async fn insert_audit_event(
                  ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
             )
             .bind(&id)
-            .bind(timestamp.to_rfc3339())
+            .bind(canonical_timestamp(&timestamp))
             .bind(event.actor_user_id)
             .bind(event.actor_user_code)
             .bind(event.actor_role)
@@ -328,7 +351,14 @@ pub struct AuditEventRow {
     pub event_hash: Option<String>,
 }
 
-const AUDIT_EVENT_COLUMNS_PG: &str = "id::text, \"timestamp\"::text, actor_user_id::text, actor_user_code, actor_role, \
+// Postgres's default `timestamptz::text` cast produces
+// `2026-08-10 16:58:56.801715+00` — a space instead of `T` and a bare
+// `+00` offset, neither of which Rust's RFC 3339 parser (used by
+// `verify_chain` to recompute a stored row's hash) accepts. `to_char`
+// with an explicit format instead produces `2026-08-10T16:58:56.801715Z`
+// — parseable, and at a fixed 6-digit precision matching
+// `canonical_timestamp` exactly.
+const AUDIT_EVENT_COLUMNS_PG: &str = "id::text, to_char(\"timestamp\" AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS \"timestamp\", actor_user_id::text, actor_user_code, actor_role, \
      action, request_id, case_reference, resource_type, resource_id, result, source, ip_address, user_agent, \
      metadata::text, organization_id::text, organization_unit_id::text, sequence, previous_hash, event_hash";
 const AUDIT_EVENT_COLUMNS_SQLITE: &str = "id, timestamp, actor_user_id, actor_user_code, actor_role, action, \
