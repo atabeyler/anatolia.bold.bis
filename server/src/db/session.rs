@@ -274,6 +274,86 @@ pub async fn revoke_all_sessions_for_user(
     Ok(())
 }
 
+/// Lists a user's active (not revoked, not yet expired) sessions,
+/// most-recently-used first — the "where am I signed in" / device-list
+/// view (item 12 in the V1 closure checklist). Deliberately excludes
+/// `refresh_token_hash`: nothing outside `auth.rs`'s own refresh flow ever
+/// needs it, and there is no reason for even an admin-facing list to
+/// carry it.
+pub async fn list_active_sessions_for_user(
+    backend: &DbBackend,
+    user_id: &str,
+) -> Result<Vec<SessionRow>, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(uuid) = Uuid::parse_str(user_id) else {
+                return Ok(Vec::new());
+            };
+            sqlx::query_as::<_, SessionRow>(&format!(
+                "SELECT {SESSION_COLUMNS_PG} FROM sessions \
+                 WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > NOW() \
+                 ORDER BY last_used_at DESC"
+            ))
+            .bind(uuid)
+            .fetch_all(pool)
+            .await
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query_as::<_, SessionRow>(&format!(
+                "SELECT {SESSION_COLUMNS_SQLITE} FROM sessions \
+                 WHERE user_id = ?1 AND revoked_at IS NULL \
+                 AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+                 ORDER BY last_used_at DESC"
+            ))
+            .bind(user_id)
+            .fetch_all(pool)
+            .await
+        }
+    }
+}
+
+/// Revokes one session, but only if it belongs to `user_id` — the
+/// ownership check a self-service "sign out this device" action needs
+/// (as opposed to `revoke_session`, used internally by the refresh flow
+/// itself, and `revoke_all_sessions_for_user`, used by admin actions that
+/// already checked the target account). Returns whether a row was
+/// actually revoked, so the route can distinguish "not yours" /
+/// "already gone" from a real success.
+pub async fn revoke_session_owned_by_user(
+    backend: &DbBackend,
+    session_id: &str,
+    user_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let rows_affected = match backend {
+        DbBackend::Postgres(pool) => {
+            let (Ok(session_uuid), Ok(user_uuid)) =
+                (Uuid::parse_str(session_id), Uuid::parse_str(user_id))
+            else {
+                return Ok(false);
+            };
+            sqlx::query(
+                "UPDATE sessions SET revoked_at = NOW() \
+                 WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",
+            )
+            .bind(session_uuid)
+            .bind(user_uuid)
+            .execute(pool)
+            .await?
+            .rows_affected()
+        }
+        DbBackend::Sqlite(pool) => sqlx::query(
+            "UPDATE sessions SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+                 WHERE id = ?1 AND user_id = ?2 AND revoked_at IS NULL",
+        )
+        .bind(session_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?
+        .rows_affected(),
+    };
+    Ok(rows_affected > 0)
+}
+
 /// Deletes `sessions` and `approval_tokens` rows past their `expires_at`.
 /// An expired session can never be used to refresh again (see
 /// `find_session_by_id`/`rotate_session`, which already reject one), and

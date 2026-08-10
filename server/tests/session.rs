@@ -31,6 +31,15 @@ fn refresh_cookie(response: &axum::response::Response) -> String {
     set_cookie.split(';').next().unwrap().to_string()
 }
 
+/// A deterministic, distinct-per-user_code 11-digit national ID — a test
+/// that registers more than one account in the same run (e.g. a victim
+/// and an attacker) needs each to be unique, since a shared fixed value
+/// would collide on the second registration.
+fn national_id_for(user_code: &str) -> String {
+    let sum: u32 = user_code.bytes().map(u32::from).sum();
+    format!("9876543{:04}", sum % 10000)
+}
+
 async fn approve_and_login(
     app: &axum::Router,
     user_code: &str,
@@ -48,8 +57,8 @@ async fn approve_and_login(
             json!({
                 "firstName": "Session",
                 "lastName": "Tester",
-                "nationalId": "98765432109",
-                "email": "session-tester@example.test",
+                "nationalId": national_id_for(user_code),
+                "email": format!("{}@example.test", user_code.to_lowercase()),
                 "password": password,
                 "userCode": user_code,
             }),
@@ -282,6 +291,196 @@ async fn logout_all_revokes_every_session_for_the_user() {
         StatusCode::UNAUTHORIZED,
         "logout-all must revoke sessions created before it ran, not just the caller's own"
     );
+}
+
+#[tokio::test]
+async fn listing_sessions_shows_every_active_device_and_marks_the_current_one() {
+    let state = AppState::for_tests().await;
+    let app = routes::router(state);
+
+    let first_login = approve_and_login(&app, "DEVLIST1", "DevListPass1!").await;
+    let first_cookie = refresh_cookie(&first_login);
+    let first_access_token = body_json(first_login).await["accessToken"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let second_login = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/login",
+            json!({ "userCode": "DEVLIST1", "password": "DevListPass1!" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(second_login.status(), StatusCode::OK);
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/users/me/sessions")
+                .header("authorization", format!("Bearer {first_access_token}"))
+                .header("cookie", &first_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let payload = body_json(list_response).await;
+    let items = payload["items"].as_array().unwrap();
+    assert_eq!(
+        items.len(),
+        2,
+        "both logins should be listed as active sessions"
+    );
+    let current_count = items.iter().filter(|s| s["isCurrent"] == true).count();
+    assert_eq!(
+        current_count, 1,
+        "exactly the session behind the request's own refresh cookie should be marked current"
+    );
+}
+
+#[tokio::test]
+async fn a_users_own_session_can_be_individually_revoked() {
+    let state = AppState::for_tests().await;
+    let app = routes::router(state);
+
+    let first_login = approve_and_login(&app, "DEVREV01", "DevRevPass1!").await;
+    let first_cookie = refresh_cookie(&first_login);
+    let first_access_token = body_json(first_login).await["accessToken"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let second_login = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/login",
+            json!({ "userCode": "DEVREV01", "password": "DevRevPass1!" }),
+        ))
+        .await
+        .unwrap();
+    let second_cookie = refresh_cookie(&second_login);
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/users/me/sessions")
+                .header("authorization", format!("Bearer {first_access_token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let payload = body_json(list_response).await;
+    let items = payload["items"].as_array().unwrap();
+    let other_session_id = items
+        .iter()
+        .find(|s| s["isCurrent"] != true)
+        .expect("the second login's session should be listed and not marked current from the first device's request")
+        ["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let revoke_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/users/me/sessions/{other_session_id}"))
+                .header("authorization", format!("Bearer {first_access_token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(revoke_response.status(), StatusCode::OK);
+
+    // The revoked (second) device's refresh cookie stops working...
+    let refresh_after_revoke = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/refresh")
+                .header("cookie", &second_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(refresh_after_revoke.status(), StatusCode::UNAUTHORIZED);
+
+    // ...while the caller's own (first) session is untouched.
+    let refresh_first_still_works = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/refresh")
+                .header("cookie", &first_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(refresh_first_still_works.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn revoking_another_users_session_id_is_rejected_as_not_found() {
+    let state = AppState::for_tests().await;
+    let app = routes::router(state);
+
+    let victim_login = approve_and_login(&app, "DEVVICT1", "DevVictPass1!").await;
+    let victim_access_token = body_json(victim_login).await["accessToken"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let victim_sessions = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/users/me/sessions")
+                .header("authorization", format!("Bearer {victim_access_token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let victim_session_id = body_json(victim_sessions).await["items"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let attacker_login = approve_and_login(&app, "DEVATTK1", "DevAttkPass1!").await;
+    let attacker_access_token = body_json(attacker_login).await["accessToken"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/users/me/sessions/{victim_session_id}"))
+                .header("authorization", format!("Bearer {attacker_access_token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

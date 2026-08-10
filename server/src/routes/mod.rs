@@ -46,6 +46,7 @@ pub fn router(state: AppState) -> Router {
             "/biometric-thresholds",
             get(admin::list_biometric_thresholds),
         )
+        .route("/connectors", get(admin::list_connectors))
         .route(
             "/users/:id",
             delete(admin::delete_user_route).patch(admin::update_user_route),
@@ -129,6 +130,11 @@ pub fn router(state: AppState) -> Router {
         .route("/api/health/ready", get(health::ready))
         .route("/metrics", get(metrics::metrics_route))
         .route("/api/v1/users/me", get(auth::me))
+        .route("/api/v1/users/me/sessions", get(auth::list_sessions))
+        .route(
+            "/api/v1/users/me/sessions/:session_id",
+            delete(auth::revoke_own_session),
+        )
         .route("/api/v1/audit", get(audit::list_audit_events_route))
         .route(
             "/api/v1/audit/integrity",

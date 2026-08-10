@@ -6,6 +6,8 @@ export interface HealthReady {
   timestamp: string;
   biometricProvider: string;
   biometricSearch: string;
+  uptimeSeconds: number;
+  dbPool: { size: number; idle: number };
 }
 
 export async function getHealthReady(): Promise<HealthReady> {
@@ -38,5 +40,16 @@ export async function listBiometricThresholds(): Promise<BiometricThreshold[]> {
   const { data } = await apiClient.get<{ items: BiometricThreshold[] }>(
     '/v1/admin/biometric-thresholds',
   );
+  return data.items;
+}
+
+export interface ConnectorStatus {
+  slot: string;
+  providerName: string;
+  isMock: boolean;
+}
+
+export async function listConnectors(): Promise<ConnectorStatus[]> {
+  const { data } = await apiClient.get<{ items: ConnectorStatus[] }>('/v1/admin/connectors');
   return data.items;
 }

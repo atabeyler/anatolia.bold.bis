@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { OsintWorkspace } from '../components/OsintWorkspace';
 import { useAuth } from '../features/auth/AuthContext';
 import { formatLatitude, formatLongitude, getLastKnownLocation } from '../hooks/useGeolocation';
 import * as searchClient from '../services/searchClient';
@@ -10,12 +11,15 @@ import { apiErrorMessageKey } from '../services/apiClient';
 
 const REVIEW_ROLES = ['REVIEWER', 'SECURITY_ADMIN', 'SYSTEM_ADMIN'];
 const SEARCH_ROLES = ['OPERATOR', 'REVIEWER', 'SECURITY_ADMIN', 'SYSTEM_ADMIN'];
+const MANAGE_CANDIDATE_ROLES = ['OPERATOR', 'SECURITY_ADMIN', 'SYSTEM_ADMIN'];
 
 export function DashboardPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const canReview = !!user && REVIEW_ROLES.includes(user.role);
   const canSearch = !!user && SEARCH_ROLES.includes(user.role);
+  const canManageCandidates = !!user && MANAGE_CANDIDATE_ROLES.includes(user.role);
+  const [osintCandidate, setOsintCandidate] = useState<{ id: string; name: string } | null>(null);
 
   const [caseReference, setCaseReference] = useState('');
   const [purpose, setPurpose] = useState('');
@@ -274,6 +278,17 @@ export function DashboardPage() {
                           })}
                         </p>
                       )}
+                      {canSearch && (
+                        <button
+                          type="button"
+                          className="overlay-secondary-button"
+                          onClick={() =>
+                            setOsintCandidate({ id: candidate.candidateId, name: candidate.fullName })
+                          }
+                        >
+                          {t('osint.openLabel')}
+                        </button>
+                      )}
                     </div>
                     {canReview &&
                       (candidate.status === 'pending' ||
@@ -354,6 +369,15 @@ export function DashboardPage() {
           </article>
         ))}
       </section>
+
+      {osintCandidate && (
+        <OsintWorkspace
+          candidateId={osintCandidate.id}
+          candidateName={osintCandidate.name}
+          canManage={canManageCandidates}
+          onClose={() => setOsintCandidate(null)}
+        />
+      )}
     </main>
   );
 }

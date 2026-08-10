@@ -1,3 +1,6 @@
+use std::sync::LazyLock;
+use std::time::Instant;
+
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -11,6 +14,21 @@ use crate::db::{AppState, DbBackend};
 /// deployment (e.g. on Render) is verified to have actually picked up a
 /// given push, rather than assuming from push time alone.
 const GIT_COMMIT_SHA: &str = env!("GIT_COMMIT_SHA");
+
+/// Set the first time anything touches it, which in practice is this
+/// process's first `/api/health/ready` call — close enough to true
+/// process start (within the first request's latency) without needing to
+/// thread a start time through `AppState` from `main.rs`.
+static PROCESS_START: LazyLock<Instant> = LazyLock::new(Instant::now);
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DbPoolStatus {
+    /// Total connections currently open in the pool (in use + idle).
+    size: u32,
+    /// Connections open but not currently checked out by a query.
+    idle: u32,
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,6 +66,12 @@ struct ReadyResponse {
     /// the `vector` extension could not be enabled) — see item 2 in
     /// `docs/HARDENING_CHECKLIST.md`.
     biometric_search: &'static str,
+    /// Seconds since this process's first readiness check — an
+    /// approximation of process uptime (see `PROCESS_START`), useful for
+    /// spotting an unexpected restart without needing external
+    /// orchestrator-level tracking.
+    uptime_seconds: u64,
+    db_pool: DbPoolStatus,
 }
 
 /// Liveness (`/api/health`) only says the process is running; it never
@@ -64,6 +88,16 @@ pub async fn ready(State(state): State<AppState>) -> Response {
         DbBackend::Postgres(pool) => sqlx::query("SELECT 1").execute(pool).await.is_ok(),
         DbBackend::Sqlite(pool) => sqlx::query("SELECT 1").execute(pool).await.is_ok(),
     };
+    let db_pool = match &state.backend {
+        DbBackend::Postgres(pool) => DbPoolStatus {
+            size: pool.size(),
+            idle: pool.num_idle() as u32,
+        },
+        DbBackend::Sqlite(pool) => DbPoolStatus {
+            size: pool.size(),
+            idle: pool.num_idle() as u32,
+        },
+    };
     let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
     let biometric_provider = state.biometric_provider_name;
     let biometric_search = if state.pgvector_search_ready {
@@ -71,6 +105,7 @@ pub async fn ready(State(state): State<AppState>) -> Response {
     } else {
         "brute-force"
     };
+    let uptime_seconds = PROCESS_START.elapsed().as_secs();
     if db_ok {
         Json(ReadyResponse {
             status: "ready",
@@ -78,6 +113,8 @@ pub async fn ready(State(state): State<AppState>) -> Response {
             timestamp,
             biometric_provider,
             biometric_search,
+            uptime_seconds,
+            db_pool,
         })
         .into_response()
     } else {
@@ -89,6 +126,8 @@ pub async fn ready(State(state): State<AppState>) -> Response {
                 timestamp,
                 biometric_provider,
                 biometric_search,
+                uptime_seconds,
+                db_pool,
             }),
         )
             .into_response()

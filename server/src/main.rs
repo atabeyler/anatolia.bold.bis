@@ -105,10 +105,15 @@ async fn shutdown_signal() {
 // as traffic and keeps the instance warm. This cannot eliminate the very
 // first cold start after a genuinely idle period — only prevent repeated
 // ones — and is a no-op outside Render (e.g. desktop/local dev), since
-// the env var is unset there. Opt-out via `ENABLE_SELF_PING=false` for
-// deployments that would rather let the service sleep (e.g. to avoid
-// masking real idle-shutdown behavior, or on a plan without the cold-start
-// penalty).
+// the env var is unset there. Opt-in via `ENABLE_SELF_PING=true` — a
+// background process that periodically calls back out to its own public
+// URL is surprising, free-plan-specific behavior that a deployment
+// shouldn't get by default just because `RENDER_EXTERNAL_URL` happens to
+// be set (e.g. a paid Render plan, or any other host that also injects a
+// same-shaped external-URL variable). This project's own `render.yaml`
+// sets `ENABLE_SELF_PING=true` explicitly for the free-plan service it
+// deploys, so the live deployment's behavior is unchanged by this
+// default.
 // Deletes expired `sessions`/`approval_tokens` rows on a fixed interval so
 // they don't accumulate forever — neither table is ever read for anything
 // once its `expires_at` has passed (see `db::purge_expired_auth_records`).
@@ -155,8 +160,8 @@ fn spawn_retention_job(state: AppState) {
 }
 
 fn spawn_self_ping() {
-    if std::env::var("ENABLE_SELF_PING").as_deref() == Ok("false") {
-        tracing::info!("self-ping disabled via ENABLE_SELF_PING=false");
+    if std::env::var("ENABLE_SELF_PING").as_deref() != Ok("true") {
+        tracing::info!("self-ping disabled by default; set ENABLE_SELF_PING=true to enable");
         return;
     }
     let Ok(external_url) = std::env::var("RENDER_EXTERNAL_URL") else {

@@ -166,6 +166,20 @@ pub async fn list_biometric_thresholds(
     }
 }
 
+/// `GET /api/v1/admin/connectors` — item 7 in the V1 closure checklist:
+/// read-only visibility into which OSINT connector is active in each
+/// provider slot (web search, news, social) and whether it's real or the
+/// mock fallback. See `osint::EvidenceOrchestrator::provider_status`'s
+/// doc comment for why this stops at reporting rather than adding
+/// runtime enable/disable — that stays environment-variable-configured,
+/// consistent with every other provider toggle in this codebase.
+pub async fn list_connectors(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if let Some(denied) = require_admin(&state, &headers) {
+        return denied;
+    }
+    Json(json!({ "items": state.osint_orchestrator.provider_status() })).into_response()
+}
+
 /// Lets an admin create an account directly (immediately approved, no
 /// self-registration/approval round trip) — for operators the admin sets
 /// up in person rather than ones who self-register. Distinct from

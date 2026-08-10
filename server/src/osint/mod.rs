@@ -102,6 +102,26 @@ pub trait SourceRegistry: Send + Sync {
     fn enabled_sources(&self) -> Vec<&'static str>;
 }
 
+/// One connector slot's current status — which named provider is active
+/// there and whether it's a real implementation or the mock fallback.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectorStatus {
+    pub slot: &'static str,
+    pub provider_name: &'static str,
+    pub is_mock: bool,
+}
+
+impl ConnectorStatus {
+    fn new(slot: &'static str, provider_name: &'static str) -> Self {
+        Self {
+            slot,
+            provider_name,
+            is_mock: provider_name.starts_with("mock-"),
+        }
+    }
+}
+
 /// One provider's outcome from a single `collect` run — success with its
 /// items, or a failure that must not prevent the other providers' results
 /// from being returned (provider failure isolation).
@@ -175,6 +195,29 @@ impl EvidenceOrchestrator {
             news,
             vec![std::sync::Arc::new(mock::MockSocialProvider)],
         )
+    }
+
+    /// Read-only visibility into which provider is actually active in
+    /// each slot (item 7 in the V1 closure checklist — "connector
+    /// management API", scoped to status reporting since configuration
+    /// itself stays environment-variable-based, the same pattern every
+    /// other provider toggle in this codebase already uses; see
+    /// `from_env`'s doc comment). A provider counts as mock when its own
+    /// `name()` carries the `mock-` prefix every `Mock*` implementation in
+    /// `osint::mock` uses — there is no separate "is this real" flag to
+    /// drift out of sync with that naming.
+    pub fn provider_status(&self) -> Vec<ConnectorStatus> {
+        let mut statuses = Vec::new();
+        for provider in &self.web_search {
+            statuses.push(ConnectorStatus::new("web_search", provider.name()));
+        }
+        for provider in &self.news {
+            statuses.push(ConnectorStatus::new("news", provider.name()));
+        }
+        for provider in &self.social {
+            statuses.push(ConnectorStatus::new("social", provider.name()));
+        }
+        statuses
     }
 
     /// Runs every provider for `query`, isolating failures per provider.

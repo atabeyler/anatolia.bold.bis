@@ -71,13 +71,19 @@ they're present on both `200` and `503` responses.
   "version": "<commit-sha>",
   "timestamp": "2026-08-08T12:00:00Z",
   "biometricProvider": "mock",
-  "biometricSearch": "brute-force"
+  "biometricSearch": "brute-force",
+  "uptimeSeconds": 3600,
+  "dbPool": { "size": 5, "idle": 3 }
 }
 ```
 `biometricProvider` is `"mock"` or `"onnx"`. `biometricSearch` is
 `"pgvector-hnsw"` (indexed PostgreSQL search) or `"brute-force"` (in-memory
 linear scan — always this on SQLite, or on Postgres if the `vector`
-extension couldn't be enabled).
+extension couldn't be enabled). `uptimeSeconds` is an approximation of
+process uptime (measured from this process's first readiness check, not
+true process start) — useful for spotting an unexpected restart.
+`dbPool` reports the connection pool's current `size` (open connections,
+in use plus idle) and `idle` count.
 
 **`503 Service Unavailable`** (`{ "status": "not_ready", ... }`, same
 extra fields) if the database didn't answer.
@@ -209,6 +215,46 @@ existed. Response:
 
 Requires `Authorization: Bearer <accessToken>`. Returns the caller's own
 public profile.
+
+### Session/device management
+
+Item 12 in the V1 closure checklist: a self-service "where am I signed in"
+view over the same `sessions` table that already backs refresh-token
+rotation (`db/session.rs`) — no new storage, just new read/write access
+patterns over it.
+
+#### `GET /api/v1/users/me/sessions`
+
+Requires `Authorization: Bearer <accessToken>`. Lists the caller's own
+active (not revoked, not expired) sessions, most-recently-used first.
+Response:
+```json
+{
+  "items": [
+    {
+      "id": "...", "createdAt": "...", "lastUsedAt": "...", "expiresAt": "...",
+      "userAgent": "...", "ipAddress": "...", "isCurrent": true
+    }
+  ]
+}
+```
+`userAgent`/`ipAddress` are whatever was recorded at that session's login
+time — never re-resolved on each list call, so this reflects what was seen
+then, not a live lookup. `isCurrent` is true for whichever session the
+request's own `refresh_token` cookie belongs to, if that cookie is present
+and still valid; it's false (never omitted) for every other row, including
+when the cookie is absent (e.g. a non-browser client calling this with
+only a bearer token).
+
+#### `DELETE /api/v1/users/me/sessions/{session_id}`
+
+Requires `Authorization: Bearer <accessToken>`. Revokes exactly one of the
+caller's own sessions — "sign out this device" for a session other than
+(or including) the one making the request, contrasted with `POST
+/api/v1/auth/logout-all`'s "sign out everywhere". Ownership-checked: a
+`session_id` that exists but belongs to a different user returns the same
+**`404 Not Found`** as one that doesn't exist at all, so this endpoint can
+never be used to probe or revoke someone else's session.
 
 ### Multi-factor authentication (MFA)
 
@@ -355,6 +401,16 @@ never lock itself out of its own administration.
   `{ "items": [ { "id": "...", "modelName": "...", "modelVersion": "...", "threshold": 0.88, "equalErrorRate": 0.02, "pairCount": 40, "createdAt": "..." } ] }`.
   Saving a threshold again for the same model name+version replaces the
   previous row rather than adding a new one.
+
+- `GET /api/v1/admin/connectors` — item 7 in the V1 closure checklist:
+  read-only status of each OSINT connector slot (`web_search`, `news`,
+  `social`). Response:
+  `{ "items": [ { "slot": "web_search", "providerName": "brave-web-search", "isMock": false } ] }`.
+  Configuration itself stays environment-variable-based
+  (`BRAVE_SEARCH_API_KEY`/`NEWS_API_KEY`, see `docs/ENVIRONMENT.md`), the
+  same pattern every other provider toggle in this codebase already uses
+  — this endpoint reports which provider ended up active in each slot,
+  it does not accept writes.
 
 - `GET /api/v1/admin/review/{token}` — HTML approve/reject page linked from
   the admin's registration-notification email (valid 3 days, single-use;

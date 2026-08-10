@@ -71,7 +71,10 @@
       "recoveryCodesWarning": "Bu kodlar yalnızca bu kez gösterilmektedir.",
       "recoveryCodesAcknowledge": "Bu kodları kaydettim",
       "disabled": "Hesabınızda çok faktörlü kimlik doğrulama devre dışı bırakıldı."
-    }
+    },
+    "loggedOut": "Oturumunuz kapatıldı.",
+    "registrationPending": "Kaydınız yönetici onayını bekliyor.",
+    "forgotPasswordReceived": "Talebiniz alındı. Şifreniz sıfırlandığında sizinle iletişime geçilecektir."
   },
   "errors": {
     "invalidResetToken": "Bu şifre sıfırlama bağlantısı geçersiz veya süresi dolmuş.",
@@ -116,7 +119,8 @@
       "language": "Dil",
       "sound": "Ses",
       "appearance": "Görünüm",
-      "about": "Hakkında"
+      "about": "Hakkında",
+      "sessions": "Oturumlar"
     },
     "sound": {
       "enable": "Arayüz seslerini etkinleştir",
@@ -125,6 +129,14 @@
     "appearance": {
       "dark": "Koyu",
       "light": "Açık"
+    },
+    "sessions": {
+      "signedOutHint": "Aktif oturumlarınızı görmek ve yönetmek için giriş yapın.",
+      "empty": "Aktif oturum bulunamadı.",
+      "unknownDevice": "Bilinmeyen cihaz",
+      "currentBadge": "BU CİHAZ",
+      "lastUsed": "Son kullanım {{date}}",
+      "signOut": "Oturumu kapat"
     }
   },
   "menu": {
@@ -233,8 +245,26 @@
       "integrityHint": "Salt-eklenebilir denetim zincirinin bozulmadığını doğrulayın.",
       "integrityCheckSubmit": "BÜTÜNLÜK KONTROLÜ ÇALIŞTIR",
       "integrityIntact": "Denetim kaydı bütün ({{eventsChecked}} olay kontrol edildi).",
-      "integrityBroken": "Denetim kaydı bütünlük hatası: {{eventsChecked}} olay içinde {{breaks}} kopukluk bulundu."
-    }
+      "integrityBroken": "Denetim kaydı bütünlük hatası: {{eventsChecked}} olay içinde {{breaks}} kopukluk bulundu.",
+      "connectorsHeading": "OSINT BAĞLANTILARI",
+      "connectorSlot": {
+        "web_search": "Web araması",
+        "news": "Haberler",
+        "social": "Sosyal medya"
+      },
+      "connectorMock": "sahte",
+      "connectorReal": "canlı",
+      "uptime": "Çalışma süresi",
+      "uptimeSeconds": "{{count}} saniye",
+      "dbPool": "Veritabanı havuzu",
+      "dbPoolSummary": "{{size}} bağlantı ({{idle}} boşta)"
+    },
+    "adminCreated": "İlk sistem yöneticisi hesabı oluşturuldu.",
+    "alreadySeeded": "Bir sistem yöneticisi hesabı zaten mevcut.",
+    "banLifted": "Bu kullanıcının yasağı kaldırıldı.",
+    "requestRejected": "Kayıt talebi reddedildi.",
+    "userBanned": "Kullanıcı yasaklandı.",
+    "userDeleted": "Kullanıcı silindi."
   },
   "search": {
     "subtitle": "BİYOMETRİK ARAMA",
@@ -307,5 +337,34 @@
   },
   "a11y": {
     "skipToContent": "Ana içeriğe geç"
+  },
+  "osint": {
+    "openLabel": "OSINT",
+    "title": "OSINT çalışma alanı — {{name}}",
+    "tabs": {
+      "evidence": "Kanıtlar",
+      "entityGraph": "Varlık grafiği",
+      "duplicates": "Olası mükerrerler"
+    },
+    "evidence": {
+      "queryPlaceholder": "Arama sorgusu (örn. tam ad)",
+      "collect": "Kanıt topla",
+      "providerErrors": "Bazı sağlayıcılar başarısız oldu: {{providers}}",
+      "empty": "Henüz kanıt toplanmadı."
+    },
+    "entityGraph": {
+      "valuePlaceholder": "Değer",
+      "add": "İlişki ekle",
+      "empty": "Henüz ilişki kaydedilmedi.",
+      "relationType": {
+        "alias": "Takma ad",
+        "username": "Kullanıcı adı",
+        "organization": "Kurum",
+        "website": "Web sitesi"
+      }
+    },
+    "duplicates": {
+      "empty": "Olası mükerrer bulunamadı."
+    }
   }
 }

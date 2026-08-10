@@ -71,7 +71,10 @@
       "recoveryCodesWarning": "Ces codes ne seront affichés qu'une seule fois.",
       "recoveryCodesAcknowledge": "J'ai enregistré ces codes",
       "disabled": "L'authentification multifacteur a été désactivée sur votre compte."
-    }
+    },
+    "loggedOut": "Vous avez été déconnecté.",
+    "registrationPending": "Votre inscription est en attente d'approbation par un administrateur.",
+    "forgotPasswordReceived": "Votre demande a été reçue. Vous serez contacté une fois votre mot de passe réinitialisé."
   },
   "errors": {
     "invalidResetToken": "Ce lien de réinitialisation du mot de passe est invalide ou a expiré.",
@@ -116,7 +119,8 @@
       "language": "Langue",
       "sound": "Son",
       "appearance": "Apparence",
-      "about": "À propos"
+      "about": "À propos",
+      "sessions": "Sessions"
     },
     "sound": {
       "enable": "Activer les sons de l'interface",
@@ -125,6 +129,14 @@
     "appearance": {
       "dark": "Sombre",
       "light": "Clair"
+    },
+    "sessions": {
+      "signedOutHint": "Connectez-vous pour voir et gérer vos sessions actives.",
+      "empty": "Aucune session active trouvée.",
+      "unknownDevice": "Appareil inconnu",
+      "currentBadge": "CET APPAREIL",
+      "lastUsed": "Dernière utilisation {{date}}",
+      "signOut": "Se déconnecter"
     }
   },
   "menu": {
@@ -233,8 +245,26 @@
       "integrityHint": "Vérifiez que la chaîne d'audit en ajout seul n'a pas été altérée.",
       "integrityCheckSubmit": "LANCER LA VÉRIFICATION D'INTÉGRITÉ",
       "integrityIntact": "Journal d'audit intact ({{eventsChecked}} événements vérifiés).",
-      "integrityBroken": "Échec d'intégrité du journal d'audit : {{breaks}} rupture(s) détectée(s) parmi {{eventsChecked}} événements vérifiés."
-    }
+      "integrityBroken": "Échec d'intégrité du journal d'audit : {{breaks}} rupture(s) détectée(s) parmi {{eventsChecked}} événements vérifiés.",
+      "connectorsHeading": "CONNECTEURS OSINT",
+      "connectorSlot": {
+        "web_search": "Recherche web",
+        "news": "Actualités",
+        "social": "Réseaux sociaux"
+      },
+      "connectorMock": "simulé",
+      "connectorReal": "en direct",
+      "uptime": "Disponibilité",
+      "uptimeSeconds": "{{count}} secondes",
+      "dbPool": "Pool de base de données",
+      "dbPoolSummary": "{{size}} connexions ({{idle}} inactives)"
+    },
+    "adminCreated": "Le premier compte administrateur système a été créé.",
+    "alreadySeeded": "Un compte administrateur système existe déjà.",
+    "banLifted": "Le bannissement de cet utilisateur a été levé.",
+    "requestRejected": "La demande d'inscription a été rejetée.",
+    "userBanned": "L'utilisateur a été banni.",
+    "userDeleted": "L'utilisateur a été supprimé."
   },
   "search": {
     "subtitle": "RECHERCHE BIOMÉTRIQUE",
@@ -307,5 +337,34 @@
   },
   "a11y": {
     "skipToContent": "Passer au contenu principal"
+  },
+  "osint": {
+    "openLabel": "OSINT",
+    "title": "Espace de travail OSINT — {{name}}",
+    "tabs": {
+      "evidence": "Preuves",
+      "entityGraph": "Graphe des entités",
+      "duplicates": "Doublons possibles"
+    },
+    "evidence": {
+      "queryPlaceholder": "Requête de recherche (ex. nom complet)",
+      "collect": "Collecter des preuves",
+      "providerErrors": "Certains fournisseurs ont échoué : {{providers}}",
+      "empty": "Aucune preuve collectée pour le moment."
+    },
+    "entityGraph": {
+      "valuePlaceholder": "Valeur",
+      "add": "Ajouter une relation",
+      "empty": "Aucune relation enregistrée pour le moment.",
+      "relationType": {
+        "alias": "Alias",
+        "username": "Nom d'utilisateur",
+        "organization": "Organisation",
+        "website": "Site web"
+      }
+    },
+    "duplicates": {
+      "empty": "Aucun doublon possible trouvé."
+    }
   }
 }

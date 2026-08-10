@@ -22,11 +22,15 @@ built frontend for everything else (with an SPA fallback to
 - **Staying warm**: Render's free plan spins the whole service down after
   ~15 minutes with no external traffic; the next request then pays a
   20-60s cold start that looks like the app is simply broken. The server
-  self-pings its own `GET /api/health` every 150 seconds (using
+  can self-ping its own `GET /api/health` every 150 seconds (using
   `RENDER_EXTERNAL_URL`, which Render always sets) to keep it warm — this
   prevents *repeated* cold starts, not the very first one after a
-  genuinely idle period. No-op outside Render (the env var is unset
-  locally), and irrelevant once on a paid plan.
+  genuinely idle period. **Disabled by default** (`ENABLE_SELF_PING`, see
+  `docs/ENVIRONMENT.md`) since a background self-callback is surprising
+  behavior a deployment shouldn't get automatically; this project's own
+  `render.yaml` opts in explicitly for the free-plan service it deploys.
+  No-op outside Render regardless (the env var is unset locally), and
+  unnecessary once on a paid plan.
 
 `render.yaml` at the repository root is a Render Blueprint defining one
 service, `anatolia-bis`. There is deliberately no `databases:` block:
@@ -122,22 +126,26 @@ verify with whoever manages the Render account.
 The entire application data set lives in one place: the `anatolia_bis`
 schema of the shared Postgres instance described above under "Target:
 Render" (or the local `postgres` container in Docker Compose). That
-includes, among other tables: `users` (accounts, roles, and — until
-item 32 of `docs/HARDENING_CHECKLIST.md` adds encryption-at-rest —
-plaintext `national_id`), `sessions`, `approval_tokens`, `searches` /
-`search_candidates`, `verification_events`, and the append-only
-`audit_events` trail. There is no separate object store, file volume, or
-secondary database to account for.
+includes, among other tables: `users` (accounts, roles — `national_id` is
+encrypted at rest with AES-256-GCM, see `server/src/national_id.rs` and
+`NATIONAL_ID_ENCRYPTION_KEY` in `docs/ENVIRONMENT.md`), `sessions`,
+`approval_tokens`, `searches` / `search_candidates`, `verification_events`,
+`biometric_templates` (enrolled candidate embeddings — sensitive
+biometric data, see below), `candidate_evidence`, `entity_relations`,
+`biometric_thresholds`, `organizations` / `organization_units` /
+`organization_memberships`, and the append-only `audit_events` trail.
+There is no separate object store, file volume, or secondary database to
+account for.
 
-**Not currently applicable:** biometric templates/embeddings. No
-`biometric_templates` table or equivalent exists yet (see item 21 in
-`docs/HARDENING_CHECKLIST.md` — this is deferred along with the real
-biometric provider, item 20). Probe images uploaded to `POST
-/api/v1/search/face` are never persisted (see
-`docs/SECURITY_ARCHITECTURE.md`); only their derived similarity scores
-are. Once template storage is added, this section must be revisited —
-templates are sensitive biometric data and would need their own backup
-and encryption treatment, not just "whatever the users table gets".
+`biometric_templates` deserves the same handling care as `national_id`:
+it stores each enrolled candidate's face embedding vector (on Postgres,
+also mirrored into a native `vector(128)` column for the indexed search
+path — see `docs/HARDENING_CHECKLIST.md` item 2). A leaked backup exposes
+biometric data, not just account records — encrypt and store it with at
+least the same rigor described below, and restrict who can request a
+restore. Probe images uploaded to `POST /api/v1/search/face` themselves
+are never persisted (see `docs/SECURITY_ARCHITECTURE.md`); only the
+derived embedding and similarity scores are.
 
 ### Backing up
 

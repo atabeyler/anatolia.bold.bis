@@ -71,7 +71,10 @@
       "recoveryCodesWarning": "This is the only time these codes will be displayed.",
       "recoveryCodesAcknowledge": "I have saved these codes",
       "disabled": "Multi-factor authentication has been disabled on your account."
-    }
+    },
+    "loggedOut": "You have been signed out.",
+    "registrationPending": "Your registration is awaiting admin approval.",
+    "forgotPasswordReceived": "Your request has been received. You will be contacted once your password has been reset."
   },
   "errors": {
     "validation": "Please check the fields and try again.",
@@ -116,7 +119,8 @@
       "language": "Language",
       "sound": "Sound",
       "appearance": "Appearance",
-      "about": "About"
+      "about": "About",
+      "sessions": "Sessions"
     },
     "sound": {
       "enable": "Enable interface sounds",
@@ -125,6 +129,14 @@
     "appearance": {
       "dark": "Dark",
       "light": "Light"
+    },
+    "sessions": {
+      "signedOutHint": "Sign in to see and manage your active sessions.",
+      "empty": "No active sessions found.",
+      "unknownDevice": "Unknown device",
+      "currentBadge": "THIS DEVICE",
+      "lastUsed": "Last used {{date}}",
+      "signOut": "Sign out"
     }
   },
   "menu": {
@@ -233,8 +245,26 @@
       "integrityHint": "Verify that the append-only audit chain has not been tampered with.",
       "integrityCheckSubmit": "RUN INTEGRITY CHECK",
       "integrityIntact": "Audit trail intact ({{eventsChecked}} events checked).",
-      "integrityBroken": "Audit trail integrity failure: {{breaks}} break(s) found among {{eventsChecked}} events checked."
-    }
+      "integrityBroken": "Audit trail integrity failure: {{breaks}} break(s) found among {{eventsChecked}} events checked.",
+      "connectorsHeading": "OSINT CONNECTORS",
+      "connectorSlot": {
+        "web_search": "Web search",
+        "news": "News",
+        "social": "Social"
+      },
+      "connectorMock": "mock",
+      "connectorReal": "live",
+      "uptime": "Uptime",
+      "uptimeSeconds": "{{count}} seconds",
+      "dbPool": "Database pool",
+      "dbPoolSummary": "{{size}} connections ({{idle}} idle)"
+    },
+    "adminCreated": "The first system administrator account has been created.",
+    "alreadySeeded": "A system administrator account already exists.",
+    "banLifted": "The ban has been lifted from this user.",
+    "requestRejected": "The registration request has been rejected.",
+    "userBanned": "The user has been banned.",
+    "userDeleted": "The user has been deleted."
   },
   "search": {
     "subtitle": "BIOMETRIC SEARCH",
@@ -307,5 +337,34 @@
   },
   "a11y": {
     "skipToContent": "Skip to main content"
+  },
+  "osint": {
+    "openLabel": "OSINT",
+    "title": "OSINT workspace — {{name}}",
+    "tabs": {
+      "evidence": "Evidence",
+      "entityGraph": "Entity graph",
+      "duplicates": "Possible duplicates"
+    },
+    "evidence": {
+      "queryPlaceholder": "Search query (e.g. full name)",
+      "collect": "Collect evidence",
+      "providerErrors": "Some providers failed: {{providers}}",
+      "empty": "No evidence collected yet."
+    },
+    "entityGraph": {
+      "valuePlaceholder": "Value",
+      "add": "Add relation",
+      "empty": "No relations recorded yet.",
+      "relationType": {
+        "alias": "Alias",
+        "username": "Username",
+        "organization": "Organization",
+        "website": "Website"
+      }
+    },
+    "duplicates": {
+      "empty": "No possible duplicates found."
+    }
   }
 }

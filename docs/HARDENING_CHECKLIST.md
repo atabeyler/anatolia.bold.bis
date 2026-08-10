@@ -561,17 +561,25 @@ eşleşme bu dosyanın sonunda listelidir.
   `EvidenceOrchestrator` (her provider'ı ayrı ayrı çalıştırıp hatalarını
   izole ediyor — bir provider'ın başarısız olması diğerlerinin sonucunu
   ya da tüm isteği etkilemiyor). Üç mock implementasyon
-  (`server/src/osint/mock.rs`) — gerçek bir OSINT API erişimi/anahtarı bu
-  ortamda yok, bu yüzden gerçek bir sağlayıcı implementasyonu yapılmadı.
-  `candidate_evidence` tablosu (`server/src/db/evidence.rs`) ve
+  (`server/src/osint/mock.rs`), artık gerçek web-search (Brave Search
+  API) ve news (NewsAPI.org) sağlayıcıları da var
+  (`server/src/osint/websearch.rs`, `server/src/osint/news.rs`),
+  `BRAVE_SEARCH_API_KEY`/`NEWS_API_KEY` ayarlandığında her slot bağımsız
+  olarak devreye giriyor, aksi halde mock'a düşüyor; bir
+  timeout/retry/circuit-breaker sarmalayıcısı var
+  (`server/src/osint/resilience.rs`). `candidate_evidence` tablosu
+  (`server/src/db/evidence.rs`) ve
   `POST /api/v1/candidates/{id}/evidence/collect` /
   `GET /api/v1/candidates/{id}/evidence` endpoint'leri
   (`server/src/evidence.rs`), `permission::can_manage_candidates` /
-  `can_view_search` ile aynı yetkilendirme desenini kullanıyor.
-  **Yapılmadı, kapsam dışı bırakıldı:** entity graph, reverse image
-  search, OSINT'e özel frontend UI — her biri kendi başına büyük bir iş;
-  sahte bir implementasyonla doldurmak CLAUDE.md'nin "never fake
-  unimplemented capabilities" kuralına aykırı olurdu.
+  `can_view_search` ile aynı yetkilendirme desenini kullanıyor. Entity
+  graph (`server/src/db/entity_graph.rs`,
+  `GET/POST /api/v1/candidates/{id}/entity-graph`) ve OSINT'e özel bir
+  frontend workspace (`client/src/components/OsintWorkspace.tsx`) daha
+  sonraki bir oturumda tamamlandı — aşağıdaki ayrı entity-graph maddesine
+  ve `docs/ROADMAP.md` Phase 5'e bakın. **Hâlâ yapılmadı:** gerçek bir
+  `AuthorizedSocialProvider` (her sosyal platform API'si kendi geliştirici
+  anlaşmasını gerektiriyor, bu ortamda yok) ve reverse image search.
 
 - [x] **Entity resolution (konservatif, non-biometric sinyaller
   üzerinden)** — `server/src/entity_resolution.rs`,
@@ -702,10 +710,10 @@ eşleşme bu dosyanın sonunda listelidir.
 | A | Authentication hardening | Phase 3.5 | Tamamlandı |
 | B | Audit log | Phase 3.6 | Tamamlandı |
 | C | Search/data correctness | Phase 3.7 | Tamamlandı |
-| D | Gerçek biyometrik motor | Phase 4 | Yapılmadı |
-| E | Evaluation (FAR/FRR/ROC) | Phase 4 içinde ayrı değil | Yapılmadı |
-| F | Yetkili connector'lar / OSINT | Phase 5 | Yapılmadı |
-| G | Deployment hardening | Phase 6 | Yapılmadı |
+| D | Gerçek biyometrik motor | Phase 4 | Tamamlandı (ONNX sağlayıcı opt-in, henüz canlı Render deploy'unda doğrulanmadı — bkz. `docs/ROADMAP.md` Phase 4) |
+| E | Evaluation (FAR/FRR/ROC) | Phase 4 içinde ayrı değil | Kalibrasyon aracı tamamlandı (`calibrate.rs`); gerçek etiketli bir veri setiyle henüz çalıştırılmadı |
+| F | Yetkili connector'lar / OSINT | Phase 5 | Web arama + haber gerçek, sosyal medya hâlâ mock; entity graph ve OSINT frontend workspace tamamlandı |
+| G | Deployment hardening | Phase 6 | Kısmen — bkz. `docs/ENTERPRISE_DEPLOYMENT.md` |
 
 ## Bu dosyayı güncel tutma kuralı
 

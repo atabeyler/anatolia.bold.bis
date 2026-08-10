@@ -71,7 +71,10 @@
       "recoveryCodesWarning": "يتم عرض هذه الرموز هذه المرة فقط.",
       "recoveryCodesAcknowledge": "لقد حفظت هذه الرموز",
       "disabled": "تم تعطيل المصادقة متعددة العوامل لحسابك."
-    }
+    },
+    "loggedOut": "تم تسجيل خروجك.",
+    "registrationPending": "تسجيلك في انتظار موافقة المسؤول.",
+    "forgotPasswordReceived": "تم استلام طلبك. سيتم التواصل معك بمجرد إعادة تعيين كلمة المرور الخاصة بك."
   },
   "errors": {
     "invalidResetToken": "رابط إعادة تعيين كلمة المرور هذا غير صالح أو منتهي الصلاحية.",
@@ -116,7 +119,8 @@
       "language": "اللغة",
       "sound": "الصوت",
       "appearance": "المظهر",
-      "about": "حول"
+      "about": "حول",
+      "sessions": "الجلسات"
     },
     "sound": {
       "enable": "تفعيل أصوات الواجهة",
@@ -125,6 +129,14 @@
     "appearance": {
       "dark": "داكن",
       "light": "فاتح"
+    },
+    "sessions": {
+      "signedOutHint": "سجّل الدخول لعرض جلساتك النشطة وإدارتها.",
+      "empty": "لم يتم العثور على جلسات نشطة.",
+      "unknownDevice": "جهاز غير معروف",
+      "currentBadge": "هذا الجهاز",
+      "lastUsed": "آخر استخدام {{date}}",
+      "signOut": "تسجيل الخروج"
     }
   },
   "menu": {
@@ -233,8 +245,26 @@
       "integrityHint": "تحقق من أن سلسلة التدقيق للإلحاق فقط لم يتم التلاعب بها.",
       "integrityCheckSubmit": "تشغيل فحص السلامة",
       "integrityIntact": "سجل التدقيق سليم (تم فحص {{eventsChecked}} حدث).",
-      "integrityBroken": "فشل في سلامة سجل التدقيق: تم العثور على {{breaks}} انقطاع من بين {{eventsChecked}} حدث تم فحصه."
-    }
+      "integrityBroken": "فشل في سلامة سجل التدقيق: تم العثور على {{breaks}} انقطاع من بين {{eventsChecked}} حدث تم فحصه.",
+      "connectorsHeading": "موصلات الاستخبارات مفتوحة المصدر",
+      "connectorSlot": {
+        "web_search": "بحث الويب",
+        "news": "الأخبار",
+        "social": "وسائل التواصل الاجتماعي"
+      },
+      "connectorMock": "تجريبي",
+      "connectorReal": "مباشر",
+      "uptime": "مدة التشغيل",
+      "uptimeSeconds": "{{count}} ثانية",
+      "dbPool": "تجمع قاعدة البيانات",
+      "dbPoolSummary": "{{size}} اتصال ({{idle}} خامل)"
+    },
+    "adminCreated": "تم إنشاء حساب مسؤول النظام الأول.",
+    "alreadySeeded": "يوجد بالفعل حساب مسؤول نظام.",
+    "banLifted": "تم رفع الحظر عن هذا المستخدم.",
+    "requestRejected": "تم رفض طلب التسجيل.",
+    "userBanned": "تم حظر المستخدم.",
+    "userDeleted": "تم حذف المستخدم."
   },
   "search": {
     "subtitle": "بحث بيومتري",
@@ -307,5 +337,34 @@
   },
   "a11y": {
     "skipToContent": "الانتقال إلى المحتوى الرئيسي"
+  },
+  "osint": {
+    "openLabel": "استخبارات مفتوحة المصدر",
+    "title": "مساحة عمل الاستخبارات مفتوحة المصدر — {{name}}",
+    "tabs": {
+      "evidence": "الأدلة",
+      "entityGraph": "مخطط الكيانات",
+      "duplicates": "التكرارات المحتملة"
+    },
+    "evidence": {
+      "queryPlaceholder": "استعلام البحث (مثل الاسم الكامل)",
+      "collect": "جمع الأدلة",
+      "providerErrors": "فشل بعض المزودين: {{providers}}",
+      "empty": "لم يتم جمع أي أدلة بعد."
+    },
+    "entityGraph": {
+      "valuePlaceholder": "القيمة",
+      "add": "إضافة علاقة",
+      "empty": "لم يتم تسجيل أي علاقات بعد.",
+      "relationType": {
+        "alias": "اسم مستعار",
+        "username": "اسم المستخدم",
+        "organization": "المؤسسة",
+        "website": "الموقع الإلكتروني"
+      }
+    },
+    "duplicates": {
+      "empty": "لم يتم العثور على تكرارات محتملة."
+    }
   }
 }

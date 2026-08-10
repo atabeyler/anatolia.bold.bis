@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import * as systemClient from '../services/systemClient';
-import type { AuditIntegrityReport, BiometricThreshold, HealthReady } from '../services/systemClient';
+import type {
+  AuditIntegrityReport,
+  BiometricThreshold,
+  ConnectorStatus,
+  HealthReady,
+} from '../services/systemClient';
 import { apiErrorMessageKey } from '../services/apiClient';
 
 export function SystemPanel() {
@@ -12,6 +17,9 @@ export function SystemPanel() {
 
   const [thresholds, setThresholds] = useState<BiometricThreshold[] | null>(null);
   const [thresholdsError, setThresholdsError] = useState(false);
+
+  const [connectors, setConnectors] = useState<ConnectorStatus[] | null>(null);
+  const [connectorsError, setConnectorsError] = useState(false);
 
   const [integrityReport, setIntegrityReport] = useState<AuditIntegrityReport | null>(null);
   const [integrityMessage, setIntegrityMessage] = useState<string | null>(null);
@@ -26,6 +34,10 @@ export function SystemPanel() {
       .listBiometricThresholds()
       .then(setThresholds)
       .catch(() => setThresholdsError(true));
+    systemClient
+      .listConnectors()
+      .then(setConnectors)
+      .catch(() => setConnectorsError(true));
   }, []);
 
   const handleCheckIntegrity = async () => {
@@ -68,6 +80,19 @@ export function SystemPanel() {
               <span>{t('admin.system.biometricSearch')}</span>
               <span>{health.biometricSearch}</span>
             </li>
+            <li>
+              <span>{t('admin.system.uptime')}</span>
+              <span>{t('admin.system.uptimeSeconds', { count: health.uptimeSeconds })}</span>
+            </li>
+            <li>
+              <span>{t('admin.system.dbPool')}</span>
+              <span>
+                {t('admin.system.dbPoolSummary', {
+                  size: health.dbPool.size,
+                  idle: health.dbPool.idle,
+                })}
+              </span>
+            </li>
           </ul>
         )}
       </section>
@@ -94,6 +119,28 @@ export function SystemPanel() {
                     eer: threshold.equalErrorRate.toFixed(4),
                     pairCount: threshold.pairCount,
                   })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="admin-panel">
+        <h2 className="admin-panel__heading">{t('admin.system.connectorsHeading')}</h2>
+        {connectors === null && !connectorsError && <p className="status-card__line">{t('admin.loading')}</p>}
+        {connectorsError && (
+          <p className="status-card__line status-card__line--offline">{t('admin.loadError')}</p>
+        )}
+        {connectors && connectors.length > 0 && (
+          <ul className="admin-key-value-list">
+            {connectors.map((connector) => (
+              <li key={connector.slot}>
+                <span>{t(`admin.system.connectorSlot.${connector.slot}`)}</span>
+                <span>
+                  {connector.providerName}
+                  {' · '}
+                  {connector.isMock ? t('admin.system.connectorMock') : t('admin.system.connectorReal')}
                 </span>
               </li>
             ))}

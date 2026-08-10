@@ -52,4 +52,7 @@ async fn ready_reports_the_active_biometric_provider_and_search_mode() {
     // pgvector index is possible there, so both fields must reflect that.
     assert_eq!(json["biometricProvider"], "mock");
     assert_eq!(json["biometricSearch"], "brute-force");
+    assert!(json["uptimeSeconds"].is_number());
+    assert!(json["dbPool"]["size"].as_u64().unwrap() >= 1);
+    assert!(json["dbPool"]["idle"].is_number());
 }

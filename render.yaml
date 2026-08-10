@@ -101,3 +101,10 @@ services:
         sync: false
       - key: RUST_LOG
         value: info
+      # Defaults to disabled (see server/src/main.rs) since a background
+      # self-callback is surprising behavior most deployments shouldn't get
+      # for free. This service runs on the free plan, which spins down
+      # after ~15 minutes idle, so it opts in explicitly here to avoid the
+      # resulting cold-start latency.
+      - key: ENABLE_SELF_PING
+        value: "true"

@@ -392,6 +392,80 @@ pub async fn me(State(state): State<AppState>, headers: HeaderMap) -> Response {
     }
 }
 
+/// The token family of the request's own refresh cookie, if present and
+/// valid — used only to mark which entry in `list_sessions` is "this
+/// device"; never trusted for authorization on its own (the bearer access
+/// token in `Authorization` still gates the route).
+fn current_session_family(headers: &HeaderMap, refresh_secret: &str) -> Option<String> {
+    let token = extract_cookie(headers, "refresh_token")?;
+    decode_refresh_token(&token, refresh_secret).map(|claims| claims.family)
+}
+
+/// `GET /api/v1/users/me/sessions` — the caller's own "where am I signed
+/// in" device list (item 12 in the V1 closure checklist): every active
+/// session, most-recently-used first, with the browser/OS string and IP
+/// address recorded at creation time (never re-resolved — this is a log
+/// of what was seen then, not a live lookup) and a flag for whichever one
+/// this very request is using.
+pub async fn list_sessions(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
+        return unauthorized(&headers);
+    };
+    let current_family = current_session_family(&headers, &state.secrets.jwt_refresh_secret);
+    match crate::db::list_active_sessions_for_user(&state.backend, &claims.id).await {
+        Ok(sessions) => {
+            let items: Vec<_> = sessions
+                .into_iter()
+                .map(|s| {
+                    let is_current = current_family.as_deref() == Some(s.token_family_id.as_str());
+                    serde_json::json!({
+                        "id": s.id,
+                        "createdAt": s.created_at,
+                        "lastUsedAt": s.last_used_at,
+                        "expiresAt": s.expires_at,
+                        "userAgent": s.user_agent,
+                        "ipAddress": s.ip_address,
+                        "isCurrent": is_current,
+                    })
+                })
+                .collect();
+            Json(serde_json::json!({ "items": items })).into_response()
+        }
+        Err(_) => {
+            ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response()
+        }
+    }
+}
+
+/// `DELETE /api/v1/users/me/sessions/{session_id}` — "sign out this
+/// device" for a session other than (or including) the one making the
+/// request. Ownership-checked (`revoke_session_owned_by_user`): a session
+/// id belonging to another user is treated the same as an unknown one, so
+/// this can never be used to probe or revoke someone else's session.
+pub async fn revoke_own_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Response {
+    let rid = request_id(&headers);
+    let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
+        return unauthorized(&headers);
+    };
+    match crate::db::revoke_session_owned_by_user(&state.backend, &session_id, &claims.id).await {
+        Ok(true) => {
+            AuditRecorder::new(action::AUTH_LOGOUT, audit_result::SUCCESS, rid.clone())
+                .actor(&claims)
+                .headers(&headers)
+                .resource("session", &session_id)
+                .save(&state)
+                .await;
+            Json(serde_json::json!({ "messageKey": "auth.loggedOut" })).into_response()
+        }
+        Ok(false) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
+        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    }
+}
+
 pub async fn register(
     State(state): State<AppState>,
     headers: HeaderMap,

@@ -291,6 +291,15 @@ body::before {
   content: '› ';
 }
 
+.overlay-list__item--session {
+  cursor: default;
+  align-items: flex-start;
+}
+
+.overlay-list__item--session:hover {
+  color: var(--color-text);
+}
+
 .overlay-content p {
   margin: 0 0 0.6rem;
   font-size: var(--text-base);

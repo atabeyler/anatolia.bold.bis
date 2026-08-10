@@ -71,7 +71,10 @@
       "recoveryCodesWarning": "Diese Codes werden nur dieses eine Mal angezeigt.",
       "recoveryCodesAcknowledge": "Ich habe diese Codes gespeichert",
       "disabled": "Die Multi-Faktor-Authentifizierung wurde für Ihr Konto deaktiviert."
-    }
+    },
+    "loggedOut": "Sie wurden abgemeldet.",
+    "registrationPending": "Ihre Registrierung wartet auf die Freigabe durch einen Administrator.",
+    "forgotPasswordReceived": "Ihre Anfrage wurde empfangen. Sie werden kontaktiert, sobald Ihr Passwort zurückgesetzt wurde."
   },
   "errors": {
     "invalidResetToken": "Dieser Link zum Zurücksetzen des Passworts ist ungültig oder abgelaufen.",
@@ -116,7 +119,8 @@
       "language": "Sprache",
       "sound": "Ton",
       "appearance": "Erscheinungsbild",
-      "about": "Über"
+      "about": "Über",
+      "sessions": "Sitzungen"
     },
     "sound": {
       "enable": "Oberflächentöne aktivieren",
@@ -125,6 +129,14 @@
     "appearance": {
       "dark": "Dunkel",
       "light": "Hell"
+    },
+    "sessions": {
+      "signedOutHint": "Melden Sie sich an, um Ihre aktiven Sitzungen zu sehen und zu verwalten.",
+      "empty": "Keine aktiven Sitzungen gefunden.",
+      "unknownDevice": "Unbekanntes Gerät",
+      "currentBadge": "DIESES GERÄT",
+      "lastUsed": "Zuletzt verwendet {{date}}",
+      "signOut": "Abmelden"
     }
   },
   "menu": {
@@ -233,8 +245,26 @@
       "integrityHint": "Überprüfen Sie, ob die unveränderliche Audit-Kette nicht manipuliert wurde.",
       "integrityCheckSubmit": "INTEGRITÄTSPRÜFUNG AUSFÜHREN",
       "integrityIntact": "Prüfprotokoll intakt ({{eventsChecked}} Ereignisse geprüft).",
-      "integrityBroken": "Integritätsfehler im Prüfprotokoll: {{breaks}} Unterbrechung(en) unter {{eventsChecked}} geprüften Ereignissen gefunden."
-    }
+      "integrityBroken": "Integritätsfehler im Prüfprotokoll: {{breaks}} Unterbrechung(en) unter {{eventsChecked}} geprüften Ereignissen gefunden.",
+      "connectorsHeading": "OSINT-KONNEKTOREN",
+      "connectorSlot": {
+        "web_search": "Websuche",
+        "news": "Nachrichten",
+        "social": "Soziale Medien"
+      },
+      "connectorMock": "simuliert",
+      "connectorReal": "live",
+      "uptime": "Betriebszeit",
+      "uptimeSeconds": "{{count}} Sekunden",
+      "dbPool": "Datenbank-Pool",
+      "dbPoolSummary": "{{size}} Verbindungen ({{idle}} inaktiv)"
+    },
+    "adminCreated": "Das erste Systemadministrator-Konto wurde erstellt.",
+    "alreadySeeded": "Es existiert bereits ein Systemadministrator-Konto.",
+    "banLifted": "Die Sperre für diesen Benutzer wurde aufgehoben.",
+    "requestRejected": "Die Registrierungsanfrage wurde abgelehnt.",
+    "userBanned": "Der Benutzer wurde gesperrt.",
+    "userDeleted": "Der Benutzer wurde gelöscht."
   },
   "search": {
     "subtitle": "BIOMETRISCHE SUCHE",
@@ -307,5 +337,34 @@
   },
   "a11y": {
     "skipToContent": "Zum Hauptinhalt springen"
+  },
+  "osint": {
+    "openLabel": "OSINT",
+    "title": "OSINT-Arbeitsbereich — {{name}}",
+    "tabs": {
+      "evidence": "Beweise",
+      "entityGraph": "Entitätsgraph",
+      "duplicates": "Mögliche Duplikate"
+    },
+    "evidence": {
+      "queryPlaceholder": "Suchanfrage (z. B. vollständiger Name)",
+      "collect": "Beweise sammeln",
+      "providerErrors": "Einige Anbieter sind fehlgeschlagen: {{providers}}",
+      "empty": "Noch keine Beweise gesammelt."
+    },
+    "entityGraph": {
+      "valuePlaceholder": "Wert",
+      "add": "Beziehung hinzufügen",
+      "empty": "Noch keine Beziehungen erfasst.",
+      "relationType": {
+        "alias": "Alias",
+        "username": "Benutzername",
+        "organization": "Organisation",
+        "website": "Website"
+      }
+    },
+    "duplicates": {
+      "empty": "Keine möglichen Duplikate gefunden."
+    }
   }
 }

@@ -19,7 +19,18 @@ the individual items.
 - [x] RBAC roles (SYSTEM_ADMIN, SECURITY_ADMIN, OPERATOR, REVIEWER, AUDITOR); approved registrations default to OPERATOR
 - [x] JWT auth (register/login/refresh/logout), bcrypt password hashing, per-key rate limiting
 - [x] Admin-approval workflow for new registrations, admin user administration (approve/reject/ban/unban/delete), rate-limited admin bootstrap (`seed-admin`)
-- [ ] Session/device management UI (server-side session model exists as of Phase 3.5 — no UI to list/revoke individual sessions yet), MFA, enterprise SSO
+- [x] TOTP multi-factor authentication (`server/src/mfa.rs`) — voluntary
+      enrollment for any role, mandatory for `MFA_REQUIRED_ROLES`; see
+      `API.md`
+- [x] Session/device management — `GET/DELETE /api/v1/users/me/sessions[/{id}]`
+      over the `sessions` table Phase 3.5 already introduced, plus a
+      self-service "Sessions" tab in Settings
+      (`client/src/components/SettingsOverlay.tsx`) listing every active
+      device (browser/OS string, IP, last used, which one is the current
+      request) with a "sign out this device" action, ownership-checked
+      server-side so a session id can never be used to probe or revoke
+      another account's session
+- [ ] Enterprise SSO
 
 ## Phase 3 — Search workflow
 
@@ -185,11 +196,24 @@ the individual items.
       `BRAVE_SEARCH_API_KEY`/`NEWS_API_KEY` is set, the mock otherwise,
       independently per slot. `candidate_evidence` storage and
       `POST/GET /api/v1/candidates/{id}/evidence[/collect]`. See `API.md`.
+      Connector status is now visible read-only at
+      `GET /api/v1/admin/connectors` (which provider is active in each
+      slot, real or mock) — see `osint::EvidenceOrchestrator::provider_status`'s
+      doc comment for why this stops at reporting rather than adding
+      runtime enable/disable: configuration stays environment-variable
+      based, the same pattern every other provider toggle in this
+      codebase uses. A per-candidate OSINT frontend workspace now exists
+      (`client/src/components/OsintWorkspace.tsx`, opened from a
+      candidate row on the dashboard): trigger evidence collection, view
+      collected evidence, view/add entity-graph relations, and view
+      possible duplicates, all in one place — previously only an evidence
+      *count* badge existed in the frontend, with no way to actually
+      collect evidence or view entity-graph relations from the UI at all.
       **Not implemented**: a real `AuthorizedSocialProvider` (every
       candidate social-platform API requires its own developer agreement,
       not available in this environment — see that trait's doc comment),
-      a declared per-connector capability/rate-limit management API,
-      reverse image search, and an OSINT-specific frontend workspace —
+      per-connector rate-limit configuration (there is no runtime-tunable
+      rate limit to report or change today), and reverse image search —
       each is its own, larger piece of work
 - [x] Conservative entity resolution over non-biometric signals —
       `server/src/entity_resolution.rs`,
@@ -217,18 +241,19 @@ the individual items.
 - [x] Secondary verification workflow — `REQUIRE_SECOND_REVIEW` four-eyes
       policy (`db::record_review_decision`); see
       `docs/SECURITY_ARCHITECTURE.md`
-- [x] Administration screens — `client/src/pages/AdminPage.tsx` now has
-      three tabs: Users (existing user management), Organizations (new —
-      `OrganizationsPanel.tsx`, backed by `orgClient.ts`: create
+- [x] Administration screens — `client/src/pages/AdminPage.tsx` has three
+      tabs: Users (existing user management), Organizations
+      (`OrganizationsPanel.tsx`, backed by `orgClient.ts`: create
       organizations, create/list units per organization, assign
-      memberships by user/organization ID), System (new —
-      `SystemPanel.tsx`, backed by `systemClient.ts`: readiness/biometric
-      provider/search-mode status, calibrated threshold list, an
-      on-demand audit-chain integrity check). Session management,
-      connector management, and MFA-policy screens are **not
-      implemented** — no backend exists yet for per-session revocation or
-      connector configuration, so a frontend for them would be
-      non-functional
+      memberships by user/organization ID), System (`SystemPanel.tsx`,
+      backed by `systemClient.ts`: readiness/biometric provider/search-mode
+      status, calibrated threshold list, OSINT connector status, an
+      on-demand audit-chain integrity check). Session/device management
+      is self-service rather than an admin screen — see "Session/device
+      management" under Phase 2. MFA-policy configuration stays
+      environment-variable-only (`MFA_REQUIRED_ROLES`, see
+      `docs/ENVIRONMENT.md`) — a dedicated screen for editing it at
+      runtime is **not implemented**
 - [ ] Thin Android/iOS clients (capture/upload + result display; no on-device inference)
 
 ## Phase 6 — Hardening
