@@ -65,6 +65,7 @@ pub fn router(state: AppState) -> Router {
         .route("/face", post(search::create_search_route))
         .route("/", get(search::list_searches_route))
         .route("/:search_id", get(search::get_search_route))
+        .route("/:search_id/status", get(search::get_search_status_route))
         .route(
             "/:search_id/candidates",
             get(search::get_search_candidates_route),

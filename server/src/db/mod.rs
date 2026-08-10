@@ -427,8 +427,8 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                 .await?;
             // A candidate should only ever appear once per search — the
             // unique index makes that a database-enforced invariant rather
-            // than one relying solely on `create_search_with_candidates`
-            // never inserting a duplicate. `search` history/filtering reads
+            // than one relying solely on `finalize_queued_search` never
+            // inserting a duplicate. `search` history/filtering reads
             // by `created_at`, `case_reference`, and `requested_by` (see
             // `list_searches_page`), so all three get an index.
             sqlx::query(
@@ -1837,14 +1837,14 @@ fn push_search_org_scope_sqlite<'a>(
     builder.push(")");
 }
 
-/// Persists a search attempt that failed before (or while) writing its
-/// candidate results — see `create_search_with_candidates`. Distinct from
-/// that function: this is a single, non-transactional insert, used only
-/// after the transactional attempt has already rolled back, so the
-/// failure itself has a durable, queryable record instead of vanishing
-/// silently.
+/// Creates a search row in `queued` status with no candidates yet —
+/// the fast, synchronous half of the async search flow (madde 18-19):
+/// `POST /api/v1/search/face` inserts this row and returns `202 Accepted`
+/// with its id immediately, before the (potentially slow) biometric
+/// pipeline has even started. `started_at` is left unset until
+/// `finalize_queued_search` actually begins processing.
 #[allow(clippy::too_many_arguments)]
-pub async fn record_failed_search(
+pub async fn create_queued_search(
     backend: &DbBackend,
     case_reference: &str,
     purpose: &str,
@@ -1853,20 +1853,17 @@ pub async fn record_failed_search(
     latitude: Option<f64>,
     longitude: Option<f64>,
     top_k: i64,
-    failure_code: &str,
-    failure_message_key: &str,
     organization_id: Option<&str>,
-) -> Result<Option<SearchRow>, sqlx::Error> {
+) -> Result<SearchRow, sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
-            let Ok(requester_uuid) = Uuid::parse_str(requested_by) else {
-                return Ok(None);
-            };
+            let requester_uuid = Uuid::parse_str(requested_by)
+                .map_err(|e| sqlx::Error::Protocol(format!("invalid requested_by uuid: {e}")))?;
             let org_uuid = organization_id.and_then(|v| Uuid::parse_str(v).ok());
-            sqlx::query_as::<_, SearchRow>(&format!(
+            sqlx::query_as(&format!(
                 "INSERT INTO searches (case_reference, purpose, requested_by, requested_by_name, latitude, longitude,
-                 top_k, status, started_at, completed_at, failure_code, failure_message_key, organization_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'failed', NOW(), NOW(), $8, $9, $10) RETURNING {SEARCH_COLUMNS_PG}"
+                 top_k, status, organization_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'queued', $8) RETURNING {SEARCH_COLUMNS_PG}"
             ))
             .bind(case_reference)
             .bind(purpose)
@@ -1875,20 +1872,16 @@ pub async fn record_failed_search(
             .bind(latitude)
             .bind(longitude)
             .bind(top_k)
-            .bind(failure_code)
-            .bind(failure_message_key)
             .bind(org_uuid)
             .fetch_one(pool)
             .await
-            .map(Some)
         }
         DbBackend::Sqlite(pool) => {
             let id = Uuid::new_v4().to_string();
             sqlx::query(
                 "INSERT INTO searches (id, case_reference, purpose, requested_by, requested_by_name, latitude, longitude,
-                 top_k, status, started_at, completed_at, failure_code, failure_message_key, organization_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'failed', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-                 strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?9, ?10, ?11)",
+                 top_k, status, organization_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'queued', ?9)",
             )
             .bind(&id)
             .bind(case_reference)
@@ -1898,62 +1891,44 @@ pub async fn record_failed_search(
             .bind(latitude)
             .bind(longitude)
             .bind(top_k)
-            .bind(failure_code)
-            .bind(failure_message_key)
             .bind(organization_id)
             .execute(pool)
             .await?;
-            load_search_by_id(backend, &id).await
+            sqlx::query_as(&format!(
+                "SELECT {SEARCH_COLUMNS_SQLITE} FROM searches WHERE id = ?1"
+            ))
+            .bind(&id)
+            .fetch_one(pool)
+            .await
         }
     }
 }
 
-/// Atomically creates a search and every one of its candidate results:
-/// `BEGIN`, insert the search row, insert each candidate row, mark the
-/// search `completed`, `COMMIT`. If any step fails, the whole attempt is
-/// rolled back — no partial candidate list is ever left visible for a
-/// search that didn't fully succeed (see CLAUDE.md's transactional-search
-/// requirement). On failure, the caller is expected to call
-/// `record_failed_search` separately to leave a durable failure record.
-#[allow(clippy::too_many_arguments)]
-pub async fn create_search_with_candidates(
+/// The background half of the async search flow: marks a previously
+/// `queued` search `processing`, writes every candidate result, then
+/// marks it `completed` — all in one transaction, so a failure partway
+/// through never leaves a partial candidate list visible.
+pub async fn finalize_queued_search(
     backend: &DbBackend,
-    case_reference: &str,
-    purpose: &str,
-    requested_by: &str,
-    requested_by_name: &str,
-    latitude: Option<f64>,
-    longitude: Option<f64>,
-    top_k: i64,
+    search_id: &str,
     scored: &[(String, f64)],
-    organization_id: Option<&str>,
-) -> Result<SearchRow, sqlx::Error> {
+) -> Result<Option<SearchRow>, sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
-            let requester_uuid = Uuid::parse_str(requested_by)
-                .map_err(|e| sqlx::Error::Protocol(format!("invalid requested_by uuid: {e}")))?;
-            let org_uuid = organization_id.and_then(|v| Uuid::parse_str(v).ok());
+            let Ok(search_uuid) = Uuid::parse_str(search_id) else {
+                return Ok(None);
+            };
             let mut tx = pool.begin().await?;
-            let search: SearchRow = sqlx::query_as(&format!(
-                "INSERT INTO searches (case_reference, purpose, requested_by, requested_by_name, latitude, longitude,
-                 top_k, status, started_at, organization_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing', NOW(), $8) RETURNING {SEARCH_COLUMNS_PG}"
-            ))
-            .bind(case_reference)
-            .bind(purpose)
-            .bind(requester_uuid)
-            .bind(requested_by_name)
-            .bind(latitude)
-            .bind(longitude)
-            .bind(top_k)
-            .bind(org_uuid)
-            .fetch_one(&mut *tx)
+            sqlx::query(
+                "UPDATE searches SET status = 'processing', started_at = NOW() WHERE id = $1",
+            )
+            .bind(search_uuid)
+            .execute(&mut *tx)
             .await?;
-            let search_uuid =
-                Uuid::parse_str(&search.id).expect("just-inserted search id is a valid uuid");
             for (candidate_id, score) in scored {
-                let candidate_uuid = Uuid::parse_str(candidate_id)
-                    .map_err(|e| sqlx::Error::Protocol(format!("invalid candidate uuid: {e}")))?;
+                let Ok(candidate_uuid) = Uuid::parse_str(candidate_id) else {
+                    continue;
+                };
                 sqlx::query("INSERT INTO search_candidates (search_id, candidate_id, score) VALUES ($1, $2, $3)")
                     .bind(search_uuid)
                     .bind(candidate_uuid)
@@ -1968,32 +1943,21 @@ pub async fn create_search_with_candidates(
             .fetch_one(&mut *tx)
             .await?;
             tx.commit().await?;
-            Ok(completed)
+            Ok(Some(completed))
         }
         DbBackend::Sqlite(pool) => {
             let mut tx = pool.begin().await?;
-            let search_id = Uuid::new_v4().to_string();
             sqlx::query(
-                "INSERT INTO searches (id, case_reference, purpose, requested_by, requested_by_name, latitude, longitude,
-                 top_k, status, started_at, organization_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'processing', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?9)",
+                "UPDATE searches SET status = 'processing', started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
             )
-            .bind(&search_id)
-            .bind(case_reference)
-            .bind(purpose)
-            .bind(requested_by)
-            .bind(requested_by_name)
-            .bind(latitude)
-            .bind(longitude)
-            .bind(top_k)
-            .bind(organization_id)
+            .bind(search_id)
             .execute(&mut *tx)
             .await?;
             for (candidate_id, score) in scored {
                 let row_id = Uuid::new_v4().to_string();
                 sqlx::query("INSERT INTO search_candidates (id, search_id, candidate_id, score) VALUES (?1, ?2, ?3, ?4)")
                     .bind(&row_id)
-                    .bind(&search_id)
+                    .bind(search_id)
                     .bind(candidate_id)
                     .bind(score)
                     .execute(&mut *tx)
@@ -2002,17 +1966,61 @@ pub async fn create_search_with_candidates(
             sqlx::query(
                 "UPDATE searches SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
             )
-            .bind(&search_id)
+            .bind(search_id)
             .execute(&mut *tx)
             .await?;
-            let completed: SearchRow = sqlx::query_as(&format!(
+            let completed = sqlx::query_as(&format!(
                 "SELECT {SEARCH_COLUMNS_SQLITE} FROM searches WHERE id = ?1"
             ))
-            .bind(&search_id)
-            .fetch_one(&mut *tx)
+            .bind(search_id)
+            .fetch_optional(&mut *tx)
             .await?;
             tx.commit().await?;
             Ok(completed)
+        }
+    }
+}
+
+/// Marks a previously `queued`/`processing` search `failed` — used both
+/// when the biometric provider rejects the probe and when finalization
+/// itself fails partway through.
+pub async fn mark_queued_search_failed(
+    backend: &DbBackend,
+    search_id: &str,
+    failure_code: &str,
+    failure_message_key: &str,
+) -> Result<Option<SearchRow>, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(search_uuid) = Uuid::parse_str(search_id) else {
+                return Ok(None);
+            };
+            sqlx::query_as(&format!(
+                "UPDATE searches SET status = 'failed', completed_at = NOW(), failure_code = $2, \
+                 failure_message_key = $3 WHERE id = $1 RETURNING {SEARCH_COLUMNS_PG}"
+            ))
+            .bind(search_uuid)
+            .bind(failure_code)
+            .bind(failure_message_key)
+            .fetch_optional(pool)
+            .await
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query(
+                "UPDATE searches SET status = 'failed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), \
+                 failure_code = ?2, failure_message_key = ?3 WHERE id = ?1",
+            )
+            .bind(search_id)
+            .bind(failure_code)
+            .bind(failure_message_key)
+            .execute(pool)
+            .await?;
+            sqlx::query_as(&format!(
+                "SELECT {SEARCH_COLUMNS_SQLITE} FROM searches WHERE id = ?1"
+            ))
+            .bind(search_id)
+            .fetch_optional(pool)
+            .await
         }
     }
 }

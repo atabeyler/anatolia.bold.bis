@@ -91,12 +91,18 @@ Implemented controls:
   Nothing ever `UPDATE`s or `DELETE`s an audit row. `GET /api/v1/audit`
   (server-side paginated/filtered) is restricted to `AUDITOR`,
   `SECURITY_ADMIN`, and `SYSTEM_ADMIN`. See `docs/SECURITY_ARCHITECTURE.md`.
-- **Transactional search + immutable review history**: a search and all
-  of its candidate results are written in one database transaction — a
-  failure rolls back rather than leaving a partial result set, and is
-  recorded as a `failed` search for traceability. Every confirm/reject/
-  inconclusive decision is appended to `verification_events` rather than
-  overwriting the previous one.
+- **Async search + immutable review history**: `POST /api/v1/search/face`
+  returns `202 Accepted` immediately with a queued search id; the
+  biometric pipeline runs in a background task and is polled via
+  `GET /api/v1/search/{id}/status`. The search and all of its candidate
+  results are written in one database transaction when the background
+  task finishes — a failure rolls back rather than leaving a partial
+  result set, and marks the search `failed` for traceability instead. A
+  `SEARCH_COMPLETED` audit write failure downgrades the search to
+  `failed` too, so a poller never observes a `completed` status the audit
+  trail can't back up. Every confirm/reject/inconclusive decision is
+  appended to `verification_events` rather than overwriting the previous
+  one.
 - **Soft-deleted user accounts**: deleting a user marks `deleted_at`
   and revokes all of their sessions instead of physically removing the
   row, so past search/audit/review history stays attributable to a real

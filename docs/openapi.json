@@ -365,7 +365,7 @@
     },
     "/api/v1/search/face": {
       "post": {
-        "summary": "Submit a probe image, get ranked scored candidates",
+        "summary": "Submit a probe image; accepted for async biometric processing (madde 18-19)",
         "security": [
           {
             "bearerAuth": []
@@ -381,8 +381,8 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "202": {
+            "description": "Accepted — poll GET /api/v1/search/{searchId}/status"
           },
           "400": {
             "description": "Validation error"
@@ -951,6 +951,27 @@
           },
           "401": {
             "description": "Missing/invalid METRICS_TOKEN, when configured"
+          }
+        }
+      }
+    },
+    "/api/v1/search/{searchId}/status": {
+      "get": {
+        "summary": "Poll a search's current status/candidates (async search flow, madde 18-19)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
           }
         }
       }

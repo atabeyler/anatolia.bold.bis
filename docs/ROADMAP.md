@@ -74,14 +74,15 @@ the individual items.
 
 ## Phase 3.7 — Search/data correctness
 
-- [x] Transactional search creation (`db::create_search_with_candidates`):
+- [x] Transactional search finalization (`db::finalize_queued_search`):
       search row + every candidate result written in one transaction; a
       failure rolls back and is recorded as a `failed` search rather than
       leaving a partial candidate list or vanishing silently
 - [x] Search status state machine (`queued`/`processing`/`completed`/
       `failed`, `started_at`/`completed_at`/`failure_code`/
-      `failure_message_key`); `cancelled` reserved for the async-search
-      milestone below
+      `failure_message_key`) — now the real, reachable async flow (see
+      Phase 6 below), not just a conceptual one; `cancelled` is defined
+      in the schema but has no code path that reaches it yet
 - [x] Configurable `SEARCH_DEFAULT_TOP_K`/`SEARCH_MAX_TOP_K` replacing a
       compile-time constant; client-requested `topK` clamped server-side
 - [x] Server-side pagination on search history (`GET /api/v1/search`)
@@ -102,6 +103,15 @@ the individual items.
       stamp them from (Phase 4)
 - [x] Pagination for the admin user list — `GET /api/v1/admin/users` is
       server-side paginated
+- [x] Async search flow — `POST /api/v1/search/face` returns `202
+      Accepted` with a queued search id immediately; the biometric
+      pipeline runs in a background task, polled via `GET
+      /api/v1/search/{id}/status`. A deliberate response-contract change
+      (the endpoint previously returned a synchronous `200` with the
+      finished result), made with the repository owner's explicit choice
+      of `202` + polling over `202` + SSE/WebSocket — the latter adds
+      connection-management complexity disproportionate to a pipeline
+      that completes in seconds, not minutes. See `API.md`
 
 ## Phase 4 — Production biometric provider
 

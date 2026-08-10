@@ -6,12 +6,12 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::audit::{action, result as audit_result, AuditRecorder};
-use crate::auth::{auth_user_from_headers, require_role};
+use crate::auth::{auth_user_from_headers, require_role, Claims};
 use crate::db::{
-    create_search_with_candidates, list_search_candidates, list_searches_page,
+    create_queued_search, finalize_queued_search, list_search_candidates, list_searches_page,
     list_verification_events, load_candidate_by_id, load_search_by_id, load_user_by_id,
-    record_failed_search, record_review_decision, AppState, CandidateRow, ReviewDecisionOutcome,
-    SearchCandidateRow, SearchRow, VerificationEventRow,
+    mark_queued_search_failed, record_review_decision, AppState, CandidateRow,
+    ReviewDecisionOutcome, SearchCandidateRow, SearchRow, VerificationEventRow,
 };
 use crate::error::{request_id, ApiError};
 use crate::permission;
@@ -71,14 +71,18 @@ fn verification_event_json(event: &VerificationEventRow) -> serde_json::Value {
 }
 
 /// `POST /api/v1/search/face` — multipart form: `caseReference`, `purpose`,
-/// `image`, optional `topK`. Runs the (currently mock) `BiometricProvider`
-/// over every known candidate and stores the ranked, scored result — never
-/// a verdict, see CLAUDE.md's "candidates, not verdicts" principle. The
-/// search row and every one of its candidate results are written in a
-/// single transaction (see `db::create_search_with_candidates`); a
-/// persistence failure never leaves a partial candidate list behind, and
-/// is itself recorded as a `failed` search (see `db::record_failed_search`)
-/// rather than silently vanishing.
+/// `image`, optional `topK`. Async search flow (madde 18-19): validates
+/// the probe image and request synchronously (fast — no biometric
+/// inference yet), writes a `queued` search row, and returns
+/// **`202 Accepted`** with that row's id immediately. The (potentially
+/// slow, especially under `BIOMETRIC_PROVIDER=onnx`) biometric pipeline
+/// then runs in a background task; the caller polls
+/// `GET /api/v1/search/{id}/status` until `status` leaves
+/// `queued`/`processing`. This changed response contract (`202` instead
+/// of a synchronous `200` with the finished result) was a deliberate
+/// choice made with the repository owner over the simpler
+/// `200`-with-full-result shape the search endpoint used before — see
+/// `docs/SECURITY_ARCHITECTURE.md`.
 pub async fn create_search_route(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -168,6 +172,80 @@ pub async fn create_search_route(
         .ok()
         .flatten();
 
+    let queued = match create_queued_search(
+        &state.backend,
+        &case_reference,
+        &purpose,
+        &claims.id,
+        &requester_name,
+        latitude,
+        longitude,
+        top_k,
+        organization_id.as_deref(),
+    )
+    .await
+    {
+        Ok(search) => search,
+        Err(err) => {
+            tracing::warn!(error = %err, "failed to persist queued search");
+            AuditRecorder::new(action::SEARCH_FAILED, audit_result::FAILURE, rid.clone())
+                .actor(&claims)
+                .headers(&headers)
+                .case_reference(&case_reference)
+                .resource("search", "unknown")
+                .save(&state)
+                .await;
+            return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response();
+        }
+    };
+
+    // Best-effort: this only records that a search was accepted for
+    // processing, nothing security-critical has happened yet — the
+    // MANDATORY guarantee (never report success if the audit write
+    // failed) is applied to SEARCH_COMPLETED in the background task
+    // below instead, since that's the point a client-visible "completed"
+    // status becomes trustworthy or not.
+    AuditRecorder::new(action::SEARCH_CREATED, audit_result::SUCCESS, rid.clone())
+        .actor(&claims)
+        .headers(&headers)
+        .case_reference(&case_reference)
+        .resource("search", &queued.id)
+        .metadata(json!({ "topK": top_k }))
+        .save(&state)
+        .await;
+
+    tokio::spawn(run_queued_search(
+        state,
+        queued.id.clone(),
+        image_bytes,
+        top_k,
+        claims,
+        headers,
+        case_reference,
+    ));
+
+    (
+        axum::http::StatusCode::ACCEPTED,
+        Json(json!({ "search": search_json(&queued) })),
+    )
+        .into_response()
+}
+
+/// The background half of the async search flow — runs after
+/// `create_search_route` has already returned `202 Accepted` to the
+/// client, so there is no HTTP response left to attach a failure to;
+/// every outcome is instead written to the search row itself (which
+/// `GET /api/v1/search/{id}/status` reports) and to the audit trail.
+async fn run_queued_search(
+    state: AppState,
+    search_id: String,
+    image_bytes: Vec<u8>,
+    top_k: i64,
+    claims: Claims,
+    headers: HeaderMap,
+    case_reference: String,
+) {
+    let rid = uuid::Uuid::new_v4().to_string();
     let provider_started = std::time::Instant::now();
     let ranked = match state
         .biometric_provider
@@ -189,7 +267,22 @@ pub async fn create_search_route(
             )
             .increment(1);
             tracing::warn!(error = %err, "biometric provider rejected probe image");
-            return ApiError::new(err.code(), err.message_key(), rid).into_response();
+            let _ = mark_queued_search_failed(
+                &state.backend,
+                &search_id,
+                err.code(),
+                err.message_key(),
+            )
+            .await;
+            AuditRecorder::new(action::SEARCH_FAILED, audit_result::FAILURE, rid)
+                .actor(&claims)
+                .headers(&headers)
+                .case_reference(&case_reference)
+                .resource("search", &search_id)
+                .metadata(json!({ "failureCode": err.code() }))
+                .save(&state)
+                .await;
+            return;
         }
     };
     let scored: Vec<(String, f64)> = ranked
@@ -197,88 +290,101 @@ pub async fn create_search_route(
         .map(|s| (s.candidate.id.clone(), s.score))
         .collect();
 
-    match create_search_with_candidates(
-        &state.backend,
-        &case_reference,
-        &purpose,
-        &claims.id,
-        &requester_name,
-        latitude,
-        longitude,
-        top_k,
-        &scored,
-        organization_id.as_deref(),
-    )
-    .await
-    {
-        Ok(search) => {
-            let candidate_rows = match list_search_candidates(&state.backend, &search.id).await {
-                Ok(rows) => rows,
-                Err(_) => {
-                    return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response()
-                }
-            };
+    match finalize_queued_search(&state.backend, &search_id, &scored).await {
+        Ok(Some(search)) => {
+            let candidate_count = list_search_candidates(&state.backend, &search.id)
+                .await
+                .map(|rows| rows.len())
+                .unwrap_or(0);
 
-            // MANDATORY: a biometric search must never be reported to the
-            // client as a clean success if its audit record failed to
-            // write — see AuditRecorder::save_mandatory. The search row
-            // itself is already committed at this point (this codebase
-            // does not yet share one transaction between the two — see
-            // the limitation noted on save_mandatory); what this
-            // guarantees is that the API response is never a silent lie.
-            if let Err(mut err) =
+            // MANDATORY: never leave a search reporting `completed` via
+            // the status endpoint if its audit record failed to write —
+            // the async equivalent of `save_mandatory`'s guarantee on the
+            // old synchronous path. Here there's no HTTP response to
+            // fail instead, so a write failure downgrades the search
+            // itself to `failed` so a poller never observes a silent lie.
+            if let Err(err) =
                 AuditRecorder::new(action::SEARCH_COMPLETED, audit_result::SUCCESS, rid.clone())
                     .actor(&claims)
                     .headers(&headers)
                     .case_reference(&case_reference)
                     .resource("search", &search.id)
-                    .metadata(json!({ "candidateCount": candidate_rows.len(), "topK": top_k }))
+                    .metadata(json!({ "candidateCount": candidate_count, "topK": top_k }))
                     .save_mandatory(&state)
                     .await
             {
-                err.request_id = rid;
-                return err.into_response();
+                tracing::error!(error_code = err.code, search_id = %search.id, "mandatory audit write failed after search completed; downgrading to failed");
+                let _ = mark_queued_search_failed(
+                    &state.backend,
+                    &search.id,
+                    "AUDIT_WRITE_FAILED",
+                    "errors.auditWriteFailed",
+                )
+                .await;
             }
-
-            Json(json!({
-                "search": search_json(&search),
-                "candidates": candidate_rows.iter().map(search_candidate_json).collect::<Vec<_>>(),
-            }))
-            .into_response()
+        }
+        Ok(None) => {
+            tracing::error!(search_id = %search_id, "finalize_queued_search found no matching queued row");
         }
         Err(err) => {
-            tracing::warn!(error = %err, "search persistence failed; rolled back");
-            let failed = record_failed_search(
+            tracing::warn!(error = %err, "search finalization failed; marking search failed");
+            let _ = mark_queued_search_failed(
                 &state.backend,
-                &case_reference,
-                &purpose,
-                &claims.id,
-                &requester_name,
-                latitude,
-                longitude,
-                top_k,
+                &search_id,
                 "SEARCH_PERSIST_FAILED",
                 "errors.internal",
-                organization_id.as_deref(),
             )
-            .await
-            .ok()
-            .flatten();
-
-            AuditRecorder::new(action::SEARCH_FAILED, audit_result::FAILURE, rid.clone())
+            .await;
+            AuditRecorder::new(action::SEARCH_FAILED, audit_result::FAILURE, rid)
                 .actor(&claims)
                 .headers(&headers)
                 .case_reference(&case_reference)
-                .resource(
-                    "search",
-                    failed.as_ref().map(|s| s.id.as_str()).unwrap_or("unknown"),
-                )
+                .resource("search", &search_id)
                 .save(&state)
                 .await;
-
-            ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response()
         }
     }
+}
+
+/// `GET /api/v1/search/{search_id}/status` — polling endpoint for the
+/// async search flow: the current search row plus its candidates (once
+/// any exist). Poll until `search.status` is no longer `queued`/
+/// `processing`. Same view-role and object-level authorization as the
+/// rest of the search workflow.
+pub async fn get_search_status_route(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    let rid = request_id(&headers);
+    let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
+        return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
+    };
+    if !permission::can_view_search(&claims.role) {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
+    let search = match load_search_by_id(&state.backend, &id).await {
+        Ok(Some(search)) => search,
+        Ok(None) => return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
+        Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    };
+    let org_ids = actor_org_ids(&state, &claims).await;
+    if !permission::can_view_scoped_resource(
+        &claims.role,
+        &org_ids,
+        search.organization_id.as_deref(),
+    ) {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
+    let candidate_rows = match list_search_candidates(&state.backend, &search.id).await {
+        Ok(rows) => rows,
+        Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    };
+    Json(json!({
+        "search": search_json(&search),
+        "candidates": candidate_rows.iter().map(search_candidate_json).collect::<Vec<_>>(),
+    }))
+    .into_response()
 }
 
 pub(crate) fn code_message_key(code: &'static str) -> &'static str {

@@ -117,16 +117,20 @@ async fn seed_admin_and_login(app: &axum::Router, user_code: &str) -> String {
         .to_string()
 }
 
-#[tokio::test]
-async fn a_real_search_completes_with_ranked_candidates() {
-    let _guard = ENV_GUARD.lock().await;
-    let state = AppState::for_tests().await;
-    let app = routes::router(state);
-    let token = seed_admin_and_login(&app, "SEARCHADM1").await;
-
+/// Submits a search (async flow, madde 18-19: `POST /api/v1/search/face`
+/// returns `202 Accepted` immediately) and polls
+/// `GET /api/v1/search/{id}/status` until the background pipeline leaves
+/// `queued`/`processing`, returning the final `{ "search": ..., "candidates": [...] }`
+/// payload. Bounded to avoid hanging the test suite if something regresses.
+async fn submit_search_and_wait(
+    app: &axum::Router,
+    token: &str,
+    case_reference: &str,
+    purpose: &str,
+) -> Value {
     let (content_type, body) = MultipartRequest::new()
-        .text_field("caseReference", "CASE-001")
-        .text_field("purpose", "Identity verification")
+        .text_field("caseReference", case_reference)
+        .text_field("purpose", purpose)
         .image_field("image", "probe.png", "image/png", &valid_png_bytes(64, 64))
         .finish();
 
@@ -143,8 +147,42 @@ async fn a_real_search_completes_with_ranked_candidates() {
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload = body_json(response).await;
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let accepted = body_json(response).await;
+    let search_id = accepted["search"]["id"].as_str().unwrap().to_string();
+
+    for _ in 0..100 {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/api/v1/search/{search_id}/status"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let payload = body_json(response).await;
+        let status = payload["search"]["status"].as_str().unwrap_or("");
+        if status != "queued" && status != "processing" {
+            return payload;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("search {search_id} did not leave queued/processing in time");
+}
+
+#[tokio::test]
+async fn a_real_search_completes_with_ranked_candidates() {
+    let _guard = ENV_GUARD.lock().await;
+    let state = AppState::for_tests().await;
+    let app = routes::router(state);
+    let token = seed_admin_and_login(&app, "SEARCHADM1").await;
+
+    let payload = submit_search_and_wait(&app, &token, "CASE-001", "Identity verification").await;
     assert_eq!(payload["search"]["status"], "completed");
     assert!(payload["search"]["completedAt"].is_string());
     assert!(!payload["candidates"].as_array().unwrap().is_empty());
@@ -269,7 +307,7 @@ async fn requested_top_k_is_clamped_to_the_configured_maximum() {
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
     let payload = body_json(response).await;
     let top_k = payload["search"]["topK"].as_i64().unwrap();
     assert!(
@@ -285,25 +323,7 @@ async fn review_decisions_are_recorded_as_immutable_history() {
     let app = routes::router(state);
     let token = seed_admin_and_login(&app, "SEARCHADM5").await;
 
-    let (content_type, body) = MultipartRequest::new()
-        .text_field("caseReference", "CASE-005")
-        .text_field("purpose", "Identity verification")
-        .image_field("image", "probe.png", "image/png", &valid_png_bytes(64, 64))
-        .finish();
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/search/face")
-                .header("authorization", format!("Bearer {token}"))
-                .header("content-type", content_type)
-                .body(Body::from(body))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let payload = body_json(response).await;
+    let payload = submit_search_and_wait(&app, &token, "CASE-005", "Identity verification").await;
     let search_id = payload["search"]["id"].as_str().unwrap().to_string();
     let candidate_id = payload["candidates"][0]["candidateId"]
         .as_str()
@@ -382,25 +402,7 @@ async fn marking_a_candidate_inconclusive_leaves_it_open_for_further_review() {
     let app = routes::router(state);
     let token = seed_admin_and_login(&app, "SEARCHADM8").await;
 
-    let (content_type, body) = MultipartRequest::new()
-        .text_field("caseReference", "CASE-008")
-        .text_field("purpose", "Identity verification")
-        .image_field("image", "probe.png", "image/png", &valid_png_bytes(64, 64))
-        .finish();
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/search/face")
-                .header("authorization", format!("Bearer {token}"))
-                .header("content-type", content_type)
-                .body(Body::from(body))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let payload = body_json(response).await;
+    let payload = submit_search_and_wait(&app, &token, "CASE-008", "Identity verification").await;
     let search_id = payload["search"]["id"].as_str().unwrap().to_string();
     let candidate_id = payload["candidates"][0]["candidateId"]
         .as_str()
@@ -474,23 +476,13 @@ async fn search_history_is_paginated_server_side() {
     let token = seed_admin_and_login(&app, "SEARCHADM6").await;
 
     for i in 0..3 {
-        let (content_type, body) = MultipartRequest::new()
-            .text_field("caseReference", &format!("CASE-PAGE-{i}"))
-            .text_field("purpose", "Identity verification")
-            .image_field("image", "probe.png", "image/png", &valid_png_bytes(64, 64))
-            .finish();
-        app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/search/face")
-                    .header("authorization", format!("Bearer {token}"))
-                    .header("content-type", content_type)
-                    .body(Body::from(body))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        submit_search_and_wait(
+            &app,
+            &token,
+            &format!("CASE-PAGE-{i}"),
+            "Identity verification",
+        )
+        .await;
     }
 
     let response = app
@@ -510,4 +502,39 @@ async fn search_history_is_paginated_server_side() {
     assert_eq!(payload["items"].as_array().unwrap().len(), 2);
     assert_eq!(payload["pageSize"], 2);
     assert!(payload["total"].as_i64().unwrap() >= 3);
+}
+
+#[tokio::test]
+async fn a_queued_search_is_accepted_immediately_with_a_job_id() {
+    let _guard = ENV_GUARD.lock().await;
+    let state = AppState::for_tests().await;
+    let app = routes::router(state);
+    let token = seed_admin_and_login(&app, "SEARCHADM9").await;
+
+    let (content_type, body) = MultipartRequest::new()
+        .text_field("caseReference", "CASE-009")
+        .text_field("purpose", "Identity verification")
+        .image_field("image", "probe.png", "image/png", &valid_png_bytes(64, 64))
+        .finish();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/search/face")
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", content_type)
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let payload = body_json(response).await;
+    assert!(payload["search"]["id"].as_str().is_some());
+    // Accepted immediately means the pipeline hasn't necessarily run yet —
+    // the status must be queued or (if the background task already won
+    // the race) processing/completed, never something invalid.
+    let status = payload["search"]["status"].as_str().unwrap();
+    assert!(["queued", "processing", "completed"].contains(&status));
 }

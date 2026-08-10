@@ -69,12 +69,20 @@ export function DashboardPage() {
     setSubmitting(true);
     try {
       const result = await searchClient.createSearch(caseReference.trim(), purpose.trim(), image, getLastKnownLocation());
-      setActiveSearch(result.search);
-      setActiveCandidates(result.candidates);
-      setCaseReference('');
-      setPurpose('');
-      setImage(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      // The async pipeline (madde 18-19) can fail after acceptance (202),
+      // not just at request time — surface it the same way a request-level
+      // error would be, since the client only ever sees a single
+      // "did this search work" outcome regardless of which stage failed.
+      if (result.search.status === 'failed') {
+        setFormErrorKey(result.search.failureMessageKey ?? 'search.createError');
+      } else {
+        setActiveSearch(result.search);
+        setActiveCandidates(result.candidates);
+        setCaseReference('');
+        setPurpose('');
+        setImage(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
       loadPastSearches();
     } catch (error) {
       setFormErrorKey(apiErrorMessageKey(error, 'search.createError'));

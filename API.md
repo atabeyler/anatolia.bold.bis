@@ -406,39 +406,24 @@ a fresh re-encode of the decoded pixel data, not the original upload
 bytes, which strips any EXIF/XMP metadata (GPS coordinates, device
 make/model, capture timestamp) the original file carried.
 
-Runs the active `BiometricProvider` (`BIOMETRIC_PROVIDER` — `mock` by
+**Async search flow (madde 18-19).** Validation (image, case reference,
+purpose, coordinates) happens synchronously and can still fail this
+request directly with `400`/`403` as described above. Once validation
+passes, the request does **not** wait for the biometric pipeline to run:
+it writes a `queued` search row and returns **`202 Accepted`**
+immediately —
+
+```json
+{ "search": { "id": "...", "status": "queued", "caseReference": "...", "purpose": "...", "topK": 10, "createdAt": "...", "startedAt": null, "completedAt": null } }
+```
+
+— while the active `BiometricProvider` (`BIOMETRIC_PROVIDER` — `mock` by
 default, or `onnx` for the real YuNet/SFace pipeline; see
-`docs/SECURITY_ARCHITECTURE.md`) against every enrolled candidate's stored
-templates. The search row and every one of its candidate results are
-written in a single database transaction (see
-`db::create_search_with_candidates`) — a persistence failure never leaves
-a partial candidate list visible; the attempt is instead recorded as a
-`failed` search (see the status table below) and the request returns
-**`500 Internal Server Error`**. The probe image itself is never
-persisted; only its derived scores are.
+`docs/SECURITY_ARCHITECTURE.md`) runs against every enrolled candidate's
+stored templates in a background task. Poll
+**`GET /api/v1/search/{search_id}/status`** until `search.status` is no
+longer `queued`/`processing`:
 
-Under `BIOMETRIC_PROVIDER=onnx`, the probe image is run through a real
-pipeline (face detection → quality gating → alignment → embedding) before
-any candidate comparison happens. A probe the pipeline can't use returns
-**`422 Unprocessable Entity`** with one of these codes instead of a
-ranked-candidate result:
-
-| `code` | Meaning |
-|---|---|
-| `NO_FACE_DETECTED` | No face found in the probe image. |
-| `MULTIPLE_FACES_DETECTED` | More than one face found; exactly one is required. |
-| `FACE_TOO_SMALL` | The detected face is too small relative to the image. |
-| `IMAGE_TOO_BLURRY` | Laplacian-variance blur check failed. |
-| `EXCESSIVE_POSE` | Landmark-symmetry pose check failed (face too rotated). |
-| `POOR_LIGHTING` | Mean-brightness check failed (too dark or too bright). |
-| `LOW_FACE_QUALITY` | Detector confidence below the search-time threshold. |
-
-If the provider itself can't run (e.g. `onnx` configured but model
-initialization failed at startup — which is itself a fail-closed startup
-panic, not a runtime state — or a transient inference error), the
-response is **`503 Service Unavailable`**, `BIOMETRIC_PROVIDER_UNAVAILABLE`.
-
-**`200 OK`**:
 ```json
 {
   "search": {
@@ -454,12 +439,48 @@ response is **`503 Service Unavailable`**, `BIOMETRIC_PROVIDER_UNAVAILABLE`.
 ```
 `candidates` is ranked highest score first, capped at `topK`. `score` is a
 similarity value in `[0, 1]` — never a match/no-match verdict; see
-"Candidates, not verdicts" in CLAUDE.md.
+"Candidates, not verdicts" in CLAUDE.md. Same view-role and object-level
+authorization as the rest of the search workflow.
+
+A search that fails ends up `status: "failed"` with `failureCode`/
+`failureMessageKey` set, rather than an HTTP error — there's no HTTP
+response left in-flight by the time the background task knows the
+outcome. The search row and every one of its candidate results are
+written in a single database transaction (`db::finalize_queued_search`)
+— a persistence failure never leaves a partial candidate list visible;
+the search is instead marked `failed` (`SEARCH_PERSIST_FAILED`). The
+probe image itself is never persisted; only its derived scores are.
+
+Under `BIOMETRIC_PROVIDER=onnx`, the probe image is run through a real
+pipeline (face detection → quality gating → alignment → embedding) before
+any candidate comparison happens. A probe the pipeline can't use marks
+the search `failed` with one of these `failureCode`s instead of producing
+ranked candidates:
+
+| `failureCode` | Meaning |
+|---|---|
+| `NO_FACE_DETECTED` | No face found in the probe image. |
+| `MULTIPLE_FACES_DETECTED` | More than one face found; exactly one is required. |
+| `FACE_TOO_SMALL` | The detected face is too small relative to the image. |
+| `IMAGE_TOO_BLURRY` | Laplacian-variance blur check failed. |
+| `EXCESSIVE_POSE` | Landmark-symmetry pose check failed (face too rotated). |
+| `POOR_LIGHTING` | Mean-brightness check failed (too dark or too bright). |
+| `LOW_FACE_QUALITY` | Detector confidence below the search-time threshold. |
+| `BIOMETRIC_PROVIDER_UNAVAILABLE` | The provider itself couldn't run (e.g. a transient inference error; startup-time model failures are a fail-closed process panic, not a runtime state). |
+| `AUDIT_WRITE_FAILED` | The search's own completion audit record failed to write — the search is downgraded to `failed` rather than ever reporting `completed` on an untrustworthy basis (madde 17's MANDATORY-audit guarantee, applied to the async path). |
+
+#### `GET /api/v1/search/{search_id}/status`
+
+The polling endpoint described above: current search metadata plus its
+candidates (empty until the pipeline has produced any). Same role
+requirement and shape as the `202`/final payloads above. **`404 Not Found`**
+if the search doesn't exist.
 
 `search.status` is one of `queued`, `processing`, `completed`, `failed`
-(state machine; `cancelled` is reserved for the async-search milestone in
-`docs/ROADMAP.md` and not reachable yet). `failureCode`/
-`failureMessageKey` are only set on a `failed` search.
+(state machine; `cancelled` is defined in the schema but has no code
+path that reaches it yet — cancelling an in-flight search is not
+implemented). `failureCode`/`failureMessageKey` are only set on a
+`failed` search.
 
 #### `GET /api/v1/search`
 

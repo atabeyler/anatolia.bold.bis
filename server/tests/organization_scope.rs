@@ -180,11 +180,35 @@ async fn create_search(app: &axum::Router, token: &str, case_reference: &str) ->
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    body_json(response).await["search"]["id"]
-        .as_str()
-        .unwrap()
-        .to_string()
+    // Async search flow (madde 18-19): accepted immediately; poll until
+    // the background pipeline has produced candidates, since several
+    // callers below immediately fetch this search's candidates.
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let accepted = body_json(response).await;
+    let search_id = accepted["search"]["id"].as_str().unwrap().to_string();
+
+    for _ in 0..100 {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/api/v1/search/{search_id}/status"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let payload = body_json(response).await;
+        let status = payload["search"]["status"].as_str().unwrap_or("");
+        if status != "queued" && status != "processing" {
+            return search_id;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("search {search_id} did not leave queued/processing in time");
 }
 
 /// End-to-end setup shared by the tests below: a SYSTEM_ADMIN creates two

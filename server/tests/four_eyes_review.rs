@@ -131,14 +131,39 @@ async fn create_search(app: &axum::Router, token: &str, case_reference: &str) ->
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload = body_json(response).await;
-    let search_id = payload["search"]["id"].as_str().unwrap().to_string();
-    let candidate_id = payload["candidates"][0]["candidateId"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    (search_id, candidate_id)
+    // Async search flow (madde 18-19): the search is accepted immediately
+    // and the biometric pipeline runs in a background task — poll
+    // GET /api/v1/search/{id}/status until it leaves queued/processing.
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let accepted = body_json(response).await;
+    let search_id = accepted["search"]["id"].as_str().unwrap().to_string();
+
+    for _ in 0..100 {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/api/v1/search/{search_id}/status"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let payload = body_json(response).await;
+        let status = payload["search"]["status"].as_str().unwrap_or("");
+        if status != "queued" && status != "processing" {
+            let candidate_id = payload["candidates"][0]["candidateId"]
+                .as_str()
+                .unwrap()
+                .to_string();
+            return (search_id, candidate_id);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("search {search_id} did not leave queued/processing in time");
 }
 
 async fn review(

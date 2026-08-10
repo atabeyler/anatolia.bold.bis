@@ -177,6 +177,18 @@ async fn role_matrix_matches_permission_policy() {
     })
     .await;
 
+    // GET /api/v1/search/{id}/status — permission::can_view_search (every
+    // role). The search id doesn't need to exist: the role gate runs
+    // before any database lookup.
+    assert_role_gate(
+        &app,
+        &tokens,
+        &ALL_ROLES,
+        "GET /api/v1/search/{id}/status",
+        |token| bearer("GET", "/api/v1/search/nonexistent/status", token),
+    )
+    .await;
+
     // POST /api/v1/search/face — permission::can_create_search.
     assert_role_gate(
         &app,

@@ -465,15 +465,24 @@ eşleşme bu dosyanın sonunda listelidir.
 
 ## P2 — Background Job
 
-57. [ ] Async search hazırlığı (queue-ready `SearchService` tasarımı, 202 +
-    polling/SSE) — **yapılmadı** (hâlâ senkron; state machine kavramsal
-    olarak queue-ready ama gerçek async akış yok). Bu oturumda tekrar
-    değerlendirildi ve bilinçli olarak ertelendi: sahte bir queue
-    soyutlaması eklemek (davranışı değiştirmeyen) CLAUDE.md'nin
-    "no half-finished implementations" kuralına aykırı olurdu; gerçek
-    async akış `POST /api/v1/search/face`'in response contract'ını
-    (`200` yerine `202` + polling/SSE) değiştiriyor — bu, frontend'i de
-    kapsayan ve polling/SSE kararını gerektiren ayrı bir özellik.
+57. [x] Async search — repo sahibiyle birlikte karar verildi (202 +
+    polling, SSE/WebSocket değil — pipeline saniyeler mertebesinde
+    tamamlanıyor, bağlantı yönetimi karmaşıklığı orantısız olurdu).
+    `POST /api/v1/search/face` artık senkron `200` değil, `queued`
+    durumunda bir search satırı yazıp hemen `202 Accepted` + search id
+    dönüyor (`db::create_queued_search`); biyometrik pipeline
+    `tokio::spawn` ile arka planda çalışıyor (`search::run_queued_search`)
+    ve sonucu `db::finalize_queued_search`/`db::mark_queued_search_failed`
+    ile yazıyor. Yeni `GET /api/v1/search/{id}/status` polling endpoint'i
+    eklendi. Mandatory-audit garantisi (madde 17) async akışa da taşındı:
+    artık dönecek bir HTTP response olmadığı için, `SEARCH_COMPLETED`
+    audit yazımı başarısız olursa search `AUDIT_WRITE_FAILED` ile
+    `failed`'e düşürülüyor — bir poller hiçbir zaman güvenilmez bir
+    "completed" görmüyor. Tüm mevcut search testleri (`tests/search.rs`,
+    `tests/four_eyes_review.rs`, `tests/organization_scope.rs`) yeni
+    202 + polling akışına güncellendi. **Kapsanmayan:** `cancelled`
+    durumu şemada var ama ona ulaşan bir kod yolu yok (arama iptali
+    yapılmadı).
 58. [x] Retention job'ları — `db::purge_expired_auth_records` eklendi:
     süresi dolmuş `sessions` ve `approval_tokens` satırlarını siliyor.
     `main.rs::spawn_retention_job` bunu sabit aralıklarla (varsayılan

@@ -135,16 +135,32 @@ what these controls defend against.
   keeps using best-effort `save`.
   A failed audit write is logged as a warning and never blocks or fails
   the request that triggered it.
-- **Transactional search with a status state machine**
-  (`db::create_search_with_candidates`): a search row and every one of its
-  candidate results are written inside a single database transaction —
-  `BEGIN`, insert search (`processing`), insert each candidate, mark
-  `completed`, `COMMIT`. Any failure mid-way rolls the whole attempt back
-  (no partial candidate list is ever visible), and a separate,
-  non-transactional `record_failed_search` call then persists a `failed`
-  search row with a `failureCode`/`failureMessageKey` so the failed
-  attempt has a durable, queryable record instead of vanishing silently.
-  `status` is one of `queued`/`processing`/`completed`/`failed`.
+- **Async search with a real status state machine** (`db::create_queued_search`
+  / `db::finalize_queued_search` / `db::mark_queued_search_failed`,
+  `search::run_queued_search`): `POST /api/v1/search/face` validates the
+  request synchronously (image, case reference, purpose, coordinates —
+  can still fail `400`/`403` directly) but writes a `queued` search row
+  and returns `202 Accepted` immediately rather than waiting for the
+  biometric pipeline. A `tokio::spawn`ed background task then runs the
+  provider and finalizes the search: `BEGIN`, mark `processing`, insert
+  each candidate, mark `completed`, `COMMIT` — any failure mid-way rolls
+  the whole attempt back (no partial candidate list is ever visible) and
+  marks the search `failed` with a `failureCode`/`failureMessageKey`
+  instead. Callers poll `GET /api/v1/search/{id}/status`. `status` is one
+  of `queued`/`processing`/`completed`/`failed` (`cancelled` is defined
+  in the schema but unreachable — no cancellation code path exists).
+  **MANDATORY-audit guarantee carried into the async world**: with no
+  in-flight HTTP response left to attach a failure to once the background
+  task starts, a `SEARCH_COMPLETED` audit write failure downgrades the
+  search itself to `failed` (`AUDIT_WRITE_FAILED`) rather than ever
+  letting a poller observe a `completed` status the audit trail can't
+  back up — the same guarantee `save_mandatory` gave the old synchronous
+  path, translated to a world where the client isn't waiting anymore.
+  This response-contract change (`202` instead of a synchronous `200`
+  with the finished result) was a deliberate choice made with the
+  repository owner, picking `202` + polling over `202` + SSE/WebSocket:
+  the latter adds connection-management complexity disproportionate to a
+  pipeline that completes in seconds, not minutes.
 - **Immutable review history** (`verification_events` table,
   `db::record_review_decision`): every confirm/reject on a candidate
   appends a new event row (reviewer, decision, reason, notes, timestamp)
@@ -377,7 +393,7 @@ what these controls defend against.
 - **Database constraints on `search_candidates`/`searches`**: a unique
   index on `search_candidates (search_id, candidate_id)` makes "a
   candidate appears at most once per search" a database-enforced
-  invariant rather than one relying solely on `create_search_with_candidates`
+  invariant rather than one relying solely on `finalize_queued_search`
   never inserting a duplicate; indexes on `searches (created_at,
   case_reference, requested_by)` match the columns `list_searches_page`
   actually filters and sorts by.
@@ -515,10 +531,8 @@ codebase yet. Do not assume it is active. There is also no endpoint to change an
 already-active account's role, so a role-downgrade session-revoke
 protection (item 11) has nothing to attach to yet — adding one is real
 feature work (who may assign which role to whom, self-role-change
-handling) rather than a hardening fix. Async search (202 +
-polling/SSE, item 57) is deliberately not implemented either: doing so
-changes `POST /api/v1/search/face`'s response contract, which needs the
-frontend and the polling/SSE choice decided together, not retrofitted.
+handling) rather than a hardening fix. Async search (item 57) is now
+implemented — see "Async search with a real status state machine" above.
 The audit hash chain is tamper-*evident*, not tamper-*proof*: there is no
 dedicated append-only database role/permission grant for `audit_events`
 yet, so an operator with direct database `UPDATE`/`DELETE` privileges can

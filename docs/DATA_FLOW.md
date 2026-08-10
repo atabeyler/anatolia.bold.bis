@@ -70,39 +70,48 @@ built.
    `SYSTEM_ADMIN`) submits `POST /api/v1/search/face`: a case reference,
    a purpose string, an optional lat/lon pair, an optional `topK`, and a
    probe image as multipart form data.
-2. The image is validated before anything else touches it
+2. The image is validated synchronously, before anything else touches it
    (`server/src/image_validation.rs`): magic-byte sniff, a 10 MB size
    cap, an actual decode (JPEG/PNG/WEBP only), dimension limits, and a
    decompression-bomb guard on total decoded pixel count. A search row
-   and a `failed` record are only ever created *after* this passes —
-   malformed uploads never reach the biometric provider or the database
-   at all.
-3. The active `BiometricProvider` (`BIOMETRIC_PROVIDER=mock` or `onnx`)
-   ranks enrolled candidates against the probe image and returns a
-   bounded list (`topK`, clamped to `SEARCH_MAX_TOP_K`) of
-   `(candidate_id, score)` pairs. **Under `mock` (still the default), the
-   score is a deterministic hash of the uploaded bytes — it is not a real
-   face comparison**; see `SECURITY.md` for the production guard that
-   refuses to run this mode silently. Under `onnx`, the probe is run
-   through a real detect → quality-gate → align → embed pipeline
-   (`server/src/biometric/`) and compared by cosine similarity against
-   stored templates (`db/biometric.rs`) — see
+   is only ever created *after* this passes — malformed uploads never
+   reach the biometric provider or the database at all.
+3. Once validation passes, a `queued` search row is written and the
+   request returns **`202 Accepted`** immediately with that row's id —
+   the biometric pipeline itself runs in a background task, not inline
+   with the request (madde 18-19's async search flow; see
+   `docs/SECURITY_ARCHITECTURE.md`). The caller polls `GET
+   /api/v1/search/{id}/status` until the search leaves `queued`/
+   `processing`.
+4. In that background task, the active `BiometricProvider`
+   (`BIOMETRIC_PROVIDER=mock` or `onnx`) ranks enrolled candidates
+   against the probe image and returns a bounded list (`topK`, clamped to
+   `SEARCH_MAX_TOP_K`) of `(candidate_id, score)` pairs. **Under `mock`
+   (still the default), the score is a deterministic hash of the
+   uploaded bytes — it is not a real face comparison**; see `SECURITY.md`
+   for the production guard that refuses to run this mode silently.
+   Under `onnx`, the probe is run through a real detect → quality-gate →
+   align → embed pipeline (`server/src/biometric/`) and compared by
+   cosine similarity against stored templates (`db/biometric.rs`) — see
    `docs/SECURITY_ARCHITECTURE.md` for exactly what that pipeline
    guarantees and its documented limitations.
-4. The search row, its `search_candidates` rows, and their `pending`
+5. The search row, its `search_candidates` rows, and their `pending`
    review status are written inside a single database transaction
-   (`db::create_search_with_candidates`) — a failure mid-way rolls back
-   entirely rather than leaving a partial candidate list visible, and is
-   separately recorded as a `failed` search for traceability.
-5. The probe image bytes themselves are **not persisted** — they exist
-   only for the duration of the request, passed to the provider and then
-   dropped. Only the resulting scores and candidate references are
-   stored. (Retention/discard policy for a future real biometric provider
+   (`db::finalize_queued_search`) — a failure mid-way rolls back entirely
+   rather than leaving a partial candidate list visible, and marks the
+   search `failed` for traceability instead. There is no HTTP response
+   left in-flight at this point, so a mandatory-audit write failure
+   (madde 17) downgrades a would-be `completed` search to `failed`
+   rather than reporting an untrustworthy success to a poller.
+6. The probe image bytes themselves are **not persisted** — they exist
+   only for the duration of the background task, passed to the provider
+   and then dropped. Only the resulting scores and candidate references
+   are stored. (Retention/discard policy for a future real biometric provider
    that may need to keep intermediate embeddings is tracked as planned
    work — see `docs/ROADMAP.md` Phase 4.)
-6. Ranked candidates are returned to the caller as **candidates, not
-   verdicts** — every one of them is `pending` until a human reviewer
-   acts.
+7. Ranked candidates, once the poller observes `status: "completed"`, are
+   **candidates, not verdicts** — every one of them is `pending` until a
+   human reviewer acts.
 
 ## Review and audit trail
 

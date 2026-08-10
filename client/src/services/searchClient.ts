@@ -39,6 +39,26 @@ export interface CreateSearchResult {
   candidates: SearchCandidate[];
 }
 
+const SEARCH_STATUS_POLL_INTERVAL_MS = 500;
+const SEARCH_STATUS_POLL_TIMEOUT_MS = 60_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function getSearchStatus(searchId: string): Promise<CreateSearchResult> {
+  const { data } = await apiClient.get<CreateSearchResult>(`/v1/search/${searchId}/status`);
+  return data;
+}
+
+/**
+ * Async search flow (madde 18-19): `POST /v1/search/face` is accepted
+ * (`202`) immediately with a `queued` search row — the biometric pipeline
+ * runs server-side in a background task. This polls
+ * `GET /v1/search/{id}/status` until it leaves `queued`/`processing`, so
+ * callers keep the same "await a finished result" shape they had before
+ * the response contract changed, without needing their own polling loop.
+ */
 export async function createSearch(
   caseReference: string,
   purpose: string,
@@ -56,7 +76,17 @@ export async function createSearch(
   const { data } = await apiClient.post<CreateSearchResult>('/v1/search/face', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
-  return data;
+
+  const deadline = Date.now() + SEARCH_STATUS_POLL_TIMEOUT_MS;
+  let latest = data;
+  while (latest.search.status === 'queued' || latest.search.status === 'processing') {
+    if (Date.now() >= deadline) {
+      return latest;
+    }
+    await sleep(SEARCH_STATUS_POLL_INTERVAL_MS);
+    latest = await getSearchStatus(latest.search.id);
+  }
+  return latest;
 }
 
 export async function listSearches(page = 1, pageSize = 50): Promise<SearchSummaryPage> {
