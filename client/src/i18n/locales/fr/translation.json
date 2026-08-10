@@ -104,6 +104,7 @@
     "internal": "Une erreur est survenue. Veuillez réessayer.",
     "invalidMfaCode": "Ce code est invalide ou a expiré. Veuillez réessayer.",
     "mfaEnrollmentNotStarted": "Démarrez l'inscription MFA avant de confirmer un code.",
+    "mfaAlreadyEnabled": "L'authentification multifacteur a déjà été activée lors d'une tentative précédente. Veuillez vous reconnecter.",
     "mfaNotEnabled": "L'authentification multifacteur n'est pas activée sur ce compte.",
     "auditWriteFailed": "L'entrée du journal d'audit n'a pas pu être écrite pour cette action ; rien n'a été modifié.",
     "sameReviewerForbidden": "Ce candidat a déjà fait l'objet d'un premier examen de votre part ; un autre examinateur doit rendre la décision finale.",

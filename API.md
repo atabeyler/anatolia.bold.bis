@@ -320,7 +320,12 @@ success activates MFA and returns
 time only (only their hashes are stored), valid for either method.
 **`401 Unauthorized`** (`errors.invalidMfaCode`) on a wrong or expired
 code; **`409 Conflict`** (`errors.mfaEnrollmentNotStarted`) if `enroll`
-was never called.
+was never called, or (`errors.mfaAlreadyEnabled`) if this credential was
+already enabled by an earlier call — e.g. a retried submission after the
+first call actually succeeded but its response was lost; the emailed code
+is consumed by the enable step, so a naive retry would otherwise look
+identical to a wrong code. Callers seeing this should treat it as success
+and resume via a normal login instead of resubmitting the code.
 
 #### `POST /api/v1/auth/mfa/disable`
 

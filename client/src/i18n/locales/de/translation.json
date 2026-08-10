@@ -104,6 +104,7 @@
     "internal": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
     "invalidMfaCode": "Dieser Code ist ungültig oder abgelaufen. Bitte versuchen Sie es erneut.",
     "mfaEnrollmentNotStarted": "Starten Sie die MFA-Registrierung, bevor Sie einen Code bestätigen.",
+    "mfaAlreadyEnabled": "Die Multi-Faktor-Authentifizierung wurde bereits durch einen vorherigen Versuch aktiviert. Bitte melden Sie sich erneut an.",
     "mfaNotEnabled": "Die Multi-Faktor-Authentifizierung ist für dieses Konto nicht aktiviert.",
     "auditWriteFailed": "Der Prüfpfad-Eintrag für diese Aktion konnte nicht geschrieben werden; es wurde nichts geändert.",
     "sameReviewerForbidden": "Dieser Kandidat wurde bereits von Ihnen erstbegutachtet; eine andere prüfende Person muss die endgültige Entscheidung treffen.",

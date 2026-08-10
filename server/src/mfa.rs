@@ -334,6 +334,23 @@ async fn confirm_enrollment(
             String::new(),
         ));
     };
+    // Enrollment already completed by an earlier call — most likely a
+    // retried submission after the enable step committed but a later step
+    // in the same request (the mandatory audit write, or session issuance
+    // in `complete_login`) failed and reported an error anyway. The email
+    // method makes this user-visible in a confusing way: the code was
+    // already consumed and cleared by the successful enable, so retrying
+    // it would otherwise fall through to a generic "invalid code" that
+    // looks like the code was wrong rather than "you already finished
+    // this." Reporting it plainly here instead tells the caller to resume
+    // via a normal login rather than re-submitting the same code.
+    if pending.enabled_at.is_some() {
+        return Err(ApiError::new(
+            "MFA_ALREADY_ENABLED",
+            "errors.mfaAlreadyEnabled",
+            String::new(),
+        ));
+    }
     let enabled = if pending.method == METHOD_EMAIL {
         let code_hash = sha256_hex(code.trim());
         crate::db::enable_email_mfa_credential(&state.backend, user_id, &code_hash)
@@ -871,9 +888,21 @@ async fn complete_login(
     rid: String,
     recovery_codes: Option<Vec<String>>,
 ) -> Response {
+    // A single retry on a transient session-write failure — cheap
+    // insurance against exactly the failure mode that made this endpoint
+    // confusing before `confirm_enrollment` learned to recognize an
+    // already-enabled credential: the credential enable above has already
+    // committed (and, for the email method, already consumed the code),
+    // so failing outright here would leave the account enrolled with no
+    // way to finish this same login attempt.
     let (access_token, refresh_token) = match issue_session(state, user, headers).await {
         Ok(pair) => pair,
-        Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+        Err(_) => match issue_session(state, user, headers).await {
+            Ok(pair) => pair,
+            Err(_) => {
+                return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response()
+            }
+        },
     };
     AuditRecorder::new(
         action::AUTH_LOGIN_SUCCESS,

@@ -732,3 +732,56 @@ async fn email_mfa_resend_endpoints_issue_a_fresh_code() {
     assert_eq!(response.status(), StatusCode::OK);
     assert!(body_json(response).await["accessToken"].as_str().is_some());
 }
+
+/// Regression test: a retried `enroll/confirm` submitted after the
+/// credential was already enabled by an earlier, successfully-processed
+/// call (e.g. the client never saw that earlier call's response) must not
+/// be misreported as "invalid code" — the emailed code was already
+/// consumed by the first call, so a naive retry would otherwise look
+/// exactly like a wrong code.
+#[tokio::test]
+async fn confirming_an_already_enabled_email_credential_reports_a_clear_conflict() {
+    let _guard = ENV_GUARD.lock().await;
+    let state = AppState::for_tests().await;
+    let app = routes::router(state.clone());
+    let (token, user_id) = register_and_login_operator(&app, "MFADUP").await;
+
+    app.clone()
+        .oneshot(auth_json_request(
+            "POST",
+            "/api/v1/auth/mfa/enroll",
+            &token,
+            json!({ "method": "email" }),
+        ))
+        .await
+        .unwrap();
+    seed_email_mfa_code(&state, &user_id, "123456").await;
+
+    let response = app
+        .clone()
+        .oneshot(auth_json_request(
+            "POST",
+            "/api/v1/auth/mfa/enroll/confirm",
+            &token,
+            json!({ "code": "123456" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Retrying with the same (now-consumed) code reports a distinct
+    // conflict, not "invalid code".
+    let response = app
+        .clone()
+        .oneshot(auth_json_request(
+            "POST",
+            "/api/v1/auth/mfa/enroll/confirm",
+            &token,
+            json!({ "code": "123456" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body = body_json(response).await;
+    assert_eq!(body["code"], "MFA_ALREADY_ENABLED");
+}
