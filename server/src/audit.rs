@@ -14,7 +14,8 @@ use serde::Deserialize;
 
 use crate::auth::{require_role, Claims};
 use crate::db::{
-    insert_audit_event, list_audit_events, AppState, AuditEventFilter, AuditEventRow, NewAuditEvent,
+    insert_audit_event, list_audit_events, verify_chain, AppState, AuditEventFilter, AuditEventRow,
+    NewAuditEvent,
 };
 use crate::error::{request_id, ApiError};
 use crate::permission;
@@ -175,8 +176,8 @@ impl AuditRecorder {
         self
     }
 
-    pub async fn save(self, state: &AppState) {
-        let event = NewAuditEvent {
+    fn to_new_event(&self) -> NewAuditEvent<'_> {
+        NewAuditEvent {
             actor_user_id: self.actor_user_id.as_deref(),
             actor_user_code: self.actor_user_code.as_deref(),
             actor_role: self.actor_role.as_deref(),
@@ -189,13 +190,49 @@ impl AuditRecorder {
             source: self.source,
             ip_address: self.ip_address.as_deref(),
             user_agent: self.user_agent.as_deref(),
-            metadata: self.metadata.map(|v| v.to_string()),
+            metadata: self.metadata.as_ref().map(|v| v.to_string()),
             organization_id: None,
             organization_unit_id: None,
-        };
+        }
+    }
+
+    /// Best-effort: logs a warning and returns normally on failure — used
+    /// for events whose loss, while undesirable, must not itself take down
+    /// the request that triggered them (e.g. a login attempt). See
+    /// `save_mandatory` for the alternative used by security-critical
+    /// actions (madde 17 — MANDATORY vs BEST_EFFORT).
+    pub async fn save(self, state: &AppState) {
+        let event = self.to_new_event();
         if let Err(err) = insert_audit_event(&state.backend, event).await {
             tracing::warn!(action = self.action, error = %err, "failed to write audit event");
         }
+    }
+
+    /// For actions the instructions classify as MANDATORY (biometric
+    /// search, candidate enrollment/revocation, verification decisions,
+    /// role/permission changes, account ban/unban, MFA reset, sensitive
+    /// export — see item 17 in `docs/HARDENING_CHECKLIST.md`): propagates
+    /// a write failure instead of swallowing it, so the caller can refuse
+    /// to report the triggering operation as successful. This does not
+    /// roll back a database write the operation itself already committed
+    /// (that would need the audit insert to share the same transaction, or
+    /// a transactional outbox — see the module-level limitation noted in
+    /// the checklist); it does guarantee the operation is never reported
+    /// to the client as a clean success while its mandatory audit record
+    /// silently failed to write.
+    pub async fn save_mandatory(self, state: &AppState) -> Result<(), ApiError> {
+        let action = self.action;
+        let event = self.to_new_event();
+        insert_audit_event(&state.backend, event)
+            .await
+            .map_err(|err| {
+                tracing::error!(action, error = %err, "mandatory audit event failed to write");
+                ApiError::new(
+                    "AUDIT_WRITE_FAILED",
+                    "errors.auditWriteFailed",
+                    String::new(),
+                )
+            })
     }
 }
 
@@ -239,7 +276,34 @@ fn audit_event_json(row: &AuditEventRow) -> serde_json::Value {
         "metadata": metadata,
         "organizationId": row.organization_id,
         "organizationUnitId": row.organization_unit_id,
+        "sequence": row.sequence,
+        "previousHash": row.previous_hash,
+        "eventHash": row.event_hash,
     })
+}
+
+/// `GET /api/v1/audit/integrity` — recomputes the hash chain over every
+/// audit event and reports whether it's intact (see
+/// `db::audit::verify_chain`). Same access restriction as reading the
+/// audit trail itself: the integrity guarantee is only meaningful if
+/// checking it is also access-controlled.
+pub async fn verify_audit_integrity_route(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Response {
+    let rid = request_id(&headers);
+    if !require_role(&state, &headers, permission::can_view_audit_log) {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
+    match verify_chain(&state.backend).await {
+        Ok(report) => Json(serde_json::json!({
+            "eventsChecked": report.events_checked,
+            "intact": report.intact,
+            "breaks": report.breaks,
+        }))
+        .into_response(),
+        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    }
 }
 
 /// `GET /api/v1/audit` — server-side paginated, filtered view over the

@@ -536,6 +536,7 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                 .execute(pool)
                 .await?;
 
+            audit::migrate_pg(pool).await?;
             mfa::migrate_pg(pool).await?;
 
             seed_mock_candidates_pg(pool).await?;
@@ -796,6 +797,7 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                 .execute(pool)
                 .await?;
 
+            audit::migrate_sqlite(pool).await?;
             mfa::migrate_sqlite(pool).await?;
 
             seed_mock_candidates_sqlite(pool).await?;

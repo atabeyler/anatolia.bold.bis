@@ -175,6 +175,15 @@ Implemented controls:
   (`MFA_REQUIRED_ROLES`), voluntary for other roles. Fail-closed: no
   access/refresh token pair is ever issued to an MFA-gated account without
   MFA actually being satisfied first — see `docs/SECURITY_ARCHITECTURE.md`.
+- **Audit hash chaining and mandatory audit**: every audit event is
+  chained to the one before it (`sequence`/`previous_hash`/`event_hash`),
+  with `GET /api/v1/audit/integrity` able to detect any row altered or
+  deleted after the fact. Security-critical actions (search completion,
+  verification decisions, ban/unban, MFA changes) use a mandatory audit
+  path that refuses to report success if their audit record failed to
+  write. See `docs/SECURITY_ARCHITECTURE.md` for what this does and does
+  not guarantee (it is tamper-evident, not tamper-proof — there is no
+  dedicated append-only database role yet).
 
 ## Planned (see `docs/ROADMAP.md` and `docs/SECURITY_ARCHITECTURE.md`)
 

@@ -321,11 +321,17 @@ pub async fn enroll_confirm(
     };
     match confirm_enrollment(&state, &claims.id, &claims.user_code, &payload.code).await {
         Ok(recovery_codes) => {
-            AuditRecorder::new(action::MFA_ENABLED, audit_result::SUCCESS, rid.clone())
-                .actor(&claims)
-                .headers(&headers)
-                .save(&state)
-                .await;
+            // MANDATORY — see AuditRecorder::save_mandatory.
+            if let Err(mut err) =
+                AuditRecorder::new(action::MFA_ENABLED, audit_result::SUCCESS, rid.clone())
+                    .actor(&claims)
+                    .headers(&headers)
+                    .save_mandatory(&state)
+                    .await
+            {
+                err.request_id = rid;
+                return err.into_response();
+            }
             Json(serde_json::json!({ "recoveryCodes": recovery_codes })).into_response()
         }
         Err(mut err) => {
@@ -374,11 +380,17 @@ pub async fn disable(
             {
                 return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response();
             }
-            AuditRecorder::new(action::MFA_DISABLED, audit_result::SUCCESS, rid.clone())
-                .actor(&claims)
-                .headers(&headers)
-                .save(&state)
-                .await;
+            // MANDATORY — see AuditRecorder::save_mandatory.
+            if let Err(mut err) =
+                AuditRecorder::new(action::MFA_DISABLED, audit_result::SUCCESS, rid.clone())
+                    .actor(&claims)
+                    .headers(&headers)
+                    .save_mandatory(&state)
+                    .await
+            {
+                err.request_id = rid;
+                return err.into_response();
+            }
             Json(serde_json::json!({ "messageKey": "auth.mfa.disabled" })).into_response()
         }
     }
@@ -460,11 +472,17 @@ pub async fn challenge_enroll_confirm(
                 return err.into_response();
             }
         };
-    AuditRecorder::new(action::MFA_ENABLED, audit_result::SUCCESS, rid.clone())
-        .actor_by_id(&user.id, &user.user_code, &user.role)
-        .headers(&headers)
-        .save(&state)
-        .await;
+    // MANDATORY — see AuditRecorder::save_mandatory.
+    if let Err(mut err) =
+        AuditRecorder::new(action::MFA_ENABLED, audit_result::SUCCESS, rid.clone())
+            .actor_by_id(&user.id, &user.user_code, &user.role)
+            .headers(&headers)
+            .save_mandatory(&state)
+            .await
+    {
+        err.request_id = rid;
+        return err.into_response();
+    }
     complete_login(&state, &user, &headers, rid, Some(recovery_codes)).await
 }
 

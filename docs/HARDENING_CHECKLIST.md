@@ -36,8 +36,40 @@ eşleşme bu dosyanın sonunda listelidir.
 - [x] Append-only `audit_events` tablosu, merkezi `AuditService`/
   `AuditRecorder`, `GET /api/v1/audit` (filtreli+paginated), frontend Audit
   Logs ekranı, 6 dilde çeviri. (Milestone B)
-- [ ] Organization/unit bazlı audit görünürlük kapsamı (organization modeli
+- [ ] Organization/unit bazlı audit görünülük kapsamı (organization modeli
   henüz yok).
+- [x] Audit tamper resistance (hash chaining) — `db/audit.rs`: her
+  `audit_events` satırı `sequence` (monoton sayaç), `previous_hash` (bir
+  önceki satırın `event_hash`'i, ilk satır için sabit genesis değeri) ve
+  `event_hash` (satırın kendi alanları + `previous_hash`'in SHA-256'sı)
+  taşıyor. `audit_chain_state` tek satırlık tablo zinciri, insert'in
+  yapıldığı aynı transaction içinde okunup ilerletiliyor, böylece iki eşzamanlı
+  yazıcı asla aynı `previous_hash` üzerinden hesap yapamıyor. Audit
+  Integrity Verification: `GET /api/v1/audit/integrity` (ve
+  `db::verify_chain`) tüm zinciri yeniden hesaplayıp bozulma olup
+  olmadığını raporluyor; `server/tests/audit_integrity.rs` gerçek bir
+  satırı doğrudan SQL ile bozup zincirin bunu yakaladığını doğruluyor.
+  **Bilinçli sınırlama:** bu bir dedicated append-only DB rolü/izin
+  değil — doğrudan veritabanı erişimi olan biri satırı silebilir/UPDATE
+  edebilir, sadece bunu *tespit edilebilir* kılıyor (chain kırılır).
+  Ayrı bir append-only DB rolü provizyonlanmadı.
+- [x] Mandatory vs best-effort audit — `AuditRecorder::save()` (best-effort,
+  hata durumunda sadece log uyarısı, mevcut davranış korundu) yanında
+  `AuditRecorder::save_mandatory()` eklendi: hata durumunda `Result`
+  olarak caller'a dönüyor. Talimatta MANDATORY olarak sayılan olaylardan
+  şu an gerçek kodda var olanlara uygulandı: `SEARCH_COMPLETED`,
+  `CANDIDATE_CONFIRMED`/`REJECTED`/`MARKED_INCONCLUSIVE`, `USER_BANNED`,
+  `USER_UNBANNED`, `MFA_ENABLED`, `MFA_DISABLED`, `MFA_RESET_BY_ADMIN` —
+  bu olaylarda audit insert başarısız olursa handler `AUDIT_WRITE_FAILED`
+  hatası döndürüyor, işlemi sessizce başarılı gibi göstermiyor. **Bilinçli
+  sınırlama:** search/candidate template enrollment, role/permission
+  change, sensitive export gibi talimatta sayılan diğer MANDATORY
+  olaylar gerçek kodda henüz mevcut değil (ayrı maddeler olarak
+  planlanıyor); audit insert ile tetikleyen iş DB transaction'ını
+  paylaşmıyor (gerçek transactional outbox değil) — bu yüzden search
+  satırı audit'ten önce zaten commit edilmiş oluyor, mandatory audit
+  hatası DB yazımını geri almıyor, sadece API yanıtının yalan
+  söylemesini engelliyor.
 
 ## P1 — Auth ve Hesap Güvenliği
 

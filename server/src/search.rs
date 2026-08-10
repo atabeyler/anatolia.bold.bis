@@ -193,14 +193,26 @@ pub async fn create_search_route(
                 }
             };
 
-            AuditRecorder::new(action::SEARCH_COMPLETED, audit_result::SUCCESS, rid)
-                .actor(&claims)
-                .headers(&headers)
-                .case_reference(&case_reference)
-                .resource("search", &search.id)
-                .metadata(json!({ "candidateCount": candidate_rows.len(), "topK": top_k }))
-                .save(&state)
-                .await;
+            // MANDATORY: a biometric search must never be reported to the
+            // client as a clean success if its audit record failed to
+            // write — see AuditRecorder::save_mandatory. The search row
+            // itself is already committed at this point (this codebase
+            // does not yet share one transaction between the two — see
+            // the limitation noted on save_mandatory); what this
+            // guarantees is that the API response is never a silent lie.
+            if let Err(mut err) =
+                AuditRecorder::new(action::SEARCH_COMPLETED, audit_result::SUCCESS, rid.clone())
+                    .actor(&claims)
+                    .headers(&headers)
+                    .case_reference(&case_reference)
+                    .resource("search", &search.id)
+                    .metadata(json!({ "candidateCount": candidate_rows.len(), "topK": top_k }))
+                    .save_mandatory(&state)
+                    .await
+            {
+                err.request_id = rid;
+                return err.into_response();
+            }
 
             Json(json!({
                 "search": search_json(&search),
@@ -435,13 +447,21 @@ async fn review(
                 "inconclusive" => action::CANDIDATE_MARKED_INCONCLUSIVE,
                 _ => action::CANDIDATE_REJECTED,
             };
-            AuditRecorder::new(event_action, audit_result::SUCCESS, rid)
-                .actor(&claims)
-                .headers(&headers)
-                .resource("search_candidate", &row.id)
-                .metadata(json!({ "searchId": payload.search_id, "candidateId": candidate_id }))
-                .save(&state)
-                .await;
+            // MANDATORY: a verification decision (madde 17) must never be
+            // reported as successful if its audit trail entry failed to
+            // write — see AuditRecorder::save_mandatory.
+            if let Err(mut err) =
+                AuditRecorder::new(event_action, audit_result::SUCCESS, rid.clone())
+                    .actor(&claims)
+                    .headers(&headers)
+                    .resource("search_candidate", &row.id)
+                    .metadata(json!({ "searchId": payload.search_id, "candidateId": candidate_id }))
+                    .save_mandatory(&state)
+                    .await
+            {
+                err.request_id = rid;
+                return err.into_response();
+            }
             Json(search_candidate_json(&row)).into_response()
         }
         Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),

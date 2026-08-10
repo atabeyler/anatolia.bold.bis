@@ -490,7 +490,8 @@ Query parameters (all optional):
       "actorRole": "OPERATOR", "action": "SEARCH_CREATED", "requestId": "...",
       "caseReference": "CASE-001", "resourceType": "search", "resourceId": "...",
       "result": "success", "source": "api", "ipAddress": null, "userAgent": "...",
-      "metadata": { "candidateCount": 5 }, "organizationId": null, "organizationUnitId": null
+      "metadata": { "candidateCount": 5 }, "organizationId": null, "organizationUnitId": null,
+      "sequence": 137, "previousHash": "...", "eventHash": "..."
     }
   ],
   "page": 1,
@@ -498,6 +499,27 @@ Query parameters (all optional):
   "total": 137
 }
 ```
+
+#### `GET /api/v1/audit/integrity`
+
+Requires `AUDITOR`, `SECURITY_ADMIN`, or `SYSTEM_ADMIN` — same restriction
+as reading the trail itself. Recomputes the hash chain over every audit
+event (see "Audit hash chaining" in `docs/SECURITY_ARCHITECTURE.md`) and
+reports whether it's intact.
+
+**`200 OK`**:
+```json
+{
+  "eventsChecked": 137,
+  "intact": true,
+  "breaks": []
+}
+```
+
+A `breaks` entry (`{ "sequence": 42, "eventId": "...", "reason": "..." }`)
+means a stored row no longer reproduces its own hash, or no longer
+chains from the previous row's hash — i.e. something altered or deleted
+an audit row after it was written.
 
 ## Planned endpoints
 

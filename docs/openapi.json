@@ -671,6 +671,24 @@
           }
         }
       }
+    },
+    "/api/v1/audit/integrity": {
+      "get": {
+        "summary": "Recomputes and verifies the audit-event hash chain",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK \u2014 { eventsChecked, intact, breaks }"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {

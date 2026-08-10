@@ -456,13 +456,19 @@ pub async fn ban_user(
             // logins — a short-lived access token issued before the ban
             // would otherwise keep working until it expires.
             let _ = revoke_all_sessions_for_user(&state.backend, &id).await;
-            AuditRecorder::new(action::USER_BANNED, audit_result::SUCCESS, rid)
-                .actor_opt(actor_claims(&state, &headers).as_ref())
-                .headers(&headers)
-                .resource("user", &id)
-                .metadata(json!({ "reason": payload.reason }))
-                .save(&state)
-                .await;
+            // MANDATORY — see AuditRecorder::save_mandatory.
+            if let Err(mut err) =
+                AuditRecorder::new(action::USER_BANNED, audit_result::SUCCESS, rid.clone())
+                    .actor_opt(actor_claims(&state, &headers).as_ref())
+                    .headers(&headers)
+                    .resource("user", &id)
+                    .metadata(json!({ "reason": payload.reason }))
+                    .save_mandatory(&state)
+                    .await
+            {
+                err.request_id = rid;
+                return err.into_response();
+            }
             Json(json!({ "messageKey": "admin.userBanned" })).into_response()
         }
         Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
@@ -481,12 +487,18 @@ pub async fn unban_user(
     let rid = request_id(&headers);
     match update_user_flags(&state.backend, &id, None, Some(false), None, None).await {
         Ok(Some(_)) => {
-            AuditRecorder::new(action::USER_UNBANNED, audit_result::SUCCESS, rid)
-                .actor_opt(actor_claims(&state, &headers).as_ref())
-                .headers(&headers)
-                .resource("user", &id)
-                .save(&state)
-                .await;
+            // MANDATORY — see AuditRecorder::save_mandatory.
+            if let Err(mut err) =
+                AuditRecorder::new(action::USER_UNBANNED, audit_result::SUCCESS, rid.clone())
+                    .actor_opt(actor_claims(&state, &headers).as_ref())
+                    .headers(&headers)
+                    .resource("user", &id)
+                    .save_mandatory(&state)
+                    .await
+            {
+                err.request_id = rid;
+                return err.into_response();
+            }
             Json(json!({ "messageKey": "admin.banLifted" })).into_response()
         }
         Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
@@ -516,12 +528,21 @@ pub async fn mfa_reset_route(
     if crate::mfa::admin_reset(&state, &target.id).await.is_err() {
         return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response();
     }
-    AuditRecorder::new(action::MFA_RESET_BY_ADMIN, audit_result::SUCCESS, rid)
-        .actor_opt(actor_claims(&state, &headers).as_ref())
-        .headers(&headers)
-        .resource("user", &target.id)
-        .save(&state)
-        .await;
+    // MANDATORY — see AuditRecorder::save_mandatory.
+    if let Err(mut err) = AuditRecorder::new(
+        action::MFA_RESET_BY_ADMIN,
+        audit_result::SUCCESS,
+        rid.clone(),
+    )
+    .actor_opt(actor_claims(&state, &headers).as_ref())
+    .headers(&headers)
+    .resource("user", &target.id)
+    .save_mandatory(&state)
+    .await
+    {
+        err.request_id = rid;
+        return err.into_response();
+    }
     Json(json!({ "messageKey": "admin.mfaResetComplete" })).into_response()
 }
 

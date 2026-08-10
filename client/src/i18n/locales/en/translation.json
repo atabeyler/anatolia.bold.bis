@@ -90,7 +90,8 @@
     "internal": "Something went wrong. Please try again.",
     "invalidMfaCode": "That code is invalid or has expired. Please try again.",
     "mfaEnrollmentNotStarted": "Start MFA enrollment before confirming a code.",
-    "mfaNotEnabled": "Multi-factor authentication is not enabled on this account."
+    "mfaNotEnabled": "Multi-factor authentication is not enabled on this account.",
+    "auditWriteFailed": "The audit trail could not be written for this action; nothing was changed."
   },
   "settings": {
     "openLabel": "Settings",

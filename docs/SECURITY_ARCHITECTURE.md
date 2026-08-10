@@ -104,6 +104,35 @@ what these controls defend against.
   `GET /api/v1/audit` (server-side paginated and filtered) exposes it to
   `AUDITOR`, `SECURITY_ADMIN`, and `SYSTEM_ADMIN` only — the append-only
   guarantee is only meaningful if reading it is also access-controlled.
+- **Audit hash chaining and integrity verification** (`db/audit.rs`):
+  every row also carries `sequence`, `previous_hash` (the prior row's
+  `event_hash`, or a fixed genesis value for the first row), and
+  `event_hash` (SHA-256 of the row's own fields plus `previous_hash`). A
+  single-row `audit_chain_state` table is read and advanced inside the
+  same transaction as the row insert, so two concurrent writers can never
+  compute their event against the same `previous_hash`.
+  `GET /api/v1/audit/integrity` recomputes every row's hash and reports
+  whether the chain is intact; a single altered or deleted row breaks it
+  from that point forward. This does not by itself prevent someone with
+  direct database `UPDATE`/`DELETE` access from rewriting history — this
+  codebase does not yet provision a dedicated append-only database role
+  for the `audit_events` table (that remains a gap, see "Not yet
+  implemented" below) — it makes such tampering *detectable* rather than
+  silent.
+- **Mandatory vs. best-effort audit** (`AuditRecorder::save_mandatory`):
+  a security-critical action's audit record failing to write is no longer
+  silently swallowed the way every audit write used to be. Search
+  completion, verification decisions (confirm/reject/inconclusive), user
+  ban/unban, and MFA enable/disable/admin-reset now call
+  `save_mandatory`, which propagates the failure so the handler returns
+  `AUDIT_WRITE_FAILED` instead of reporting the operation as a clean
+  success. This does not roll back a database write the operation itself
+  already committed — the audit insert does not share a transaction with
+  the triggering write, so this is not a transactional-outbox guarantee —
+  it only guarantees the API response is never a silent lie about
+  whether the mandatory audit record exists. Every other action
+  (login/refresh/logout, registration, non-destructive admin edits)
+  keeps using best-effort `save`.
   A failed audit write is logged as a warning and never blocks or fails
   the request that triggered it.
 - **Transactional search with a status state machine**
@@ -306,3 +335,12 @@ sign-off as the four-eyes review policy (item 37). Async search (202 +
 polling/SSE, item 57) is deliberately not implemented either: doing so
 changes `POST /api/v1/search/face`'s response contract, which needs the
 frontend and the polling/SSE choice decided together, not retrofitted.
+The audit hash chain is tamper-*evident*, not tamper-*proof*: there is no
+dedicated append-only database role/permission grant for `audit_events`
+yet, so an operator with direct database `UPDATE`/`DELETE` privileges can
+still alter history — the chain only guarantees `GET /api/v1/audit/integrity`
+will detect it. Mandatory-audit coverage (`save_mandatory`) is applied to
+every MANDATORY action that exists in the codebase today; it is not yet
+wired into candidate enrollment, template revocation, role/permission
+changes, or sensitive exports, since none of those endpoints exist yet
+either.

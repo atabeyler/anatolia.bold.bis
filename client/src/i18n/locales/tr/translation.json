@@ -90,7 +90,8 @@
     "internal": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
     "invalidMfaCode": "Bu kod geçersiz veya süresi dolmuş. Lütfen tekrar deneyin.",
     "mfaEnrollmentNotStarted": "Bir kodu onaylamadan önce MFA kaydına başlayın.",
-    "mfaNotEnabled": "Bu hesapta çok faktörlü kimlik doğrulama etkin değil."
+    "mfaNotEnabled": "Bu hesapta çok faktörlü kimlik doğrulama etkin değil.",
+    "auditWriteFailed": "Bu işlem için denetim kaydı yazılamadı; hiçbir şey değiştirilmedi."
   },
   "settings": {
     "openLabel": "Ayarlar",

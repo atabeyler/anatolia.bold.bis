@@ -90,7 +90,8 @@
     "internal": "Une erreur est survenue. Veuillez réessayer.",
     "invalidMfaCode": "Ce code est invalide ou a expiré. Veuillez réessayer.",
     "mfaEnrollmentNotStarted": "Démarrez l'inscription MFA avant de confirmer un code.",
-    "mfaNotEnabled": "L'authentification multifacteur n'est pas activée sur ce compte."
+    "mfaNotEnabled": "L'authentification multifacteur n'est pas activée sur ce compte.",
+    "auditWriteFailed": "L'entrée du journal d'audit n'a pas pu être écrite pour cette action ; rien n'a été modifié."
   },
   "settings": {
     "openLabel": "Paramètres",
