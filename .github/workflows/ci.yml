@@ -23,6 +23,10 @@ jobs:
           workspaces: server
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
+      - name: Dependency vulnerability scan (cargo-audit)
+        run: |
+          cargo install --locked cargo-audit --version ^0.21 || true
+          cargo audit --deny warnings
 
   frontend:
     name: Frontend (React)
@@ -39,5 +43,22 @@ jobs:
           cache-dependency-path: client/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      # Also exercises client/src/i18n/locales.test.ts, which fails the
+      # build if any locale's translation keys drift from the others —
+      # a dedicated "locale parity" job would just duplicate this.
       - run: npm run test
       - run: npm run build
+      - name: Dependency vulnerability scan (npm audit)
+        run: npm audit --audit-level=high
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan for committed secrets (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

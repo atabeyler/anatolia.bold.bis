@@ -251,19 +251,25 @@ eşleşme bu dosyanın sonunda listelidir.
     lighting/pose/face-size kontrolleriyle yapılıyor. **Çoklu reference
     image / duplicate candidate kontrolü henüz yapılmadı** — madde 23'e
     bakın.
-23. [ ] Duplicate candidate control — **yapılmadı**. Yeni bir reference
-    photo enroll edilirken mevcut template'lere karşı bir benzerlik
-    kontrolü (`possibleDuplicateOf` gibi bir soft warning) planlandı
-    ama uygulanmadı.
+23. [x] Duplicate candidate control — bir reference photo başarıyla enroll
+    edildiğinde, aynı model/version'a ait diğer tüm aktif template'lerle
+    kosinüs benzerliği hesaplanıyor; eşik (0.90) üzerindeki en fazla 5 eşleşme
+    `possibleDuplicates` alanıyla soft warning olarak dönülüyor. Hiçbir
+    şekilde bloklamıyor veya otomatik birleştirmiyor — karar insana bırakılıyor.
 24. [x] Score semantics (probability dili yasak, "Similarity Score" olarak
     gösteriliyor) — zaten mevcuttu, korundu.
-25. [ ] Threshold calibration / evaluation tool (FAR/FRR/ROC/Top-K) —
-    **yapılmadı**. Bu ortamda yetkilendirilmiş, etiketlenmiş bir
-    biyometrik veri seti olmadığı için gerçek bir doğruluk ölçümü
-    üretilemez; araç yapılırsa bile yalnızca kendi matematiğinin
-    doğruluğu test edilebilir, gerçek dünya performansı değil.
-26. [ ] Biyometrik test koşulları (lighting/pose/resolution benchmark) —
-    **yapılmadı**.
+25. [x] Threshold calibration / evaluation tool (FAR/FRR/ROC/EER/AUC) —
+    `server/src/calibration.rs` (matematik, 7 birim testiyle doğrulanmış) ve
+    `server/src/bin/calibrate.rs` (CSV tabanlı CLI aracı) eklendi. Bu ortamda
+    yetkilendirilmiş, etiketlenmiş bir biyometrik veri seti olmadığı için
+    gerçek bir doğruluk sayısı üretilmiyor — üretilen ve doğrulanan yalnızca
+    hesaplamanın kendisinin doğruluğu; gerçek veri seti olan bir dağıtımda
+    `calibrate` aracı gerçek `(score, is_genuine)` çiftleriyle çalıştırılabilir.
+26. [x] Biyometrik test koşulları (lighting/pose/resolution benchmark) —
+    `server/benches/biometric_pipeline.rs` içine çözünürlük (320x240 —
+    4000x3000), aydınlatma (very_dark/normal/very_bright) ve poz
+    (frontal/mild_yaw/severe_yaw) koşullarını ayrı ayrı ölçen üç yeni
+    `criterion` benchmark grubu eklendi.
 
 ## P1 — Search Consistency
 
@@ -426,8 +432,15 @@ eşleşme bu dosyanın sonunda listelidir.
     diziye düşüyordu — "hiç aday yok" ile "yükleme başarısız oldu"
     ayırt edilemiyordu. Artık ayrı bir loading/error state'i var
     (`search.candidatesLoading`/`search.candidatesLoadError`, 6 dilde).
-46. [ ] Accessibility denetimi (keyboard nav, focus trap, aria, contrast,
-    RTL, reduced-motion) — **yapılmadı**.
+46. [x] Accessibility denetimi (keyboard nav, focus trap, aria, contrast,
+    RTL, reduced-motion) — `Overlay` bileşeni `role="dialog"`/`aria-modal`,
+    açılışta içeri odaklanma + kapanışta geri odak, Tab ile odak tuzağı ve
+    Escape ile kapatma/geri gitme kazandı; kapatma butonunun etiketi artık
+    sabit metin değil i18n (`common.close`/`common.back`, 6 dilde). Global
+    `:focus-visible` outline ve `prefers-reduced-motion` desteği eklendi.
+    Ana renk token'ları için WCAG AA kontrast oranı hesaplanarak doğrulandı.
+    Arapça RTL desteği zaten doğru kurulmuştu, yeniden gözden geçirildi,
+    değişiklik gerekmedi.
 47. [~] Search result UX (rank/score/source/review status/reviewer/
     timestamp/evidence count) — çoğu zaten mevcuttu; "evidence count" OSINT
     katmanına bağlı, henüz yok.
@@ -590,16 +603,15 @@ eşleşme bu dosyanın sonunda listelidir.
 
 ## P2 — CI
 
-65. [ ] CI genişletme (dependency vuln scan, secret scan, locale parity CI
-    testi, docs/API consistency testi) — **yapılmadı**, `.github/workflows/
-    ci.yml` bu oturumlarda değiştirilmedi. Not: "docs/API consistency
-    testi" parçası artık dolaylı olarak karşılanıyor — madde 40'taki
-    `server/tests/openapi_drift.rs` zaten `cargo test` üzerinden çalışıyor;
-    burada eksik kalan yalnızca dependency/secret scan ve ayrı bir locale
-    parity CI adımı (locale parity'nin kendisi zaten
-    `client/src/i18n/locales.test.ts` ile test ediliyor ve `npm run test`
-    CI'da çalışıyorsa örtük olarak kapsanıyor — bu maddenin asıl eksiği
-    dependency/secret taramaları).
+65. [x] CI genişletme (dependency vuln scan, secret scan, locale parity CI
+    testi, docs/API consistency testi) — `.github/workflows/ci.yml`'e backend
+    job'ına `cargo audit --deny warnings`, frontend job'ına
+    `npm audit --audit-level=high`, ve ayrı bir `secret-scan` job'ı
+    (`gitleaks/gitleaks-action@v2`) eklendi. "docs/API consistency testi"
+    madde 40'taki `server/tests/openapi_drift.rs` ile zaten `cargo test`
+    üzerinden CI'da çalışıyor; locale parity ise `client/src/i18n/
+    locales.test.ts` ile `npm run test` üzerinden zaten CI'da çalışıyor —
+    ikisi de örtük olarak kapsanıyordu, ayrı bir adım gerekmedi.
 66. [x] Lockfile (`Cargo.lock`, `package-lock.json`) commitli ve reproducible
     — zaten öyleydi, korundu.
 

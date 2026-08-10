@@ -1,4 +1,8 @@
 {
+  "common": {
+    "close": "Schließen",
+    "back": "Zurück"
+  },
   "app": {
     "title": "Anatolia B.I.S.",
     "tagline": "Institutionelle Plattform für biometrischen Kandidatenabgleich und Identitätsprüfung"

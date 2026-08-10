@@ -2,6 +2,7 @@ pub mod admin;
 pub mod audit;
 pub mod auth;
 pub mod biometric;
+pub mod calibration;
 pub mod candidates;
 pub mod config;
 pub mod db;

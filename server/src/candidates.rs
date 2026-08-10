@@ -15,12 +15,23 @@ use serde_json::json;
 use crate::audit::{action, result as audit_result, AuditRecorder};
 use crate::auth::auth_user_from_headers;
 use crate::db::{
-    create_candidate, insert_template, list_templates_for_candidate, load_candidate_by_id,
-    revoke_template, AppState, BiometricTemplateRow,
+    create_candidate, insert_template, list_active_templates, list_templates_for_candidate,
+    load_candidate_by_id, revoke_template, top_k_matches, AppState, BiometricTemplateRow,
 };
 use crate::entity_resolution::{find_possible_duplicates, DEFAULT_NAME_SIMILARITY_THRESHOLD};
 use crate::error::{request_id, ApiError};
 use crate::permission;
+
+/// Cosine-similarity floor above which a newly enrolled template is
+/// flagged as a possible duplicate of an existing candidate (madde 23).
+/// Deliberately conservative and, like `entity_resolution.rs`'s name
+/// threshold, a starting point rather than a calibrated value — no
+/// authorized labeled dataset exists in this environment to calibrate
+/// against (see `calibration.rs`). Always a soft warning, never a block:
+/// a real duplicate person may legitimately need re-enrollment (new
+/// photo, revoked old template), and a false positive here must never
+/// stop an operator from enrolling a real, distinct candidate.
+const DUPLICATE_TEMPLATE_SIMILARITY_THRESHOLD: f64 = 0.90;
 
 fn template_json(row: &BiometricTemplateRow) -> serde_json::Value {
     json!({
@@ -210,7 +221,37 @@ pub async fn upload_reference_photo_route(
                 err.request_id = rid;
                 return err.into_response();
             }
-            Json(template_json(&template)).into_response()
+
+            // Duplicate candidate control (madde 23): a real cosine-similarity
+            // check against every other candidate's active, compatible
+            // templates — never blocking, only a soft warning for the
+            // operator to review. Best-effort: a failure here must not
+            // undo the enrollment that already succeeded and was already
+            // audited above.
+            let possible_duplicates = match list_active_templates(
+                &state.backend,
+                &template.model_name,
+                &template.model_version,
+            )
+            .await
+            {
+                Ok(all_templates) => {
+                    let others: Vec<BiometricTemplateRow> = all_templates
+                        .into_iter()
+                        .filter(|t| t.candidate_id != candidate_id)
+                        .collect();
+                    top_k_matches(&others, &template.embedding_vec(), 5)
+                        .into_iter()
+                        .filter(|m| m.score >= DUPLICATE_TEMPLATE_SIMILARITY_THRESHOLD)
+                        .map(|m| json!({ "candidateId": m.candidate_id, "similarity": m.score }))
+                        .collect::<Vec<_>>()
+                }
+                Err(_) => Vec::new(),
+            };
+
+            let mut payload = template_json(&template);
+            payload["possibleDuplicates"] = json!(possible_duplicates);
+            Json(payload).into_response()
         }
         _ => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }

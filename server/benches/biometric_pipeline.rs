@@ -21,7 +21,8 @@
 use std::hint::black_box;
 
 use anatolia_bis_server::biometric::alignment::align_face;
-use anatolia_bis_server::biometric::quality::check_blur_and_lighting;
+use anatolia_bis_server::biometric::detection::FaceBox;
+use anatolia_bis_server::biometric::quality::{check_blur_and_lighting, check_pose};
 use anatolia_bis_server::db::{top_k_matches, AppState, BiometricTemplateRow};
 use anatolia_bis_server::image_validation::validate_and_sanitize_probe_image;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
@@ -95,7 +96,6 @@ fn bench_vector_search(c: &mut Criterion) {
 }
 
 fn bench_alignment(c: &mut Criterion) {
-    let src = vec![120u8; (640 * 480 * 3) as usize];
     let landmarks = [
         (220.0f32, 200.0),
         (420.0, 200.0),
@@ -104,25 +104,107 @@ fn bench_alignment(c: &mut Criterion) {
         (390.0, 360.0),
     ];
     c.bench_function("face_alignment_640x480", |b| {
+        let src = vec![120u8; (640 * 480 * 3) as usize];
         b.iter(|| align_face(black_box(&src), 640, 480, black_box(&landmarks)));
     });
 }
 
-fn bench_quality_checks(c: &mut Criterion) {
+/// Resolution benchmark (madde 26): alignment cost as source image
+/// resolution varies from a small capture up to a high-resolution one,
+/// landmarks scaled proportionally so they stay inside the frame.
+fn bench_alignment_across_resolutions(c: &mut Criterion) {
+    let mut group = c.benchmark_group("face_alignment_by_resolution");
+    for &(w, h) in &[(320u32, 240u32), (640, 480), (1920, 1080), (4000, 3000)] {
+        let src = vec![120u8; (w * h * 3) as usize];
+        let sx = w as f32 / 640.0;
+        let sy = h as f32 / 480.0;
+        let landmarks = [
+            (220.0 * sx, 200.0 * sy),
+            (420.0 * sx, 200.0 * sy),
+            (320.0 * sx, 280.0 * sy),
+            (250.0 * sx, 360.0 * sy),
+            (390.0 * sx, 360.0 * sy),
+        ];
+        group.bench_with_input(
+            BenchmarkId::from_parameter(format!("{w}x{h}")),
+            &src,
+            |b, src| {
+                b.iter(|| align_face(black_box(src), w, h, black_box(&landmarks)));
+            },
+        );
+    }
+    group.finish();
+}
+
+fn checkerboard_112(bright: u8, dark: u8) -> Vec<u8> {
     let size = 112u32;
     let mut buf = vec![0u8; (size * size * 3) as usize];
     for y in 0..size {
         for x in 0..size {
-            let value = if (x + y) % 2 == 0 { 200u8 } else { 60u8 };
+            let value = if (x + y) % 2 == 0 { bright } else { dark };
             let idx = ((y * size + x) * 3) as usize;
             buf[idx] = value;
             buf[idx + 1] = value;
             buf[idx + 2] = value;
         }
     }
-    c.bench_function("blur_and_lighting_check_112x112", |b| {
-        b.iter(|| check_blur_and_lighting(black_box(&buf), size));
-    });
+    buf
+}
+
+/// Lighting condition benchmark (madde 26): blur/lighting check cost is
+/// expected to be resolution-bound, not brightness-bound, but this
+/// exercises every lighting branch (too dark / normal / too bright) the
+/// real search/enrollment path can hit, not just one happy-path input.
+fn bench_quality_checks_by_lighting(c: &mut Criterion) {
+    let mut group = c.benchmark_group("quality_check_by_lighting");
+    let conditions: &[(&str, u8, u8)] = &[
+        ("very_dark", 20, 5),
+        ("normal", 200, 60),
+        ("very_bright", 250, 235),
+    ];
+    for &(label, bright, dark) in conditions {
+        let buf = checkerboard_112(bright, dark);
+        group.bench_with_input(BenchmarkId::from_parameter(label), &buf, |b, buf| {
+            b.iter(|| check_blur_and_lighting(black_box(buf), 112));
+        });
+    }
+    group.finish();
+}
+
+fn face_box_with_pose(right_eye_x: f32, left_eye_x: f32) -> FaceBox {
+    FaceBox {
+        x: 0.0,
+        y: 0.0,
+        width: 200.0,
+        height: 200.0,
+        score: 0.95,
+        landmarks: [
+            (right_eye_x, 40.0),
+            (left_eye_x, 40.0),
+            (50.0, 60.0),
+            (35.0, 80.0),
+            (65.0, 80.0),
+        ],
+    }
+}
+
+/// Pose condition benchmark (madde 26): frontal vs. increasingly rotated
+/// synthetic landmark geometry through the same coarse pose check a real
+/// search/enrollment probe goes through.
+fn bench_pose_check_by_angle(c: &mut Criterion) {
+    let mut group = c.benchmark_group("pose_check_by_angle");
+    let conditions: &[(&str, f32, f32)] = &[
+        ("frontal", 30.0, 70.0),
+        ("mild_yaw", 40.0, 75.0),
+        ("severe_yaw", 48.0, 95.0),
+    ];
+    for &(label, right_eye_x, left_eye_x) in conditions {
+        let face = face_box_with_pose(right_eye_x, left_eye_x);
+        group.bench_with_input(BenchmarkId::from_parameter(label), &face, |b, face| {
+            b.iter(|| check_pose(black_box(face)));
+        });
+    }
+    group.finish();
 }
 
 fn bench_db_list_candidates(c: &mut Criterion) {
@@ -139,7 +221,9 @@ criterion_group!(
     bench_probe_image_validation,
     bench_vector_search,
     bench_alignment,
-    bench_quality_checks,
+    bench_alignment_across_resolutions,
+    bench_quality_checks_by_lighting,
+    bench_pose_check_by_angle,
     bench_db_list_candidates,
 );
 criterion_main!(benches);

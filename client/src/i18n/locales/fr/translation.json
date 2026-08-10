@@ -1,4 +1,8 @@
 {
+  "common": {
+    "close": "Fermer",
+    "back": "Retour"
+  },
   "app": {
     "title": "Anatolia B.I.S.",
     "tagline": "Plateforme institutionnelle de rapprochement biométrique de candidats et de vérification d'identité"

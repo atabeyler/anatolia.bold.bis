@@ -1,4 +1,8 @@
 {
+  "common": {
+    "close": "Close",
+    "back": "Back"
+  },
   "app": {
     "title": "Anatolia B.I.S.",
     "tagline": "Institutional biometric candidate-matching and identity verification platform"

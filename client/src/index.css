@@ -4,6 +4,37 @@
   box-sizing: border-box;
 }
 
+/* Accessibility: a visible focus ring for keyboard navigation on every
+   interactive element, using :focus-visible so it only appears for
+   keyboard/assistive-tech focus, not every mouse click. Never rely on
+   an element's own bespoke focus styling alone — this is the floor
+   every button/link/input gets regardless of component-specific CSS. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-accent, #4f6ef7);
+  outline-offset: 2px;
+}
+
+/* Accessibility: honor the OS-level "reduce motion" preference. This
+   app's decorative animations (scanline pings, spinning brand marks,
+   neon-breathe glows, blinking corners — see below) are purely
+   cosmetic, so they're safe to disable outright rather than merely
+   shortened, for users who've asked their system to minimize motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 html,
 body,
 #root {

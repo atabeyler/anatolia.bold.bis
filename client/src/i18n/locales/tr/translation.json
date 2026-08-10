@@ -1,4 +1,8 @@
 {
+  "common": {
+    "close": "Kapat",
+    "back": "Geri"
+  },
   "app": {
     "title": "Anatolia B.I.S.",
     "tagline": "Kurumsal biyometrik aday eşleştirme ve kimlik doğrulama platformu"
