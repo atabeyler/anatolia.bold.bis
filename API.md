@@ -768,10 +768,12 @@ typically the candidate's full name or another identifying string.
 
 Runs every configured `WebSearchProvider`/`NewsProvider`/
 `AuthorizedSocialProvider` and stores whatever each one returns.
-Web search uses the Brave Search API and news uses NewsAPI.org when
-`BRAVE_SEARCH_API_KEY`/`NEWS_API_KEY` are set (each independently; see
-`docs/ENVIRONMENT.md`), falling back to that slot's mock implementation
-when its key is unset — a deployment with neither key set behaves exactly
+Web search uses Tavily or the Brave Search API, and news uses Currents or
+NewsAPI.org, depending on which of `TAVILY_API_KEY`/`BRAVE_SEARCH_API_KEY`/
+`CURRENTS_API_KEY`/`NEWS_API_KEY` are set (each slot independently, with
+Tavily/Currents checked first; see `docs/ENVIRONMENT.md`), falling back
+to that slot's mock implementation when neither of its keys is set — a
+deployment with none of the four keys set behaves exactly
 like before (mock-only). There is no real `AuthorizedSocialProvider`
 implementation yet — see that trait's doc comment in
 `server/src/osint/mod.rs` for why. Real providers apply a timeout, one

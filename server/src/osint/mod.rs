@@ -17,9 +17,11 @@
 //! (when one exists) behind the same interface so callers never branch on
 //! which is active.
 
+pub mod currents;
 pub mod mock;
 pub mod news;
 pub mod resilience;
+pub mod tavily;
 pub mod websearch;
 
 use async_trait::async_trait;
@@ -142,6 +144,15 @@ pub struct EvidenceOrchestrator {
     social: Vec<std::sync::Arc<dyn AuthorizedSocialProvider>>,
 }
 
+/// Reads an environment variable, treating unset or blank-after-trim the
+/// same way (`None`) — a key set to an empty string must not be mistaken
+/// for "configured".
+fn env_key(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .filter(|key| !key.trim().is_empty())
+}
+
 impl EvidenceOrchestrator {
     pub fn new(
         web_search: Vec<std::sync::Arc<dyn WebSearchProvider>>,
@@ -164,33 +175,54 @@ impl EvidenceOrchestrator {
     }
 
     /// Builds the real orchestrator this deployment should actually run:
-    /// each provider slot uses its real implementation when the matching
-    /// API key is configured (`BRAVE_SEARCH_API_KEY` for web search,
-    /// `NEWS_API_KEY` for news), and falls back to that slot's mock
+    /// each provider slot uses its real implementation when a matching API
+    /// key is configured, and falls back to that slot's mock
     /// implementation otherwise — so an operator can enable providers
     /// incrementally, and a deployment with no keys configured at all
-    /// behaves exactly like `mock()`. There is no real
+    /// behaves exactly like `mock()`.
+    ///
+    /// Web search checks `TAVILY_API_KEY` first, then
+    /// `BRAVE_SEARCH_API_KEY` — Tavily first because its free tier needs
+    /// no payment method at signup, unlike Brave's (see `tavily.rs`).
+    /// News checks `CURRENTS_API_KEY` first, then `NEWS_API_KEY` —
+    /// Currents first because NewsAPI's free tier explicitly forbids
+    /// production/commercial use (see `currents.rs`). Both keys in a slot
+    /// may be set at once (e.g. while migrating from one to the other);
+    /// only the higher-priority one is used. There is no real
     /// `AuthorizedSocialProvider` implementation yet (see the trait's doc
     /// comment on why a real one is more than an API-key away); that slot
     /// is always the mock today.
     pub fn from_env() -> Self {
         let web_search: Vec<std::sync::Arc<dyn WebSearchProvider>> =
-            match std::env::var("BRAVE_SEARCH_API_KEY") {
-                Ok(key) if !key.trim().is_empty() => {
+            match (env_key("TAVILY_API_KEY"), env_key("BRAVE_SEARCH_API_KEY")) {
+                (Some(key), _) => {
+                    tracing::info!("OSINT: Tavily web-search provider enabled");
+                    vec![std::sync::Arc::new(tavily::TavilyWebSearchProvider::new(
+                        key,
+                    ))]
+                }
+                (None, Some(key)) => {
                     tracing::info!("OSINT: Brave Search web-search provider enabled");
                     vec![std::sync::Arc::new(websearch::RealWebSearchProvider::new(
                         key,
                     ))]
                 }
-                _ => vec![std::sync::Arc::new(mock::MockWebSearchProvider)],
+                (None, None) => vec![std::sync::Arc::new(mock::MockWebSearchProvider)],
             };
-        let news: Vec<std::sync::Arc<dyn NewsProvider>> = match std::env::var("NEWS_API_KEY") {
-            Ok(key) if !key.trim().is_empty() => {
-                tracing::info!("OSINT: NewsAPI news provider enabled");
-                vec![std::sync::Arc::new(news::RealNewsProvider::new(key))]
-            }
-            _ => vec![std::sync::Arc::new(mock::MockNewsProvider)],
-        };
+        let news: Vec<std::sync::Arc<dyn NewsProvider>> =
+            match (env_key("CURRENTS_API_KEY"), env_key("NEWS_API_KEY")) {
+                (Some(key), _) => {
+                    tracing::info!("OSINT: Currents news provider enabled");
+                    vec![std::sync::Arc::new(currents::CurrentsNewsProvider::new(
+                        key,
+                    ))]
+                }
+                (None, Some(key)) => {
+                    tracing::info!("OSINT: NewsAPI news provider enabled");
+                    vec![std::sync::Arc::new(news::RealNewsProvider::new(key))]
+                }
+                (None, None) => vec![std::sync::Arc::new(mock::MockNewsProvider)],
+            };
         Self::new(
             web_search,
             news,
@@ -348,25 +380,52 @@ mod tests {
     // Serialized: both mutate the same process-wide env vars.
     static ENV_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+    fn clear_osint_env_keys() {
+        for key in [
+            "TAVILY_API_KEY",
+            "BRAVE_SEARCH_API_KEY",
+            "CURRENTS_API_KEY",
+            "NEWS_API_KEY",
+        ] {
+            std::env::remove_var(key);
+        }
+    }
+
     #[tokio::test]
     async fn from_env_falls_back_to_every_mock_provider_when_no_keys_are_set() {
         let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
-        std::env::remove_var("BRAVE_SEARCH_API_KEY");
-        std::env::remove_var("NEWS_API_KEY");
+        clear_osint_env_keys();
         let orchestrator = EvidenceOrchestrator::from_env();
         let sources = orchestrator.enabled_sources();
         assert_eq!(sources, vec!["mock-web-search", "mock-news", "mock-social"]);
     }
 
     #[tokio::test]
-    async fn from_env_uses_the_real_provider_once_its_api_key_is_set() {
+    async fn from_env_uses_the_fallback_provider_when_only_its_key_is_set() {
         let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        clear_osint_env_keys();
         std::env::set_var("BRAVE_SEARCH_API_KEY", "test-key");
         std::env::set_var("NEWS_API_KEY", "test-key");
         let orchestrator = EvidenceOrchestrator::from_env();
         let sources = orchestrator.enabled_sources();
         assert_eq!(sources, vec!["brave-web-search", "newsapi", "mock-social"]);
-        std::env::remove_var("BRAVE_SEARCH_API_KEY");
-        std::env::remove_var("NEWS_API_KEY");
+        clear_osint_env_keys();
+    }
+
+    #[tokio::test]
+    async fn from_env_prefers_tavily_and_currents_over_the_fallback_keys() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        clear_osint_env_keys();
+        std::env::set_var("TAVILY_API_KEY", "test-key");
+        std::env::set_var("BRAVE_SEARCH_API_KEY", "test-key");
+        std::env::set_var("CURRENTS_API_KEY", "test-key");
+        std::env::set_var("NEWS_API_KEY", "test-key");
+        let orchestrator = EvidenceOrchestrator::from_env();
+        let sources = orchestrator.enabled_sources();
+        assert_eq!(
+            sources,
+            vec!["tavily-web-search", "currents-news", "mock-social"]
+        );
+        clear_osint_env_keys();
     }
 }

@@ -93,8 +93,10 @@ implemented or tested unless it was actually run and verified."
   treat the first rollout as a verification step, not an assumed-safe
   flip.
 - **Connectors**: real OSINT web-search/news providers are optional,
-  independently enabled per provider via API key
-  (`BRAVE_SEARCH_API_KEY`/`NEWS_API_KEY`), with a timeout/retry/circuit-breaker
+  independently enabled per slot via API key
+  (`TAVILY_API_KEY`/`BRAVE_SEARCH_API_KEY` for web search,
+  `CURRENTS_API_KEY`/`NEWS_API_KEY` for news — see `docs/ENVIRONMENT.md`
+  for which one wins if both are set), with a timeout/retry/circuit-breaker
   wrapper isolating one provider's outage from the others
   (`server/src/osint/resilience.rs`). Status is visible read-only at
   `GET /api/v1/admin/connectors`.

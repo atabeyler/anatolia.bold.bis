@@ -348,13 +348,16 @@ what these controls defend against.
     evidence or fails the whole `POST .../evidence/collect` request. The
     response reports per-provider failures in `providerErrors` rather
     than silently dropping them.
-  - **Real web-search and news providers**: `server/src/osint/websearch.rs`
-    (Brave Search API) and `server/src/osint/news.rs` (NewsAPI.org) —
-    official, documented REST APIs, never scraping. Each is used only
-    when its API key (`BRAVE_SEARCH_API_KEY`/`NEWS_API_KEY`) is
-    configured (`EvidenceOrchestrator::from_env`); unset, that provider
-    slot stays on its mock implementation. Both wrap their HTTP call
-    through a shared timeout/retry/circuit-breaker
+  - **Real web-search and news providers**: two implementations per slot,
+    all official, documented REST APIs, never scraping —
+    `server/src/osint/tavily.rs` (Tavily) and `server/src/osint/websearch.rs`
+    (Brave Search API) for web search; `server/src/osint/currents.rs`
+    (Currents) and `server/src/osint/news.rs` (NewsAPI.org) for news.
+    `EvidenceOrchestrator::from_env` checks Tavily/Currents first, then
+    Brave/NewsAPI, then falls back to that slot's mock implementation if
+    neither key is configured — see `docs/ENVIRONMENT.md` for the exact
+    variable names and precedence. Every real provider wraps its HTTP
+    call through a shared timeout/retry/circuit-breaker
     (`server/src/osint/resilience.rs`): an 8-second request timeout, one
     retry, and a circuit breaker that opens after 3 consecutive failures
     for a 30-second cooldown — protecting both this service's own

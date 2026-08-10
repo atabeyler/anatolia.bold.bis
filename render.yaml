@@ -108,11 +108,22 @@ services:
       # Optional: registration/approval emails are silently skipped if unset.
       - key: RESEND_API_KEY
         sync: false
-      # Optional real OSINT providers — see server/src/osint/websearch.rs
-      # and server/src/osint/news.rs. Each falls back to its mock
-      # implementation, independently, when its key is unset; leaving
-      # both unset (the default) reproduces today's mock-only behavior.
+      # Optional real OSINT providers — see server/src/osint/mod.rs's
+      # from_env for the exact precedence. Each slot falls back to its
+      # mock implementation when no key for it is set; leaving all four
+      # unset (the default) reproduces today's mock-only behavior.
+      #
+      # Web search: TAVILY_API_KEY is checked first (see
+      # server/src/osint/tavily.rs — its free tier needs no payment
+      # method), then BRAVE_SEARCH_API_KEY (server/src/osint/websearch.rs).
+      - key: TAVILY_API_KEY
+        sync: false
       - key: BRAVE_SEARCH_API_KEY
+        sync: false
+      # News: CURRENTS_API_KEY is checked first (see
+      # server/src/osint/currents.rs — NewsAPI's free tier forbids
+      # production use), then NEWS_API_KEY (server/src/osint/news.rs).
+      - key: CURRENTS_API_KEY
         sync: false
       - key: NEWS_API_KEY
         sync: false

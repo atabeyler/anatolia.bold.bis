@@ -159,10 +159,12 @@ Implemented controls:
   runs a set of provider abstractions
   (`WebSearchProvider`/`NewsProvider`/`AuthorizedSocialProvider`) and
   stores whatever each returns as `candidate_evidence` rows. Web search
-  (Brave Search API) and news (NewsAPI.org) have real, non-mock
-  implementations, each independently enabled when its own API key
-  (`BRAVE_SEARCH_API_KEY`/`NEWS_API_KEY`) is configured and falling back
-  to a mock otherwise; both real providers sit behind a
+  (Tavily, or the Brave Search API) and news (Currents, or NewsAPI.org)
+  have real, non-mock implementations, each slot independently enabled
+  when one of its API keys (`TAVILY_API_KEY`/`BRAVE_SEARCH_API_KEY` for
+  web search, `CURRENTS_API_KEY`/`NEWS_API_KEY` for news — the first of
+  each pair takes priority) is configured and falling back to a mock
+  otherwise; every real provider sits behind a
   timeout/retry/circuit-breaker wrapper (`osint::resilience`) so a
   struggling upstream degrades gracefully. `AuthorizedSocialProvider`
   remains mock-only — every real candidate social-platform API requires

@@ -61,8 +61,10 @@ Configured, but fails silently if wrong or missing — deserve extra care:
 |---|---|
 | `RESEND_API_KEY` | Registration/approval/rejection/MFA-code emails are silently skipped (logged as a warning) — the triggering endpoint still responds normally regardless of whether the notification email actually went out. An account enrolling in email-method MFA with this unset will never receive its code. |
 | `ADMIN_EMAIL` | Falls back to `info@boldkimya.com.tr` if unset. |
-| `BRAVE_SEARCH_API_KEY` | Web-search OSINT evidence collection falls back to `MockWebSearchProvider` (synthetic results, clearly labeled as such) when unset — see `server/src/osint/websearch.rs`. |
-| `NEWS_API_KEY` | News OSINT evidence collection falls back to `MockNewsProvider` — see `server/src/osint/news.rs`. |
+| `TAVILY_API_KEY` | Preferred web-search OSINT provider (`server/src/osint/tavily.rs`) — its free tier needs no payment method at signup, unlike Brave's. Checked before `BRAVE_SEARCH_API_KEY`; if neither is set, web-search evidence collection falls back to `MockWebSearchProvider` (synthetic results, clearly labeled as such). |
+| `BRAVE_SEARCH_API_KEY` | Fallback web-search OSINT provider (`server/src/osint/websearch.rs`), used only when `TAVILY_API_KEY` is unset. Requires a paid Brave Search API plan. |
+| `CURRENTS_API_KEY` | Preferred news OSINT provider (`server/src/osint/currents.rs`) — its free tier is documented as usable in production, unlike NewsAPI's (dev/localhost-only). Checked before `NEWS_API_KEY`; if neither is set, news evidence collection falls back to `MockNewsProvider`. |
+| `NEWS_API_KEY` | Fallback news OSINT provider (`server/src/osint/news.rs`), used only when `CURRENTS_API_KEY` is unset. NewsAPI's own free-tier terms forbid production/commercial use. |
 
 Everything else:
 

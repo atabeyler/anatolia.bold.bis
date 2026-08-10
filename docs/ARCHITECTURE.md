@@ -74,8 +74,9 @@ anatolia.bold.bis/
   `docs/SECURITY_ARCHITECTURE.md`. OSINT connector traits
   (`WebSearchProvider`/`NewsProvider`/`AuthorizedSocialProvider`,
   `server/src/osint/`) follow the same pattern: real implementations
-  (Brave Search, NewsAPI.org) behind the same interface as their mocks,
-  selected per-provider by whether an API key is configured.
+  (Tavily or Brave Search for web search, Currents or NewsAPI.org for
+  news) behind the same interface as their mocks, selected per-slot by
+  whichever of that slot's API keys is configured.
 - **Observability**: structured (JSON) logs, per-request IDs propagated
   via the `x-request-id` header, `GET /api/health` reporting the exact
   running commit SHA.
