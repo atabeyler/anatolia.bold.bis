@@ -522,7 +522,14 @@ what these controls defend against.
   none of which should travel with the image into anything that processes
   it downstream. Re-encoding drops that metadata unconditionally, since
   the `image` crate's encoders never write EXIF/XMP chunks back out; no
-  separate metadata-scrubbing pass is needed.
+  separate metadata-scrubbing pass is needed. Before that re-encode, the
+  EXIF `Orientation` tag (if present) is read and applied to the pixel
+  data (`DynamicImage::apply_orientation`) so the sanitized bytes are
+  right-side-up — a real phone selfie's raw sensor pixel layout is
+  routinely rotated 90/180/270 degrees from how it displays, and the
+  biometric pipeline operates on those raw pixels, not on how a viewer
+  renders them; without this correction, real-world selfie uploads
+  reliably fail face detection even when the photo itself is fine.
 - **National ID encryption at rest and response masking**
   (`national_id.rs`, `admin::mask_national_id`): registration and admin
   user-management no longer write the plaintext national ID to the
