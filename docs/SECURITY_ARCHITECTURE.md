@@ -317,6 +317,24 @@ what these controls defend against.
     OSINT-specific frontend UI, and a real (non-mock) connector with
     declared per-connector authorization type, capabilities, and rate
     limits.
+- **Metrics** (`GET /metrics`, `server/src/metrics.rs`): a process-wide
+  Prometheus recorder (`metrics` crate) backs both scattered
+  `counter!`/`histogram!` call sites and the endpoint itself, which
+  renders the current snapshot on demand. What's recorded: HTTP request
+  count and duration (labeled by method, matched route *template* — e.g.
+  `/api/v1/candidates/:candidate_id`, never the concrete path with a real
+  id — and status code), login failures (labeled by reason:
+  `unknown_account`/`invalid_password`/`account_banned`/
+  `account_not_approved`), biometric search duration and outcome (success
+  or the specific rejection code), and OSINT provider outcomes (labeled
+  by provider name and success/failure). Every label is a fixed,
+  small-cardinality value chosen specifically to avoid becoming an
+  unbounded-cardinality or PII leak — same rule the existing structured
+  logging follows. `/metrics` is open by default (the conventional
+  Prometheus scrape posture, since nothing exported is sensitive); an
+  optional `METRICS_TOKEN` restricts it, compared in constant time like
+  other secret comparisons in this codebase. Not covered: database
+  connection pool gauges — a separate, smaller piece of work.
 - **Conservative entity resolution** (`server/src/entity_resolution.rs`,
   `GET /api/v1/candidates/{id}/possible-duplicates`): two real, working
   non-biometric signals — Jaro-Winkler name similarity over normalized

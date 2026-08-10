@@ -599,6 +599,8 @@ pub async fn login(
             .metadata(serde_json::json!({ "userCode": rate_key, "reason": "unknown_account" }))
             .save(&state)
             .await;
+            metrics::counter!("auth_login_failures_total", "reason" => "unknown_account")
+                .increment(1);
             return ApiError::new("UNAUTHORIZED", "errors.invalidCredentials", rid).into_response();
         }
         Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
@@ -615,6 +617,7 @@ pub async fn login(
         .metadata(serde_json::json!({ "reason": "invalid_password" }))
         .save(&state)
         .await;
+        metrics::counter!("auth_login_failures_total", "reason" => "invalid_password").increment(1);
         return ApiError::new("UNAUTHORIZED", "errors.invalidCredentials", rid).into_response();
     }
     if user.is_banned {
@@ -624,6 +627,7 @@ pub async fn login(
             .metadata(serde_json::json!({ "reason": "account_banned" }))
             .save(&state)
             .await;
+        metrics::counter!("auth_login_failures_total", "reason" => "account_banned").increment(1);
         return ApiError::new("FORBIDDEN", "errors.accountBanned", rid).into_response();
     }
     if !user.is_approved {
@@ -633,6 +637,8 @@ pub async fn login(
             .metadata(serde_json::json!({ "reason": "account_not_approved" }))
             .save(&state)
             .await;
+        metrics::counter!("auth_login_failures_total", "reason" => "account_not_approved")
+            .increment(1);
         return ApiError::new("FORBIDDEN", "errors.accountNotApproved", rid).into_response();
     }
 

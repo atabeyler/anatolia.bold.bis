@@ -65,6 +65,15 @@ this instance.
 if the database answered; **`503 Service Unavailable`**
 (`{ "status": "not_ready", ... }`) if it didn't.
 
+### `GET /metrics`
+
+Prometheus text exposition format. Open by default; if `METRICS_TOKEN` is
+set, requires `Authorization: Bearer <token>` (**`401 Unauthorized`**
+without it). See `server/src/metrics.rs` for exactly which metrics are
+exported — every label is a fixed, small-cardinality value (HTTP method,
+route template, status code, provider name), never a raw path, user id,
+or IP address.
+
 ### Authentication
 
 Access tokens are short-lived JWTs (15 minutes) returned in the response

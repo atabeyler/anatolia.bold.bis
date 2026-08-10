@@ -159,12 +159,26 @@ fn run_provider(
     result: Result<Vec<EvidenceItem>, OsintError>,
 ) -> ProviderOutcome {
     match result {
-        Ok(items) => ProviderOutcome {
-            provider_name: provider_name.to_string(),
-            items,
-            error: None,
-        },
+        Ok(items) => {
+            metrics::counter!(
+                "osint_provider_outcomes_total",
+                "provider" => provider_name.to_string(),
+                "outcome" => "success",
+            )
+            .increment(1);
+            ProviderOutcome {
+                provider_name: provider_name.to_string(),
+                items,
+                error: None,
+            }
+        }
         Err(err) => {
+            metrics::counter!(
+                "osint_provider_outcomes_total",
+                "provider" => provider_name.to_string(),
+                "outcome" => "failure",
+            )
+            .increment(1);
             tracing::warn!(provider = provider_name, error = %err, "OSINT provider failed");
             ProviderOutcome {
                 provider_name: provider_name.to_string(),

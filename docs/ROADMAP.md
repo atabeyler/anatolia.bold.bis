@@ -172,7 +172,12 @@ the individual items.
 
 ## Phase 6 — Hardening
 
-- [ ] Observability, security tests, performance tests
+- [x] Observability — `GET /metrics` (`server/src/metrics.rs`), Prometheus
+      text format: HTTP request count/latency by method+route+status,
+      login failures by reason, biometric search duration/outcome, OSINT
+      provider outcomes. All labels are fixed-cardinality, no PII. Not
+      covered: DB connection pool gauges
+- [ ] Security tests, performance tests
 - [ ] Institutional deployment hardening
 
 ## Operator geolocation

@@ -941,6 +941,19 @@
           }
         }
       }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Prometheus-format metrics snapshot (optionally gated by METRICS_TOKEN)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Missing/invalid METRICS_TOKEN, when configured"
+          }
+        }
+      }
     }
   },
   "components": {

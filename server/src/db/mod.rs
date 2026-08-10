@@ -71,6 +71,11 @@ pub struct AppState {
     /// real provider set is a drop-in swap, matching the
     /// `biometric_provider` pattern.
     pub osint_orchestrator: Arc<crate::osint::EvidenceOrchestrator>,
+    /// Renders the current Prometheus snapshot for `GET /metrics` — see
+    /// `metrics.rs`. The recorder itself is process-wide/global (the
+    /// `metrics` crate's macros work anywhere without this handle); the
+    /// handle is only needed to render a snapshot on demand.
+    pub metrics_handle: metrics_exporter_prometheus::PrometheusHandle,
 }
 
 impl AppState {
@@ -126,6 +131,7 @@ impl AppState {
             require_second_review: config.require_second_review,
             biometric_provider,
             osint_orchestrator: Arc::new(crate::osint::EvidenceOrchestrator::mock()),
+            metrics_handle: crate::metrics::init(),
         })
     }
 
@@ -165,6 +171,7 @@ impl AppState {
             require_second_review: false,
             biometric_provider: Arc::new(crate::biometric::MockBiometricProvider),
             osint_orchestrator: Arc::new(crate::osint::EvidenceOrchestrator::mock()),
+            metrics_handle: crate::metrics::init(),
         }
     }
 }

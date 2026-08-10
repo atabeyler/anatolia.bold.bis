@@ -10,6 +10,7 @@ pub mod entity_resolution;
 pub mod error;
 pub mod evidence;
 pub mod image_validation;
+pub mod metrics;
 pub mod mfa;
 pub mod middleware;
 pub mod national_id;

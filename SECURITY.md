@@ -132,6 +132,16 @@ Implemented controls:
   scan, and the detection/alignment math could only be tested against
   synthetic images in this environment (never real photographs — the
   repository must never contain real biometric data).
+- **Metrics** (`GET /metrics`, `server/src/metrics.rs`): Prometheus text
+  exposition format — HTTP request count/latency by method+route
+  template+status, login failures by reason, biometric search
+  duration/outcome by rejection code, OSINT provider outcomes by
+  provider. Every label is a fixed, small-cardinality value; nothing
+  exported is a raw path, user id, IP address, or other PII, matching
+  the existing structured-logging rule. Open by default (conventional
+  Prometheus scrape posture); an optional `METRICS_TOKEN` bearer token
+  restricts it for deployments that prefer not to expose operational
+  counts on an unauthenticated path.
 - **Evidence (OSINT) collection**: `POST /api/v1/candidates/{id}/evidence/collect`
   runs a set of provider abstractions
   (`WebSearchProvider`/`NewsProvider`/`AuthorizedSocialProvider`, only mock

@@ -168,13 +168,26 @@ pub async fn create_search_route(
         .ok()
         .flatten();
 
+    let provider_started = std::time::Instant::now();
     let ranked = match state
         .biometric_provider
         .search(&state, &image_bytes, top_k as usize)
         .await
     {
-        Ok(ranked) => ranked,
+        Ok(ranked) => {
+            metrics::histogram!("biometric_search_duration_seconds")
+                .record(provider_started.elapsed().as_secs_f64());
+            metrics::counter!("biometric_search_outcomes_total", "outcome" => "success")
+                .increment(1);
+            ranked
+        }
         Err(err) => {
+            metrics::counter!(
+                "biometric_search_outcomes_total",
+                "outcome" => "rejected",
+                "code" => err.code(),
+            )
+            .increment(1);
             tracing::warn!(error = %err, "biometric provider rejected probe image");
             return ApiError::new(err.code(), err.message_key(), rid).into_response();
         }

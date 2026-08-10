@@ -1,10 +1,11 @@
 mod health;
 
+use axum::middleware::from_fn;
 use axum::routing::{delete, get, post};
 use axum::Router;
 
 use crate::db::AppState;
-use crate::{admin, audit, auth, candidates, evidence, mfa, org, search};
+use crate::{admin, audit, auth, candidates, evidence, metrics, mfa, org, search};
 
 pub fn router(state: AppState) -> Router {
     let auth_routes = Router::new()
@@ -116,6 +117,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/api/health", get(health::health))
         .route("/api/health/ready", get(health::ready))
+        .route("/metrics", get(metrics::metrics_route))
         .route("/api/v1/users/me", get(auth::me))
         .route("/api/v1/audit", get(audit::list_audit_events_route))
         .route(
@@ -126,5 +128,6 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/v1/admin", admin_routes)
         .nest("/api/v1/search", search_routes)
         .nest("/api/v1/candidates", candidate_routes)
+        .route_layer(from_fn(metrics::http_metrics_middleware))
         .with_state(state)
 }

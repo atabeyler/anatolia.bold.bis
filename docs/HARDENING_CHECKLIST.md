@@ -449,8 +449,16 @@ eşleşme bu dosyanın sonunda listelidir.
 ## P2 — Logging ve Observability
 
 54. [x] Structured logging (JSON) — zaten vardı, hassas alan eklenmedi.
-55. [ ] Metrics interface (latency, auth failures, db pool vb.) —
-    **yapılmadı**.
+55. [x] Metrics interface — `GET /metrics` (`server/src/metrics.rs`),
+    Prometheus text formatı. HTTP istek sayısı/gecikmesi (method+route
+    template+status), login başarısızlıkları (reason bazında), biyometrik
+    arama süresi/sonucu (rejection code bazında), OSINT provider sonuçları
+    (provider bazında). Her label sabit, düşük kardinaliteli bir değer —
+    hiçbir zaman ham path, kullanıcı id'si, IP adresi ya da başka bir PII
+    değil. Varsayılan olarak açık (geleneksel Prometheus scrape duruşu);
+    isteğe bağlı `METRICS_TOKEN` ile kısıtlanabiliyor. **Kapsanmayan:** DB
+    pool metrikleri (`db pool` gauge'ları) — bu oturumda kapsam dışı
+    bırakıldı, ayrı bir iş kalemi.
 56. [x] Health/readiness — `GET /api/health` (liveness, DB'ye dokunmuyor)
     zaten vardı. `GET /api/health/ready` eklendi: gerçek backend'e karşı
     basit bir sorgu çalıştırıyor, başarısız olursa `503` dönüyor.
