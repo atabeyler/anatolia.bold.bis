@@ -368,10 +368,21 @@ what these controls defend against.
     reviewer to weigh — same "candidates, not verdicts" principle as
     biometric scores. Every evidence item with a URL also becomes an
     entity-graph `website` relation automatically — see below.
+  - **Frontend**: `client/src/components/OsintWorkspace.tsx`, opened from
+    a candidate row on the dashboard — triggers evidence collection
+    (`POST .../evidence/collect`), lists collected evidence, and (in
+    adjacent tabs of the same overlay) manages entity-graph relations and
+    reviews possible duplicates. Previously only an evidence *count*
+    badge existed in the frontend, with no way to actually collect
+    evidence or manage the entity graph from the UI. Connector status
+    (which provider is active per slot, real or mock) is visible
+    read-only to admins at `GET /api/v1/admin/connectors` — see "Entity
+    graph" below and `docs/ROADMAP.md` Phase 5.
   - **Not implemented** (each a separate, larger piece of work, not a
-    faked stand-in): reverse image search, an OSINT-specific frontend
-    workspace, and a declared per-connector capability/rate-limit
-    management API.
+    faked stand-in): reverse image search, a real
+    `AuthorizedSocialProvider`, and per-connector rate-limit
+    *configuration* (status is read-only; there is no runtime-tunable
+    rate limit to change today).
 - **Entity graph** (item 10 in `docs/HARDENING_CHECKLIST.md`,
   `server/src/db/entity_graph.rs`, `server/src/entity_graph.rs`):
   candidate-centric relations to aliases, usernames, organizations, and
@@ -418,23 +429,33 @@ what these controls defend against.
   logging follows. `/metrics` is open by default (the conventional
   Prometheus scrape posture, since nothing exported is sensitive); an
   optional `METRICS_TOKEN` restricts it, compared in constant time like
-  other secret comparisons in this codebase. Not covered: database
-  connection pool gauges — a separate, smaller piece of work.
+  other secret comparisons in this codebase. Not covered in Prometheus
+  metrics specifically: database connection pool gauges — a basic
+  size/idle count is available separately via `GET /api/health/ready`
+  (see "Readiness" above), just not as a scraped time series yet.
 - **Conservative entity resolution** (`server/src/entity_resolution.rs`,
-  `GET /api/v1/candidates/{id}/possible-duplicates`): two real, working
+  `GET /api/v1/candidates/{id}/possible-duplicates`): real, working
   non-biometric signals — Jaro-Winkler name similarity over normalized
-  full names, and candidates that share an OSINT evidence URL — surface
-  other candidate records a human reviewer may want to compare. This is
-  strictly advisory: nothing here ever merges, links, or otherwise alters
-  a candidate record automatically, same "candidates, not verdicts"
+  full names, candidates that share an OSINT evidence URL, and candidates
+  that share an alias/username/organization entity-graph relation (see
+  "Entity graph" below) — surface other candidate records a human
+  reviewer may want to compare. Each match reports exactly which
+  signal(s) fired (`matchedSignals`: `name_similarity`,
+  `shared_evidence_url`, `shared_alias`, `shared_username`,
+  `shared_organization`) instead of a single blended score, so a reviewer
+  can judge the strength of a match themselves. This is strictly
+  advisory: nothing here ever merges, links, or otherwise alters a
+  candidate record automatically, same "candidates, not verdicts"
   principle as biometric scores. The national ID field is deliberately
   never used for this matching — it exists as encrypted ciphertext plus a
   deterministic lookup hash specifically to prevent fuzzy/plaintext
   comparison (see the national ID encryption entry above), and using it
   here would undermine that. Not implemented: phonetic name matching and
-  a persisted entity graph (a many-to-many resolved-identity structure) —
-  the current endpoint recomputes similarity on each request rather than
-  maintaining resolved clusters.
+  geography/temporal signals (no real per-candidate location/time data
+  exists to compare). The endpoint still recomputes similarity on each
+  request rather than maintaining resolved clusters — the entity graph
+  (below) is a real, persisted relation structure, but it is not a
+  resolved-identity/clustering system.
 - **Role change with immediate session revoke** (`POST
   /api/v1/admin/users/{id}/role`, `server/src/admin.rs::change_role_route`,
   item 11): every active session for the target account is revoked the
@@ -598,17 +619,15 @@ what these controls defend against.
   `candidates` is now stamped with its creator's organization at creation
   time (`POST /api/v1/candidates`, resolved server-side the same way a
   search is — never accepted from the client) and `CandidateRow` carries
-  `organization_id` through every read path. The entity graph
-  (`GET/POST /api/v1/candidates/{id}/entity-graph`, item 10 in
-  `docs/HARDENING_CHECKLIST.md`) enforces `can_view_scoped_resource`
-  against it — see `server/tests/entity_graph.rs` for the negative-
-  authorization coverage, same shape as `organization_scope.rs`'s search
-  tests. **Not yet covered**: the other candidate-reading endpoints
-  (`GET .../templates`, `GET .../evidence`,
-  `GET .../possible-duplicates`) don't apply this check yet, even though
-  the data they'd need to (`CandidateRow.organization_id`) is now
-  available — extending them is now purely a matter of adding the same
-  check `entity_graph.rs` already demonstrates, not new plumbing.
+  `organization_id` through every read path. Every candidate-scoped
+  route — the entity graph (`GET/POST /api/v1/candidates/{id}/entity-graph`),
+  reference-photo upload, template listing/revocation, evidence
+  collection/listing, and possible-duplicates — enforces
+  `can_view_scoped_resource` against it via the shared
+  `candidates::authorize_candidate_scope` helper (see "Entity graph"
+  above for how this gap was found and closed); see
+  `server/tests/entity_graph.rs` for the negative-authorization coverage,
+  same shape as `organization_scope.rs`'s search tests.
 
 ## Not yet implemented
 
@@ -621,8 +640,10 @@ yet, so an operator with direct database `UPDATE`/`DELETE` privileges can
 still alter history — the chain only guarantees `GET /api/v1/audit/integrity`
 will detect it. Mandatory-audit coverage (`save_mandatory`) is applied to
 every MANDATORY action that exists in the codebase today, including
-candidate creation, reference-photo enrollment, and template revocation
-(`server/src/candidates.rs`) — minting or revoking a biometric template
-is never reported to the client as a clean success if its audit record
-failed to write. It is not yet wired into role/permission changes or
-sensitive exports, since neither of those endpoints exist yet.
+candidate creation, reference-photo enrollment, template revocation
+(`server/src/candidates.rs`), user ban/unban/delete, and role changes
+(`server/src/admin.rs`, `USER_ROLE_CHANGED`) — none of these are ever
+reported to the client as a clean success if their audit record failed
+to write. Sensitive-data export endpoints do not exist in this codebase,
+so there is nothing yet to wire mandatory-audit coverage into for that
+case.

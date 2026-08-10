@@ -240,6 +240,206 @@ async fn login_and_registration_generate_audit_events_visible_through_the_endpoi
     assert!(!payload["items"].as_array().unwrap().is_empty());
 }
 
+fn authed_json_request(method: &str, uri: &str, token: &str, body: Value) -> Request<Body> {
+    Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("authorization", format!("Bearer {token}"))
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
+async fn create_organization(app: &axum::Router, admin_token: &str, name: &str) -> String {
+    app.clone()
+        .oneshot(authed_json_request(
+            "POST",
+            "/api/v1/admin/organizations",
+            admin_token,
+            json!({ "name": name }),
+        ))
+        .await
+        .unwrap();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/admin/organizations")
+                .header("authorization", format!("Bearer {admin_token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    body_json(response)
+        .await
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["name"] == name)
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+/// Registers and admin-approves a user, deliberately stopping short of
+/// logging in — a caller that needs to assign an organization membership
+/// before the account's first-ever login (so that login's own audit
+/// event is correctly org-scoped, rather than recorded as an "orgless"
+/// event visible to every role, per `can_view_scoped_resource`'s
+/// documented orgless-stays-visible behavior) needs that ordering.
+async fn register_and_approve(
+    app: &axum::Router,
+    admin_token: &str,
+    user_code: &str,
+    national_id: &str,
+) -> String {
+    app.clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/register",
+            json!({
+                "firstName": "Audit",
+                "lastName": "Scoped",
+                "nationalId": national_id,
+                "email": format!("{}@example.test", user_code.to_lowercase()),
+                "password": "ScopedPass1!",
+                "userCode": user_code,
+            }),
+        ))
+        .await
+        .unwrap();
+
+    let users_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/admin/users")
+                .header("authorization", format!("Bearer {admin_token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let users = body_json(users_response).await;
+    let user_id = users["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|u| u["userCode"] == user_code)
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    app.clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/admin/users/{user_id}/approve"))
+                .header("authorization", format!("Bearer {admin_token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    user_id
+}
+
+async fn login(app: &axum::Router, user_code: &str, password: &str) -> String {
+    let login_response = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/login",
+            json!({ "userCode": user_code, "password": password }),
+        ))
+        .await
+        .unwrap();
+    body_json(login_response).await["accessToken"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+async fn assign_membership(app: &axum::Router, admin_token: &str, user_id: &str, org_id: &str) {
+    app.clone()
+        .oneshot(authed_json_request(
+            "POST",
+            "/api/v1/admin/memberships",
+            admin_token,
+            json!({ "userId": user_id, "organizationId": org_id }),
+        ))
+        .await
+        .unwrap();
+}
+
+/// An `AUDITOR` in one organization must never see another organization's
+/// audit events, even though the `AUDITOR` role globally permits reading
+/// the audit trail — the same object-level authorization
+/// (`can_view_scoped_resource`) already proven for searches and
+/// candidate-scoped routes must also cover this endpoint. See "Not yet
+/// covered" corrections in `docs/SECURITY_ARCHITECTURE.md`.
+#[tokio::test]
+async fn an_auditor_in_one_organization_cannot_see_another_organizations_events() {
+    let _guard = ENV_GUARD.lock().await;
+    let state = AppState::for_tests().await;
+    let app = routes::router(state);
+    let admin_token = seed_and_login_admin(&app, "AUDITSCOP").await;
+
+    let org_a = create_organization(&app, &admin_token, "Audit Scope Org A").await;
+    let org_b = create_organization(&app, &admin_token, "Audit Scope Org B").await;
+
+    // Both accounts are registered, approved, and given their org
+    // membership *before* their first login, so that first login's own
+    // audit event is correctly org-scoped rather than recorded as an
+    // orgless event visible to every role.
+    let auditor_id = register_and_approve(&app, &admin_token, "AUDSCOPEA", "10101010101").await;
+    app.clone()
+        .oneshot(authed_json_request(
+            "POST",
+            &format!("/api/v1/admin/users/{auditor_id}/role"),
+            &admin_token,
+            json!({ "role": "AUDITOR" }),
+        ))
+        .await
+        .unwrap();
+    assign_membership(&app, &admin_token, &auditor_id, &org_a).await;
+    let auditor_token = login(&app, "AUDSCOPEA", "ScopedPass1!").await;
+
+    let org_b_user_id = register_and_approve(&app, &admin_token, "AUDSCOPEB", "20202020202").await;
+    assign_membership(&app, &admin_token, &org_b_user_id, &org_b).await;
+    // This is org B's member's first login — its audit event is stamped
+    // with org B's id, since the membership above was assigned first.
+    login(&app, "AUDSCOPEB", "ScopedPass1!").await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/audit?action=AUTH_LOGIN_SUCCESS&pageSize=200")
+                .header("authorization", format!("Bearer {auditor_token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let payload = body_json(response).await;
+    let items = payload["items"].as_array().unwrap();
+    assert!(
+        items
+            .iter()
+            .all(|item| item["actorUserCode"] != "AUDSCOPEB"),
+        "an org A auditor must not see org B's login events: {items:?}"
+    );
+}
+
 #[tokio::test]
 async fn audit_page_size_is_clamped_to_the_max() {
     let _guard = ENV_GUARD.lock().await;

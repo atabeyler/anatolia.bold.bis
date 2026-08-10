@@ -47,7 +47,11 @@ Implemented controls:
   revokes that one session; `POST /api/v1/auth/logout-all` revokes every
   session for the authenticated user. Banning a user immediately revokes
   all of their active sessions rather than waiting for their access token
-  to expire.
+  to expire. `GET /api/v1/users/me/sessions` lists a user's own active
+  sessions (device/browser string, IP, last used); `DELETE
+  /api/v1/users/me/sessions/{id}` revokes one of them individually,
+  ownership-checked so a session id belonging to another account is
+  treated the same as an unknown one.
 - **Approval tokens are isolated from login tokens**: the registration
   approve/reject email link is signed with its own `APPROVAL_TOKEN_SECRET`
   (not the refresh secret) and is additionally tracked server-side in
@@ -134,10 +138,13 @@ Implemented controls:
   `IMAGE_TOO_BLURRY`, `EXCESSIVE_POSE`, `POOR_LIGHTING`,
   `LOW_FACE_QUALITY`) rather than a fabricated result. See
   `docs/SECURITY_ARCHITECTURE.md` for the honest limitations: occlusion
-  detection is not implemented, similarity search is an unindexed O(n)
-  scan, and the detection/alignment math could only be tested against
-  synthetic images in this environment (never real photographs — the
-  repository must never contain real biometric data).
+  detection is not implemented, and the detection/alignment math could
+  only be tested against synthetic images in this environment (never real
+  photographs — the repository must never contain real biometric data).
+  Similarity search runs a correct in-memory O(n) scan on every backend,
+  plus a native `pgvector`-indexed HNSW path on PostgreSQL when the
+  extension can be enabled (`GET /api/health/ready` reports which path is
+  active).
 - **Metrics** (`GET /metrics`, `server/src/metrics.rs`): Prometheus text
   exposition format — HTTP request count/latency by method+route
   template+status, login failures by reason, biometric search
@@ -150,14 +157,26 @@ Implemented controls:
   counts on an unauthenticated path.
 - **Evidence (OSINT) collection**: `POST /api/v1/candidates/{id}/evidence/collect`
   runs a set of provider abstractions
-  (`WebSearchProvider`/`NewsProvider`/`AuthorizedSocialProvider`, only mock
-  implementations exist — no real external OSINT access in this
-  environment) and stores whatever each returns as `candidate_evidence`
-  rows. One provider failing never fails the whole request or blocks the
-  others' results (`osint::EvidenceOrchestrator`). Same role restriction
-  as candidate enrollment for collecting; anyone who can view search
-  results can read what was collected. See `docs/SECURITY_ARCHITECTURE.md`
-  for what this first slice does and does not cover.
+  (`WebSearchProvider`/`NewsProvider`/`AuthorizedSocialProvider`) and
+  stores whatever each returns as `candidate_evidence` rows. Web search
+  (Brave Search API) and news (NewsAPI.org) have real, non-mock
+  implementations, each independently enabled when its own API key
+  (`BRAVE_SEARCH_API_KEY`/`NEWS_API_KEY`) is configured and falling back
+  to a mock otherwise; both real providers sit behind a
+  timeout/retry/circuit-breaker wrapper (`osint::resilience`) so a
+  struggling upstream degrades gracefully. `AuthorizedSocialProvider`
+  remains mock-only — every real candidate social-platform API requires
+  its own developer agreement, not available in this environment. One
+  provider failing never fails the whole request or blocks the others'
+  results (`osint::EvidenceOrchestrator`). Same role restriction as
+  candidate enrollment for collecting; anyone who can view search results
+  can read what was collected, and — separately from the OSINT layer —
+  a candidate-centric entity graph (aliases/usernames/organizations/websites,
+  `server/src/db/entity_graph.rs`) records relations a reviewer finds,
+  editable from a per-candidate OSINT workspace in the frontend
+  (`client/src/components/OsintWorkspace.tsx`). See
+  `docs/SECURITY_ARCHITECTURE.md` for what this layer does and does not
+  cover.
 - **Candidate enrollment**: `POST /api/v1/candidates` and
   `POST /api/v1/candidates/{id}/reference-photos` (restricted to
   `OPERATOR`/`SECURITY_ADMIN`/`SYSTEM_ADMIN`) create candidate records and
@@ -233,18 +252,27 @@ Implemented controls:
   not guarantee (it is tamper-evident, not tamper-proof — there is no
   dedicated append-only database role yet).
 - **Organization/unit model and object-level authorization**:
-  `organizations`/`organization_units`/`user_memberships`, with searches
-  and audit events scoped to the actor's organization on every read
-  path. `SYSTEM_ADMIN` is the sole role exempt from scoping — holding
-  another privileged role (`AUDITOR`, `SECURITY_ADMIN`) does not by
-  itself grant visibility into another organization's records. See
-  `docs/SECURITY_ARCHITECTURE.md`; not yet covering candidates, which
-  have no real enrollment pipeline to scope from yet.
+  `organizations`/`organization_units`/`user_memberships`, with searches,
+  audit events, and every candidate-scoped route (reference-photo upload,
+  templates, evidence, entity graph, possible-duplicates) scoped to the
+  actor's organization on every read and write path
+  (`candidates::authorize_candidate_scope`). `SYSTEM_ADMIN` is the sole
+  role exempt from scoping — holding another privileged role (`AUDITOR`,
+  `SECURITY_ADMIN`) does not by itself grant visibility into another
+  organization's records. See `docs/SECURITY_ARCHITECTURE.md`. A security
+  audit of the candidate-scoped routes found several that loaded a
+  candidate but never checked its organization against the caller's,
+  unlike search routes — fixed with the shared helper referenced above,
+  with regression tests covering the previously-unchecked paths
+  (`server/tests/entity_graph.rs`).
 
 ## Planned (see `docs/ROADMAP.md` and `docs/SECURITY_ARCHITECTURE.md`)
 
-Enterprise SSO is designed but not yet implemented. Do not assume it is
-active until this document is updated to say otherwise.
+Enterprise SSO, SCIM provisioning, thin Android/iOS clients, and a real
+`AuthorizedSocialProvider` are designed but not yet implemented. Do not
+assume any of these are active until this document is updated to say
+otherwise. See `docs/ENTERPRISE_DEPLOYMENT.md` for a fuller institutional
+deployment readiness summary.
 
 ## Rules enforced in this repository
 

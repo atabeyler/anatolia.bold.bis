@@ -4,6 +4,33 @@ Implemented incrementally. Each phase below is marked `[x]`/`[ ]` per
 item — a phase heading does not imply everything under it is done; check
 the individual items.
 
+## Explicitly out of scope for V1
+
+Deliberately deferred to a later release rather than blocking V1 — each
+has a real reason it's excluded (external dependency this environment
+doesn't have, or a scope large enough to be its own milestone), not a
+placeholder waiting to be filled with a fake implementation:
+
+- **Enterprise SSO** (SAML/OIDC) and **SCIM provisioning** — see "Identity
+  and access" in `docs/ENTERPRISE_DEPLOYMENT.md`.
+- **Thin Android/iOS clients** — capture/upload + result display only, no
+  on-device inference (see Phase 5 below); not started.
+- **Advanced occlusion detection** — no reliable heuristic exists without
+  a trained model; a fake check would violate this project's rule against
+  faking unimplemented capabilities (see Phase 4 below).
+- **A real `AuthorizedSocialProvider`** — every candidate social-platform
+  API requires its own developer agreement, not available in this
+  environment (see Phase 5 below).
+- **Reverse image search** (see Phase 5 below).
+- **Full institutional deployment / HA / SIEM / HSM infrastructure** — load
+  balancing beyond a single instance, a shared (non-in-memory) rate
+  limiter, SIEM/log-pipeline integration, and hardware security module
+  key storage. See "Scaling and availability" and "Data protection" in
+  `docs/ENTERPRISE_DEPLOYMENT.md` for what exists today instead.
+
+None of these block V1 closure; each is called out again in its own
+phase below with the specific reason it's excluded.
+
 ## Phase 1 — Repository foundation (this phase)
 
 - [x] Repository rules (`AGENTS.md`, `CLAUDE.md`)

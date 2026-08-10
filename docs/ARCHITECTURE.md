@@ -82,7 +82,7 @@ anatolia.bold.bis/
 
 ## Frontend
 
-- React 18+, TypeScript (strict), Vite, TanStack Query, i18next.
+- React 19, TypeScript (strict), Vite, TanStack Query, i18next.
 - No user-facing string is ever hardcoded — see `docs/I18N.md`.
 - Talks to the API via a relative `/api` base URL by default, since in
   every deployed environment it's served from the same origin as the
