@@ -35,6 +35,23 @@ services:
       # never compromises the others (see docs/SECURITY_ARCHITECTURE.md).
       - key: APPROVAL_TOKEN_SECRET
         generateValue: true
+      # Signs the short-lived login-time MFA challenge token — separate
+      # from the access/refresh secrets above so a compromised MFA
+      # challenge token can never be replayed as a real session token.
+      # Required in production once TOTP MFA is enabled — see
+      # server/src/mfa.rs, docs/ENVIRONMENT.md.
+      - key: MFA_TOKEN_SECRET
+        generateValue: true
+      # AES-256-GCM key encrypting national ID numbers at rest — see
+      # server/src/national_id.rs, docs/ENVIRONMENT.md. Required in
+      # production, and must be exactly 64 hex characters (32 bytes) —
+      # `generateValue` is deliberately not used here since its output
+      # isn't guaranteed to be valid hex, which would just trade this
+      # startup panic for a different one. Set once in the Render
+      # dashboard with the output of `openssl rand -hex 32`. Rotating
+      # this key makes every existing encrypted national ID undecryptable.
+      - key: NATIONAL_ID_ENCRYPTION_KEY
+        sync: false
       # BiometricProvider is mock-only until a real, server-side face
       # provider ships (see docs/ROADMAP.md Phase 4). Production refuses to
       # start with the mock provider unless this is explicitly set — set
