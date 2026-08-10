@@ -392,6 +392,16 @@ what these controls defend against.
   `can_view_scoped_resource` against the candidate's `organization_id`,
   the same rule already proven for searches — see
   `server/tests/entity_graph.rs` for the negative-authorization coverage.
+  Building the entity graph surfaced a real gap: several other
+  candidate-scoped routes (`POST .../reference-photos`,
+  `GET .../templates`, `POST .../templates/{id}/revoke`,
+  `GET/POST .../evidence[/collect]`, `GET .../possible-duplicates`) loaded
+  the candidate but never checked its organization against the caller's,
+  unlike search routes — a member of one organization could act on another
+  organization's candidate through these paths. Fixed with a shared
+  `candidates::authorize_candidate_scope` helper, applied uniformly across
+  all of them; `server/tests/entity_graph.rs` also covers this negative
+  case for each affected route.
 - **Metrics** (`GET /metrics`, `server/src/metrics.rs`): a process-wide
   Prometheus recorder (`metrics` crate) backs both scattered
   `counter!`/`histogram!` call sites and the endpoint itself, which

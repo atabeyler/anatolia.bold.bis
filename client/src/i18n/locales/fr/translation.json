@@ -193,7 +193,20 @@
     "mfaResetComplete": "L'authentification multifacteur a été réinitialisée pour ce compte.",
     "org": {
       "membershipAssigned": "Adhésion attribuée.",
-      "membershipRemoved": "Adhésion supprimée."
+      "membershipRemoved": "Adhésion supprimée.",
+      "createHeading": "CRÉER UNE ORGANISATION",
+      "namePlaceholder": "Nom de l'organisation",
+      "createSubmit": "CRÉER",
+      "empty": "Aucune organisation pour l'instant.",
+      "units": "Unités",
+      "noUnits": "Aucune unité pour l'instant.",
+      "unitNamePlaceholder": "Nom de l'unité",
+      "addUnit": "Ajouter une unité",
+      "membershipHeading": "ATTRIBUER UNE ADHÉSION",
+      "membershipHint": "Attribuez un utilisateur à une organisation par identifiant.",
+      "userIdPlaceholder": "ID utilisateur",
+      "organizationIdPlaceholder": "ID de l'organisation",
+      "assignSubmit": "ATTRIBUER"
     },
     "roleChanged": "Rôle mis à jour. Le compte devra se reconnecter.",
     "roleLabel": "Rôle",
@@ -204,6 +217,23 @@
       "OPERATOR": "Opérateur",
       "REVIEWER": "Examinateur",
       "AUDITOR": "Auditeur"
+    },
+    "tabOrganizations": "ORGANISATIONS",
+    "tabSystem": "SYSTÈME",
+    "system": {
+      "healthHeading": "ÉTAT DU SYSTÈME",
+      "status": "Statut",
+      "version": "Version",
+      "biometricProvider": "Fournisseur biométrique",
+      "biometricSearch": "Recherche biométrique",
+      "thresholdsHeading": "SEUILS CALIBRÉS",
+      "thresholdsEmpty": "Aucun seuil calibré enregistré pour le moment.",
+      "thresholdSummary": "seuil {{threshold}}, EER {{eer}}, {{pairCount}} paires",
+      "integrityHeading": "INTÉGRITÉ DU JOURNAL D'AUDIT",
+      "integrityHint": "Vérifiez que la chaîne d'audit en ajout seul n'a pas été altérée.",
+      "integrityCheckSubmit": "LANCER LA VÉRIFICATION D'INTÉGRITÉ",
+      "integrityIntact": "Journal d'audit intact ({{eventsChecked}} événements vérifiés).",
+      "integrityBroken": "Échec d'intégrité du journal d'audit : {{breaks}} rupture(s) détectée(s) parmi {{eventsChecked}} événements vérifiés."
     }
   },
   "search": {
@@ -274,5 +304,8 @@
       "next": "Suivant",
       "pageOf": "Page {{page}} sur {{totalPages}}"
     }
+  },
+  "a11y": {
+    "skipToContent": "Passer au contenu principal"
   }
 }

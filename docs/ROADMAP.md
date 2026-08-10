@@ -161,9 +161,17 @@ the individual items.
       reliable heuristic exists without a trained model, and a fake check
       would violate CLAUDE.md's "never fake unimplemented capabilities"
       rule
-- [ ] FAR/FRR/ROC calibration tooling against a real labeled dataset — not
-      implemented; no authorized labeled biometric dataset exists in this
-      environment to calibrate against
+- [x] FAR/FRR/ROC calibration tooling — `server/src/bin/calibrate.rs`
+      supports `--format text|json|csv` output and, with
+      `--model-name`/`--model-version`/`--save-threshold`, persists the
+      computed threshold and equal-error-rate to a new
+      `biometric_thresholds` table (`db::save_calibrated_threshold`, upsert
+      per model name+version), visible to admins at
+      `GET /api/v1/admin/biometric-thresholds`. No authorized labeled
+      biometric dataset exists in this environment, so the tool has only
+      been run against its own synthetic self-test pairs, never a real
+      calibration dataset — an operator with real labeled data runs this
+      CLI against it before trusting a threshold in production
 
 ## Phase 5 — Authorized connectors and administration
 
@@ -186,9 +194,14 @@ the individual items.
 - [x] Conservative entity resolution over non-biometric signals —
       `server/src/entity_resolution.rs`,
       `GET /api/v1/candidates/{id}/possible-duplicates`: Jaro-Winkler name
-      similarity plus shared OSINT-evidence-URL detection, advisory only
-      (never auto-merges/links candidates). Not implemented: phonetic
-      matching
+      similarity, shared OSINT-evidence-URL detection, and shared
+      alias/username/organization entity-graph relations, advisory only
+      (never auto-merges/links candidates). Each possible match now reports
+      exactly which signal(s) fired (`matchedSignals` — `name_similarity`,
+      `shared_evidence_url`, `shared_alias`, `shared_username`,
+      `shared_organization`) instead of a single blended score. Not
+      implemented: phonetic matching, geography/temporal signals (no real
+      per-candidate location/time data exists to compare)
 - [x] Entity graph — candidate-centric relations to aliases, usernames,
       organizations, and websites (`server/src/db/entity_graph.rs`,
       `GET/POST /api/v1/candidates/{id}/entity-graph`). `website`
@@ -204,7 +217,18 @@ the individual items.
 - [x] Secondary verification workflow — `REQUIRE_SECOND_REVIEW` four-eyes
       policy (`db::record_review_decision`); see
       `docs/SECURITY_ARCHITECTURE.md`
-- [ ] Administration screens
+- [x] Administration screens — `client/src/pages/AdminPage.tsx` now has
+      three tabs: Users (existing user management), Organizations (new —
+      `OrganizationsPanel.tsx`, backed by `orgClient.ts`: create
+      organizations, create/list units per organization, assign
+      memberships by user/organization ID), System (new —
+      `SystemPanel.tsx`, backed by `systemClient.ts`: readiness/biometric
+      provider/search-mode status, calibrated threshold list, an
+      on-demand audit-chain integrity check). Session management,
+      connector management, and MFA-policy screens are **not
+      implemented** — no backend exists yet for per-session revocation or
+      connector configuration, so a frontend for them would be
+      non-functional
 - [ ] Thin Android/iOS clients (capture/upload + result display; no on-device inference)
 
 ## Phase 6 — Hardening
@@ -220,7 +244,19 @@ the individual items.
       SQLite-backed DB-path example. Real ONNX inference and a
       Postgres-backed DB path are deliberately not benchmarked here — see
       the file's own doc comment for why
-- [ ] Security tests
+- [x] Security regression: organization-scope enforcement was audited
+      across every candidate-scoped route and found inconsistent — several
+      routes (`POST /candidates/{id}/reference-photos`,
+      `GET /candidates/{id}/templates`,
+      `POST /candidates/{id}/templates/{template_id}/revoke`,
+      `GET/POST /candidates/{id}/evidence[/collect]`,
+      `GET /candidates/{id}/possible-duplicates`) loaded the candidate but
+      never checked the requester's organization against it, unlike
+      search routes. Fixed with a shared
+      `candidates::authorize_candidate_scope` helper, applied to every
+      route above plus the entity-graph route; covered by 2 new
+      regression tests in `server/tests/entity_graph.rs` asserting a
+      different organization's member is refused on each of these routes
 - [ ] Institutional deployment hardening
 
 ## Operator geolocation

@@ -13,6 +13,7 @@ use serde_json::json;
 
 use crate::audit::{action, result as audit_result, AuditRecorder};
 use crate::auth::auth_user_from_headers;
+use crate::candidates::authorize_candidate_scope;
 use crate::db::{
     insert_evidence, list_evidence_for_candidate, load_candidate_by_id, AppState, EvidenceRow,
 };
@@ -60,10 +61,13 @@ pub async fn collect_evidence_route(
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
 
-    match load_candidate_by_id(&state.backend, &candidate_id).await {
-        Ok(Some(_)) => {}
+    let candidate = match load_candidate_by_id(&state.backend, &candidate_id).await {
+        Ok(Some(candidate)) => candidate,
         Ok(None) => return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
         Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    };
+    if !authorize_candidate_scope(&state, &claims, &candidate).await {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
 
     let query = payload.query.trim().to_string();
@@ -124,6 +128,12 @@ pub async fn list_evidence_route(
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
     };
     if !permission::can_view_search(&claims.role) {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
+    let Ok(Some(candidate)) = load_candidate_by_id(&state.backend, &candidate_id).await else {
+        return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response();
+    };
+    if !authorize_candidate_scope(&state, &claims, &candidate).await {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
     match list_evidence_for_candidate(&state.backend, &candidate_id).await {

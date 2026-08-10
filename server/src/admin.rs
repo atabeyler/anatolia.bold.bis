@@ -145,6 +145,27 @@ pub async fn list_users(
     }
 }
 
+/// `GET /api/v1/admin/biometric-thresholds` — every model/version that
+/// has had a real `calibrate --save-threshold` run against it (item 3 in
+/// the hardening checklist). Advisory only — see
+/// `db::BiometricThresholdRow`'s doc comment: nothing reads this table to
+/// gate a search result, it exists purely so a real calibration run's
+/// result is visible to an administrator rather than left in a terminal.
+pub async fn list_biometric_thresholds(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(denied) = require_admin(&state, &headers) {
+        return denied;
+    }
+    match crate::db::list_calibrated_thresholds(&state.backend).await {
+        Ok(rows) => Json(json!({ "items": rows })).into_response(),
+        Err(_) => {
+            ApiError::new("INTERNAL_ERROR", "errors.internal", request_id(&headers)).into_response()
+        }
+    }
+}
+
 /// Lets an admin create an account directly (immediately approved, no
 /// self-registration/approval round trip) — for operators the admin sets
 /// up in person rather than ones who self-register. Distinct from

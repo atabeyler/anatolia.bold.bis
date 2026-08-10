@@ -450,6 +450,21 @@ eşleşme bu dosyanın sonunda listelidir.
     Ana renk token'ları için WCAG AA kontrast oranı hesaplanarak doğrulandı.
     Arapça RTL desteği zaten doğru kurulmuştu, yeniden gözden geçirildi,
     değişiklik gerekmedi.
+
+    Takip turu (V1 kapanış kontrol listesi, madde 16): sayfalar tek tek
+    yeniden tarandı. Bulunan gerçek eksikler: (1) Admin/Audit/Organizations
+    panellerindeki metin girdileri yalnızca `placeholder` ile
+    etiketleniyordu — bu erişilebilir bir isim sağlamaz (WCAG 1.3.1),
+    girdiye yazı yazılınca kaybolur; her birine `placeholder` ile aynı
+    metni taşıyan bir `aria-label` eklendi (`AuditPage`, `DashboardPage`,
+    `AdminPage`, `OrganizationsPanel`). (2) Klavye kullanıcıları sabit
+    topbar/nav'ı atlayıp doğrudan sayfa içeriğine geçemiyordu — bir
+    "skip to main content" bağlantısı eklendi (`App.tsx`, `.skip-link`,
+    yalnızca fokus alınca görünür oluyor, `a11y.skipToContent` anahtarıyla
+    6 dilde çevrildi). Admin panelindeki sekme geçişleri daha önce
+    tıklanamayan `<span>` idi; yeni Organizations/System sekmeleriyle
+    birlikte gerçek, klavyeyle odaklanabilir `<button>` elemanlarına
+    çevrildi.
 47. [x] Search result UX (rank/score/source/review status/reviewer/
     timestamp/evidence count) — `evidenceClient.ts` eklendi, DashboardPage
     her adayın `GET /api/v1/candidates/{id}/evidence` sayısını best-effort

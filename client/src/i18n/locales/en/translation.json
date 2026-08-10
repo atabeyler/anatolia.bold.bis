@@ -193,7 +193,20 @@
     "mfaResetComplete": "Multi-factor authentication has been reset for this account.",
     "org": {
       "membershipAssigned": "Membership assigned.",
-      "membershipRemoved": "Membership removed."
+      "membershipRemoved": "Membership removed.",
+      "createHeading": "CREATE ORGANIZATION",
+      "namePlaceholder": "Organization name",
+      "createSubmit": "CREATE",
+      "empty": "No organizations yet.",
+      "units": "Units",
+      "noUnits": "No units yet.",
+      "unitNamePlaceholder": "Unit name",
+      "addUnit": "Add unit",
+      "membershipHeading": "ASSIGN MEMBERSHIP",
+      "membershipHint": "Assign a user to an organization by ID.",
+      "userIdPlaceholder": "User ID",
+      "organizationIdPlaceholder": "Organization ID",
+      "assignSubmit": "ASSIGN"
     },
     "roleChanged": "Role updated. The account will need to sign in again.",
     "roleLabel": "Role",
@@ -204,6 +217,23 @@
       "OPERATOR": "Operator",
       "REVIEWER": "Reviewer",
       "AUDITOR": "Auditor"
+    },
+    "tabOrganizations": "ORGANIZATIONS",
+    "tabSystem": "SYSTEM",
+    "system": {
+      "healthHeading": "SYSTEM HEALTH",
+      "status": "Status",
+      "version": "Version",
+      "biometricProvider": "Biometric provider",
+      "biometricSearch": "Biometric search",
+      "thresholdsHeading": "CALIBRATED THRESHOLDS",
+      "thresholdsEmpty": "No calibrated thresholds recorded yet.",
+      "thresholdSummary": "threshold {{threshold}}, EER {{eer}}, {{pairCount}} pairs",
+      "integrityHeading": "AUDIT TRAIL INTEGRITY",
+      "integrityHint": "Verify that the append-only audit chain has not been tampered with.",
+      "integrityCheckSubmit": "RUN INTEGRITY CHECK",
+      "integrityIntact": "Audit trail intact ({{eventsChecked}} events checked).",
+      "integrityBroken": "Audit trail integrity failure: {{breaks}} break(s) found among {{eventsChecked}} events checked."
     }
   },
   "search": {
@@ -274,5 +304,8 @@
       "next": "Next",
       "pageOf": "Page {{page}} of {{totalPages}}"
     }
+  },
+  "a11y": {
+    "skipToContent": "Skip to main content"
   }
 }

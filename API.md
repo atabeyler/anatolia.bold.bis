@@ -349,6 +349,13 @@ account: **`409 Conflict`** (`LAST_ADMIN_PROTECTED`,
 `errors.lastAdminProtected`) instead of taking effect, so the platform can
 never lock itself out of its own administration.
 
+- `GET /api/v1/admin/biometric-thresholds` — lists every calibrated
+  FAR/FRR threshold recorded by `server/src/bin/calibrate.rs --save-threshold`,
+  most-recent write per model name+version. Response:
+  `{ "items": [ { "id": "...", "modelName": "...", "modelVersion": "...", "threshold": 0.88, "equalErrorRate": 0.02, "pairCount": 40, "createdAt": "..." } ] }`.
+  Saving a threshold again for the same model name+version replaces the
+  previous row rather than adding a new one.
+
 - `GET /api/v1/admin/review/{token}` — HTML approve/reject page linked from
   the admin's registration-notification email (valid 3 days, single-use;
   signed with `APPROVAL_TOKEN_SECRET`, independent of the JWT secrets —
@@ -698,16 +705,25 @@ Available to anyone who can view search results
 
 #### `GET /api/v1/candidates/{candidate_id}/possible-duplicates`
 
-Requires `Authorization: Bearer <accessToken>` and
-`permission::can_view_search`. Conservative, **advisory-only** entity
+Requires `Authorization: Bearer <accessToken>`,
+`permission::can_view_search`, and the same organization-scoping check as
+the entity graph routes below. Conservative, **advisory-only** entity
 resolution over non-biometric signals (`server/src/entity_resolution.rs`):
-Jaro-Winkler name similarity (default threshold `0.90`) plus any
-candidates sharing an OSINT evidence URL with this one. Never merges or
-auto-links anything — it only surfaces other candidate records a human
-reviewer may want to compare, same "candidates, not verdicts" principle
-as biometric scores. Deliberately does not use the national ID field for
-matching — it's encrypted specifically so it can't be used for
-fuzzy/plaintext comparison (see `national_id.rs`).
+Jaro-Winkler name similarity (default threshold `0.90`), any candidates
+sharing an OSINT evidence URL with this one, and any candidates sharing an
+alias/username/organization entity-graph relation with this one. Never
+merges or auto-links anything — it only surfaces other candidate records a
+human reviewer may want to compare, same "candidates, not verdicts"
+principle as biometric scores. Deliberately does not use the national ID
+field for matching — it's encrypted specifically so it can't be used for
+fuzzy/plaintext comparison (see `national_id.rs`). Not implemented:
+phonetic matching, geography/temporal signals (no real per-candidate
+location/time data exists to compare).
+
+Each match reports exactly which signal(s) fired via `matchedSignals`
+(one or more of `name_similarity`, `shared_evidence_url`, `shared_alias`,
+`shared_username`, `shared_organization`) instead of a single blended
+score, so a reviewer can judge the strength of a match themselves.
 
 **`200 OK`**:
 ```json
@@ -715,7 +731,8 @@ fuzzy/plaintext comparison (see `national_id.rs`).
   "items": [
     {
       "candidateId": "...", "referenceCode": "...", "fullName": "...",
-      "nameSimilarity": 0.97, "sharedEvidenceUrls": []
+      "nameSimilarity": 0.97, "sharedEvidenceUrls": [],
+      "matchedSignals": ["name_similarity"]
     }
   ]
 }

@@ -381,3 +381,82 @@ async fn collecting_evidence_with_a_url_automatically_records_a_website_relation
         );
     }
 }
+
+/// Item 21 in `docs/HARDENING_CHECKLIST.md`: organization scoping was
+/// only enforced on the entity-graph routes when they were added; every
+/// other candidate-scoped endpoint (templates, evidence, possible-
+/// duplicates, reference-photo upload) read/wrote candidate data with no
+/// such check at all — a real IDOR. These tests cover the fix.
+#[tokio::test]
+async fn a_different_orgs_member_cannot_list_templates_or_evidence_or_possible_duplicates() {
+    let fixture = set_up_two_orgs("6").await;
+
+    for uri in [
+        format!("/api/v1/candidates/{}/templates", fixture.candidate_a_id),
+        format!("/api/v1/candidates/{}/evidence", fixture.candidate_a_id),
+        format!(
+            "/api/v1/candidates/{}/possible-duplicates",
+            fixture.candidate_a_id
+        ),
+    ] {
+        let response = fixture
+            .app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(&uri)
+                    .header("authorization", format!("Bearer {}", fixture.org_b_token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::FORBIDDEN,
+            "expected 403 for org B reading org A's candidate via {uri}"
+        );
+    }
+
+    // Same-org access still works — the fix must not have overcorrected
+    // into blocking everyone.
+    let response = fixture
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/api/v1/candidates/{}/templates",
+                    fixture.candidate_a_id
+                ))
+                .header("authorization", format!("Bearer {}", fixture.org_a_token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn a_different_orgs_member_cannot_collect_evidence_for_another_orgs_candidate() {
+    let fixture = set_up_two_orgs("7").await;
+
+    let response = fixture
+        .app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            &format!(
+                "/api/v1/candidates/{}/evidence/collect",
+                fixture.candidate_a_id
+            ),
+            &fixture.org_b_token,
+            json!({ "query": "Should not be allowed" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}

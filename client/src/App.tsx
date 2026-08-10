@@ -96,12 +96,15 @@ function App() {
   if (resetToken) {
     return (
       <div className="app-shell">
+        <a href="#main-content" className="skip-link">
+          {t('a11y.skipToContent')}
+        </a>
         <div className="app-nav-fixed">
           <button type="button" className="app-header__nav-button" onClick={() => setMenuOpen(true)}>
             ☰ {t('menu.openLabel')}
           </button>
         </div>
-        <div className="app-main">
+        <div id="main-content" className="app-main">
           <ResetPasswordPage token={resetToken} onDone={clearResetToken} />
         </div>
         <footer className="app-footer" ref={footerRef}>
@@ -117,6 +120,9 @@ function App() {
 
   return (
     <div className="app-shell">
+      <a href="#main-content" className="skip-link">
+        {t('a11y.skipToContent')}
+      </a>
       {signedIn ? (
         // Logo, brand, contextual subtitle, and session actions stay
         // pinned in one bar across every signed-in screen, rather than
@@ -183,7 +189,7 @@ function App() {
         </div>
       )}
 
-      <div className={signedIn ? 'app-main app-main--with-topbar' : 'app-main'}>
+      <div id="main-content" className={signedIn ? 'app-main app-main--with-topbar' : 'app-main'}>
         {status === 'loading' ? null : signedIn ? (
           view === 'admin' ? <AdminPage /> : view === 'audit' ? <AuditPage /> : <DashboardPage />
         ) : (

@@ -193,7 +193,20 @@
     "mfaResetComplete": "Bu hesap için çok faktörlü kimlik doğrulama sıfırlandı.",
     "org": {
       "membershipAssigned": "Üyelik atandı.",
-      "membershipRemoved": "Üyelik kaldırıldı."
+      "membershipRemoved": "Üyelik kaldırıldı.",
+      "createHeading": "KURUM OLUŞTUR",
+      "namePlaceholder": "Kurum adı",
+      "createSubmit": "OLUŞTUR",
+      "empty": "Henüz kurum yok.",
+      "units": "Birimler",
+      "noUnits": "Henüz birim yok.",
+      "unitNamePlaceholder": "Birim adı",
+      "addUnit": "Birim ekle",
+      "membershipHeading": "ÜYELİK ATA",
+      "membershipHint": "Bir kullanıcıyı kimliğiyle bir kuruma atayın.",
+      "userIdPlaceholder": "Kullanıcı kimliği",
+      "organizationIdPlaceholder": "Kurum kimliği",
+      "assignSubmit": "ATA"
     },
     "roleChanged": "Rol güncellendi. Hesabın yeniden oturum açması gerekecek.",
     "roleLabel": "Rol",
@@ -204,6 +217,23 @@
       "OPERATOR": "Operatör",
       "REVIEWER": "İnceleyici",
       "AUDITOR": "Denetçi"
+    },
+    "tabOrganizations": "KURUMLAR",
+    "tabSystem": "SİSTEM",
+    "system": {
+      "healthHeading": "SİSTEM SAĞLIĞI",
+      "status": "Durum",
+      "version": "Sürüm",
+      "biometricProvider": "Biyometrik sağlayıcı",
+      "biometricSearch": "Biyometrik arama",
+      "thresholdsHeading": "KALİBRE EDİLMİŞ EŞİKLER",
+      "thresholdsEmpty": "Henüz kalibre edilmiş eşik kaydı yok.",
+      "thresholdSummary": "eşik {{threshold}}, EER {{eer}}, {{pairCount}} çift",
+      "integrityHeading": "DENETİM KAYDI BÜTÜNLÜĞÜ",
+      "integrityHint": "Salt-eklenebilir denetim zincirinin bozulmadığını doğrulayın.",
+      "integrityCheckSubmit": "BÜTÜNLÜK KONTROLÜ ÇALIŞTIR",
+      "integrityIntact": "Denetim kaydı bütün ({{eventsChecked}} olay kontrol edildi).",
+      "integrityBroken": "Denetim kaydı bütünlük hatası: {{eventsChecked}} olay içinde {{breaks}} kopukluk bulundu."
     }
   },
   "search": {
@@ -274,5 +304,8 @@
       "next": "Sonraki",
       "pageOf": "Sayfa {{page}} / {{totalPages}}"
     }
+  },
+  "a11y": {
+    "skipToContent": "Ana içeriğe geç"
   }
 }

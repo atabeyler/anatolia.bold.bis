@@ -13,6 +13,7 @@ use serde_json::json;
 
 use crate::audit::{action, result as audit_result, AuditRecorder};
 use crate::auth::auth_user_from_headers;
+use crate::candidates::authorize_candidate_scope;
 use crate::db::{self, is_valid_relation_type, load_candidate_by_id, AppState, EntityRelationRow};
 use crate::error::{request_id, ApiError};
 use crate::permission;
@@ -29,29 +30,6 @@ fn relation_json(row: &EntityRelationRow) -> serde_json::Value {
     })
 }
 
-/// Checks that the caller may view `candidate`'s data, applying the same
-/// organization-scoping rule already established for searches
-/// (`permission::can_view_scoped_resource`) — a candidate with no owning
-/// organization stays visible to anyone who passes the role check, same
-/// as legacy/orgless searches.
-async fn authorize_view(
-    state: &AppState,
-    claims: &crate::auth::Claims,
-    candidate: &crate::db::CandidateRow,
-) -> bool {
-    if !permission::can_view_search(&claims.role) {
-        return false;
-    }
-    let actor_org_ids = db::user_organization_ids(&state.backend, &claims.id)
-        .await
-        .unwrap_or_default();
-    permission::can_view_scoped_resource(
-        &claims.role,
-        &actor_org_ids,
-        candidate.organization_id.as_deref(),
-    )
-}
-
 /// `GET /api/v1/candidates/{id}/entity-graph` — every non-revoked
 /// relation recorded for this candidate (see `db::entity_graph`'s module
 /// doc comment for how a relation gets there — automatic for evidence
@@ -65,10 +43,13 @@ pub async fn entity_graph_route(
     let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
     };
+    if !permission::can_view_search(&claims.role) {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
     let Ok(Some(candidate)) = load_candidate_by_id(&state.backend, &candidate_id).await else {
         return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response();
     };
-    if !authorize_view(&state, &claims, &candidate).await {
+    if !authorize_candidate_scope(&state, &claims, &candidate).await {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
     match db::list_relations_for_candidate(&state.backend, &candidate_id).await {
@@ -109,7 +90,7 @@ pub async fn add_entity_relation_route(
     let Ok(Some(candidate)) = load_candidate_by_id(&state.backend, &candidate_id).await else {
         return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response();
     };
-    if !authorize_view(&state, &claims, &candidate).await {
+    if !authorize_candidate_scope(&state, &claims, &candidate).await {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
 

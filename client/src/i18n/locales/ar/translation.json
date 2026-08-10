@@ -193,7 +193,20 @@
     "mfaResetComplete": "تمت إعادة تعيين المصادقة متعددة العوامل لهذا الحساب.",
     "org": {
       "membershipAssigned": "تم تعيين العضوية.",
-      "membershipRemoved": "تمت إزالة العضوية."
+      "membershipRemoved": "تمت إزالة العضوية.",
+      "createHeading": "إنشاء مؤسسة",
+      "namePlaceholder": "اسم المؤسسة",
+      "createSubmit": "إنشاء",
+      "empty": "لا توجد مؤسسات بعد.",
+      "units": "الوحدات",
+      "noUnits": "لا توجد وحدات بعد.",
+      "unitNamePlaceholder": "اسم الوحدة",
+      "addUnit": "إضافة وحدة",
+      "membershipHeading": "تعيين عضوية",
+      "membershipHint": "قم بتعيين مستخدم إلى مؤسسة باستخدام المعرف.",
+      "userIdPlaceholder": "معرف المستخدم",
+      "organizationIdPlaceholder": "معرف المؤسسة",
+      "assignSubmit": "تعيين"
     },
     "roleChanged": "تم تحديث الدور. سيحتاج الحساب إلى تسجيل الدخول مرة أخرى.",
     "roleLabel": "الدور",
@@ -204,6 +217,23 @@
       "OPERATOR": "مشغل",
       "REVIEWER": "مراجع",
       "AUDITOR": "مدقق"
+    },
+    "tabOrganizations": "المؤسسات",
+    "tabSystem": "النظام",
+    "system": {
+      "healthHeading": "صحة النظام",
+      "status": "الحالة",
+      "version": "الإصدار",
+      "biometricProvider": "مزود القياسات الحيوية",
+      "biometricSearch": "بحث القياسات الحيوية",
+      "thresholdsHeading": "العتبات المعايرة",
+      "thresholdsEmpty": "لا توجد عتبات معايرة مسجلة بعد.",
+      "thresholdSummary": "العتبة {{threshold}}، معدل الخطأ المتساوي {{eer}}، {{pairCount}} زوج",
+      "integrityHeading": "سلامة سجل التدقيق",
+      "integrityHint": "تحقق من أن سلسلة التدقيق للإلحاق فقط لم يتم التلاعب بها.",
+      "integrityCheckSubmit": "تشغيل فحص السلامة",
+      "integrityIntact": "سجل التدقيق سليم (تم فحص {{eventsChecked}} حدث).",
+      "integrityBroken": "فشل في سلامة سجل التدقيق: تم العثور على {{breaks}} انقطاع من بين {{eventsChecked}} حدث تم فحصه."
     }
   },
   "search": {
@@ -274,5 +304,8 @@
       "next": "التالي",
       "pageOf": "صفحة {{page}} من {{totalPages}}"
     }
+  },
+  "a11y": {
+    "skipToContent": "الانتقال إلى المحتوى الرئيسي"
   }
 }

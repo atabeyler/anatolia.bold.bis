@@ -56,7 +56,10 @@ export function DashboardPage() {
       evidenceClient
         .listEvidence(candidate.candidateId)
         .then((items) => {
-          setEvidenceCounts((counts) => ({ ...counts, [candidate.candidateId]: items.length }));
+          setEvidenceCounts((counts) => ({
+            ...counts,
+            [candidate.candidateId]: items.length,
+          }));
         })
         .catch(() => {
           // Leave the count absent for this candidate; the badge simply
@@ -90,7 +93,12 @@ export function DashboardPage() {
     setFormErrorKey(null);
     setSubmitting(true);
     try {
-      const result = await searchClient.createSearch(caseReference.trim(), purpose.trim(), image, getLastKnownLocation());
+      const result = await searchClient.createSearch(
+        caseReference.trim(),
+        purpose.trim(),
+        image,
+        getLastKnownLocation(),
+      );
       // The async pipeline (madde 18-19) can fail after acceptance (202),
       // not just at request time — surface it the same way a request-level
       // error would be, since the client only ever sees a single
@@ -150,6 +158,7 @@ export function DashboardPage() {
               <input
                 type="text"
                 placeholder={t('search.caseReference') ?? ''}
+                aria-label={t('search.caseReference') ?? ''}
                 value={caseReference}
                 onChange={(event) => setCaseReference(event.target.value)}
                 required
@@ -157,6 +166,7 @@ export function DashboardPage() {
               <input
                 type="text"
                 placeholder={t('search.purpose') ?? ''}
+                aria-label={t('search.purpose') ?? ''}
                 value={purpose}
                 onChange={(event) => setPurpose(event.target.value)}
                 required
@@ -203,7 +213,9 @@ export function DashboardPage() {
           <div className="admin-user-list">
             {activeCandidatesLoading && <p className="status-card__line">{t('search.candidatesLoading')}</p>}
             {activeCandidatesError && (
-              <p className="status-card__line status-card__line--offline">{t('search.candidatesLoadError')}</p>
+              <p className="status-card__line status-card__line--offline">
+                {t('search.candidatesLoadError')}
+              </p>
             )}
             {reviewErrorKey && (
               <p className="status-card__line status-card__line--offline">{t(reviewErrorKey)}</p>
@@ -223,16 +235,24 @@ export function DashboardPage() {
                         <span>{candidate.fullName}</span>
                         <span className="search-score">{(candidate.score * 100).toFixed(1)}%</span>
                         {candidate.status === 'confirmed' && (
-                          <span className="admin-badge admin-badge--admin">{t('search.status.confirmed')}</span>
+                          <span className="admin-badge admin-badge--admin">
+                            {t('search.status.confirmed')}
+                          </span>
                         )}
                         {candidate.status === 'rejected' && (
-                          <span className="admin-badge admin-badge--banned">{t('search.status.rejected')}</span>
+                          <span className="admin-badge admin-badge--banned">
+                            {t('search.status.rejected')}
+                          </span>
                         )}
                         {candidate.status === 'pending' && (
-                          <span className="admin-badge admin-badge--pending">{t('search.status.pending')}</span>
+                          <span className="admin-badge admin-badge--pending">
+                            {t('search.status.pending')}
+                          </span>
                         )}
                         {candidate.status === 'inconclusive' && (
-                          <span className="admin-badge admin-badge--pending">{t('search.status.inconclusive')}</span>
+                          <span className="admin-badge admin-badge--pending">
+                            {t('search.status.inconclusive')}
+                          </span>
                         )}
                         {candidate.status === 'needs_second_review' && (
                           <span className="admin-badge admin-badge--pending">
@@ -242,12 +262,16 @@ export function DashboardPage() {
                       </div>
                       {candidate.reviewedByName && (
                         <p className="admin-user-card__note">
-                          {t('search.reviewedBy', { name: candidate.reviewedByName })}
+                          {t('search.reviewedBy', {
+                            name: candidate.reviewedByName,
+                          })}
                         </p>
                       )}
                       {evidenceCounts[candidate.candidateId] !== undefined && (
                         <p className="admin-user-card__note">
-                          {t('search.evidenceCount', { count: evidenceCounts[candidate.candidateId] })}
+                          {t('search.evidenceCount', {
+                            count: evidenceCounts[candidate.candidateId],
+                          })}
                         </p>
                       )}
                     </div>
@@ -255,33 +279,33 @@ export function DashboardPage() {
                       (candidate.status === 'pending' ||
                         candidate.status === 'inconclusive' ||
                         candidate.status === 'needs_second_review') && (
-                      <div className="admin-user-card__actions">
-                        <button
-                          type="button"
-                          className="admin-icon-button admin-icon-button--approve"
-                          disabled={isBusy}
-                          onClick={() => runReview(candidate.candidateId, 'confirm')}
-                        >
-                          {t('search.confirmIdentity')}
-                        </button>
-                        <button
-                          type="button"
-                          className="admin-icon-button admin-icon-button--reject"
-                          disabled={isBusy}
-                          onClick={() => runReview(candidate.candidateId, 'reject')}
-                        >
-                          {t('search.rejectCandidate')}
-                        </button>
-                        <button
-                          type="button"
-                          className="admin-icon-button"
-                          disabled={isBusy}
-                          onClick={() => runReview(candidate.candidateId, 'inconclusive')}
-                        >
-                          {t('search.markInconclusive')}
-                        </button>
-                      </div>
-                    )}
+                        <div className="admin-user-card__actions">
+                          <button
+                            type="button"
+                            className="admin-icon-button admin-icon-button--approve"
+                            disabled={isBusy}
+                            onClick={() => runReview(candidate.candidateId, 'confirm')}
+                          >
+                            {t('search.confirmIdentity')}
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-icon-button admin-icon-button--reject"
+                            disabled={isBusy}
+                            onClick={() => runReview(candidate.candidateId, 'reject')}
+                          >
+                            {t('search.rejectCandidate')}
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-icon-button"
+                            disabled={isBusy}
+                            onClick={() => runReview(candidate.candidateId, 'inconclusive')}
+                          >
+                            {t('search.markInconclusive')}
+                          </button>
+                        </div>
+                      )}
                   </div>
                 </article>
               );
@@ -292,9 +316,15 @@ export function DashboardPage() {
 
       <section className="admin-user-list">
         <h2 className="admin-panel__heading">{t('search.pastSearches')}</h2>
-        {pastSearches === null && !pastSearchesError && <p className="status-card__line">{t('search.loading')}</p>}
-        {pastSearchesError && <p className="status-card__line status-card__line--offline">{t('search.loadError')}</p>}
-        {pastSearches !== null && pastSearches.length === 0 && <p className="status-card__line">{t('search.empty')}</p>}
+        {pastSearches === null && !pastSearchesError && (
+          <p className="status-card__line">{t('search.loading')}</p>
+        )}
+        {pastSearchesError && (
+          <p className="status-card__line status-card__line--offline">{t('search.loadError')}</p>
+        )}
+        {pastSearches !== null && pastSearches.length === 0 && (
+          <p className="status-card__line">{t('search.empty')}</p>
+        )}
         {pastSearches?.map((search) => (
           <article
             key={search.id}

@@ -33,6 +33,30 @@ use crate::permission;
 /// stop an operator from enrolling a real, distinct candidate.
 const DUPLICATE_TEMPLATE_SIMILARITY_THRESHOLD: f64 = 0.90;
 
+/// Checks that the caller may view data scoped to `candidate`, applying
+/// the same organization-scoping rule already established for searches
+/// (`permission::can_view_scoped_resource`): a candidate belonging to an
+/// organization is only visible to members of that organization (or
+/// `SYSTEM_ADMIN`); an orgless/legacy candidate stays visible to anyone
+/// who passes the role check. Shared by every route that reads
+/// candidate-scoped data — `candidates.rs`, `evidence.rs`,
+/// `entity_graph.rs` — so this check can never silently drift between
+/// them. See item 21 in `docs/HARDENING_CHECKLIST.md`.
+pub async fn authorize_candidate_scope(
+    state: &AppState,
+    claims: &crate::auth::Claims,
+    candidate: &crate::db::CandidateRow,
+) -> bool {
+    let actor_org_ids = crate::db::user_organization_ids(&state.backend, &claims.id)
+        .await
+        .unwrap_or_default();
+    permission::can_view_scoped_resource(
+        &claims.role,
+        &actor_org_ids,
+        candidate.organization_id.as_deref(),
+    )
+}
+
 fn template_json(row: &BiometricTemplateRow) -> serde_json::Value {
     json!({
         "id": row.id,
@@ -154,10 +178,13 @@ pub async fn upload_reference_photo_route(
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
 
-    match load_candidate_by_id(&state.backend, &candidate_id).await {
-        Ok(Some(_)) => {}
+    let candidate = match load_candidate_by_id(&state.backend, &candidate_id).await {
+        Ok(Some(candidate)) => candidate,
         Ok(None) => return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
         Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    };
+    if !authorize_candidate_scope(&state, &claims, &candidate).await {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
 
     let mut image_bytes: Option<Vec<u8>> = None;
@@ -278,6 +305,12 @@ pub async fn list_templates_route(
     if !permission::can_view_search(&claims.role) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
+    let Ok(Some(candidate)) = load_candidate_by_id(&state.backend, &candidate_id).await else {
+        return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response();
+    };
+    if !authorize_candidate_scope(&state, &claims, &candidate).await {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
     match list_templates_for_candidate(&state.backend, &candidate_id).await {
         Ok(rows) => Json(json!({
             "items": rows.iter().map(template_json).collect::<Vec<_>>(),
@@ -301,6 +334,12 @@ pub async fn revoke_template_route(
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
     };
     if !permission::can_manage_candidates(&claims.role) {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
+    let Ok(Some(candidate)) = load_candidate_by_id(&state.backend, &candidate_id).await else {
+        return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response();
+    };
+    if !authorize_candidate_scope(&state, &claims, &candidate).await {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
     match revoke_template(&state.backend, &template_id).await {
@@ -348,6 +387,12 @@ pub async fn possible_duplicates_route(
     if !permission::can_view_search(&claims.role) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
+    let Ok(Some(candidate)) = load_candidate_by_id(&state.backend, &candidate_id).await else {
+        return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response();
+    };
+    if !authorize_candidate_scope(&state, &claims, &candidate).await {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
     match find_possible_duplicates(
         &state.backend,
         &candidate_id,
@@ -362,6 +407,7 @@ pub async fn possible_duplicates_route(
                 "fullName": m.candidate.full_name,
                 "nameSimilarity": m.name_similarity,
                 "sharedEvidenceUrls": m.shared_evidence_urls,
+                "matchedSignals": m.matched_signals,
             })).collect::<Vec<_>>(),
         }))
         .into_response(),

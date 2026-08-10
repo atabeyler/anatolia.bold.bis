@@ -193,7 +193,20 @@
     "mfaResetComplete": "Многофакторная аутентификация для этой учётной записи сброшена.",
     "org": {
       "membershipAssigned": "Членство назначено.",
-      "membershipRemoved": "Членство удалено."
+      "membershipRemoved": "Членство удалено.",
+      "createHeading": "СОЗДАТЬ ОРГАНИЗАЦИЮ",
+      "namePlaceholder": "Название организации",
+      "createSubmit": "СОЗДАТЬ",
+      "empty": "Организаций пока нет.",
+      "units": "Подразделения",
+      "noUnits": "Подразделений пока нет.",
+      "unitNamePlaceholder": "Название подразделения",
+      "addUnit": "Добавить подразделение",
+      "membershipHeading": "НАЗНАЧИТЬ ЧЛЕНСТВО",
+      "membershipHint": "Назначьте пользователя в организацию по идентификатору.",
+      "userIdPlaceholder": "ID пользователя",
+      "organizationIdPlaceholder": "ID организации",
+      "assignSubmit": "НАЗНАЧИТЬ"
     },
     "roleChanged": "Роль обновлена. Учётной записи потребуется повторный вход.",
     "roleLabel": "Роль",
@@ -204,6 +217,23 @@
       "OPERATOR": "Оператор",
       "REVIEWER": "Рецензент",
       "AUDITOR": "Аудитор"
+    },
+    "tabOrganizations": "ОРГАНИЗАЦИИ",
+    "tabSystem": "СИСТЕМА",
+    "system": {
+      "healthHeading": "СОСТОЯНИЕ СИСТЕМЫ",
+      "status": "Статус",
+      "version": "Версия",
+      "biometricProvider": "Поставщик биометрии",
+      "biometricSearch": "Биометрический поиск",
+      "thresholdsHeading": "КАЛИБРОВАННЫЕ ПОРОГИ",
+      "thresholdsEmpty": "Калиброванных порогов пока не зарегистрировано.",
+      "thresholdSummary": "порог {{threshold}}, EER {{eer}}, {{pairCount}} пар",
+      "integrityHeading": "ЦЕЛОСТНОСТЬ ЖУРНАЛА АУДИТА",
+      "integrityHint": "Проверьте, что цепочка аудита с добавлением записей не была изменена.",
+      "integrityCheckSubmit": "ЗАПУСТИТЬ ПРОВЕРКУ ЦЕЛОСТНОСТИ",
+      "integrityIntact": "Журнал аудита не поврежден (проверено событий: {{eventsChecked}}).",
+      "integrityBroken": "Нарушение целостности журнала аудита: найдено {{breaks}} разрыв(ов) среди {{eventsChecked}} проверенных событий."
     }
   },
   "search": {
@@ -274,5 +304,8 @@
       "next": "Вперёд",
       "pageOf": "Страница {{page}} из {{totalPages}}"
     }
+  },
+  "a11y": {
+    "skipToContent": "Перейти к основному содержимому"
   }
 }

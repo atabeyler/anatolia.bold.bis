@@ -193,7 +193,20 @@
     "mfaResetComplete": "Die Multi-Faktor-Authentifizierung wurde für dieses Konto zurückgesetzt.",
     "org": {
       "membershipAssigned": "Mitgliedschaft zugewiesen.",
-      "membershipRemoved": "Mitgliedschaft entfernt."
+      "membershipRemoved": "Mitgliedschaft entfernt.",
+      "createHeading": "ORGANISATION ERSTELLEN",
+      "namePlaceholder": "Name der Organisation",
+      "createSubmit": "ERSTELLEN",
+      "empty": "Noch keine Organisationen.",
+      "units": "Einheiten",
+      "noUnits": "Noch keine Einheiten.",
+      "unitNamePlaceholder": "Name der Einheit",
+      "addUnit": "Einheit hinzufügen",
+      "membershipHeading": "MITGLIEDSCHAFT ZUWEISEN",
+      "membershipHint": "Weisen Sie einen Benutzer anhand seiner ID einer Organisation zu.",
+      "userIdPlaceholder": "Benutzer-ID",
+      "organizationIdPlaceholder": "Organisations-ID",
+      "assignSubmit": "ZUWEISEN"
     },
     "roleChanged": "Rolle aktualisiert. Das Konto muss sich erneut anmelden.",
     "roleLabel": "Rolle",
@@ -204,6 +217,23 @@
       "OPERATOR": "Operator",
       "REVIEWER": "Prüfer",
       "AUDITOR": "Auditor"
+    },
+    "tabOrganizations": "ORGANISATIONEN",
+    "tabSystem": "SYSTEM",
+    "system": {
+      "healthHeading": "SYSTEMSTATUS",
+      "status": "Status",
+      "version": "Version",
+      "biometricProvider": "Biometrischer Anbieter",
+      "biometricSearch": "Biometrische Suche",
+      "thresholdsHeading": "KALIBRIERTE SCHWELLENWERTE",
+      "thresholdsEmpty": "Noch keine kalibrierten Schwellenwerte erfasst.",
+      "thresholdSummary": "Schwelle {{threshold}}, EER {{eer}}, {{pairCount}} Paare",
+      "integrityHeading": "INTEGRITÄT DES PRÜFPROTOKOLLS",
+      "integrityHint": "Überprüfen Sie, ob die unveränderliche Audit-Kette nicht manipuliert wurde.",
+      "integrityCheckSubmit": "INTEGRITÄTSPRÜFUNG AUSFÜHREN",
+      "integrityIntact": "Prüfprotokoll intakt ({{eventsChecked}} Ereignisse geprüft).",
+      "integrityBroken": "Integritätsfehler im Prüfprotokoll: {{breaks}} Unterbrechung(en) unter {{eventsChecked}} geprüften Ereignissen gefunden."
     }
   },
   "search": {
@@ -274,5 +304,8 @@
       "next": "Weiter",
       "pageOf": "Seite {{page}} von {{totalPages}}"
     }
+  },
+  "a11y": {
+    "skipToContent": "Zum Hauptinhalt springen"
   }
 }

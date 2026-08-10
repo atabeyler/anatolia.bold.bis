@@ -66,6 +66,22 @@ pub(super) async fn migrate_pg(pool: &PgPool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS biometric_thresholds (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            model_name TEXT NOT NULL,
+            model_version TEXT NOT NULL,
+            threshold DOUBLE PRECISION NOT NULL,
+            equal_error_rate DOUBLE PRECISION NOT NULL,
+            pair_count BIGINT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (model_name, model_version)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
@@ -148,6 +164,22 @@ pub(super) async fn migrate_sqlite(pool: &SqlitePool) -> Result<(), sqlx::Error>
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_biometric_templates_model \
          ON biometric_templates (model_name, model_version)",
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS biometric_thresholds (
+            id TEXT PRIMARY KEY,
+            model_name TEXT NOT NULL,
+            model_version TEXT NOT NULL,
+            threshold REAL NOT NULL,
+            equal_error_rate REAL NOT NULL,
+            pair_count INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            UNIQUE (model_name, model_version)
+        )
+        "#,
     )
     .execute(pool)
     .await?;
@@ -453,6 +485,107 @@ async fn search_top_k_indexed(
             score,
         })
         .collect())
+}
+
+/// A calibrated FAR/FRR threshold for one model/version — see
+/// `server/src/bin/calibrate.rs --save-threshold` (item 3 in the
+/// hardening checklist). Advisory: nothing in this codebase currently
+/// *enforces* a stored threshold against search results (the biometric
+/// engine returns ranked candidates, never a match/no-match verdict, per
+/// CLAUDE.md's "candidates, not verdicts" principle) — this exists so a
+/// real calibration run's result is durably recorded and visible
+/// (`GET /api/v1/admin/biometric-thresholds`), for a human reviewer to
+/// use as a reference point, not to gate anything automatically.
+#[derive(Debug, Clone, FromRow, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BiometricThresholdRow {
+    pub id: String,
+    pub model_name: String,
+    pub model_version: String,
+    pub threshold: f64,
+    pub equal_error_rate: f64,
+    pub pair_count: i64,
+    pub created_at: String,
+}
+
+/// Records (or replaces, if one already exists for this exact
+/// model_name/model_version) the calibrated threshold from a real
+/// `calibrate --save-threshold` run.
+pub async fn save_calibrated_threshold(
+    backend: &DbBackend,
+    model_name: &str,
+    model_version: &str,
+    threshold: f64,
+    equal_error_rate: f64,
+    pair_count: i64,
+) -> Result<(), sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            sqlx::query(
+                "INSERT INTO biometric_thresholds \
+                 (model_name, model_version, threshold, equal_error_rate, pair_count) \
+                 VALUES ($1, $2, $3, $4, $5) \
+                 ON CONFLICT (model_name, model_version) DO UPDATE SET \
+                   threshold = EXCLUDED.threshold, \
+                   equal_error_rate = EXCLUDED.equal_error_rate, \
+                   pair_count = EXCLUDED.pair_count, \
+                   created_at = NOW()",
+            )
+            .bind(model_name)
+            .bind(model_version)
+            .bind(threshold)
+            .bind(equal_error_rate)
+            .bind(pair_count)
+            .execute(pool)
+            .await?;
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query(
+                "INSERT INTO biometric_thresholds \
+                 (id, model_name, model_version, threshold, equal_error_rate, pair_count) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6) \
+                 ON CONFLICT (model_name, model_version) DO UPDATE SET \
+                   threshold = excluded.threshold, \
+                   equal_error_rate = excluded.equal_error_rate, \
+                   pair_count = excluded.pair_count, \
+                   created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+            )
+            .bind(Uuid::new_v4().to_string())
+            .bind(model_name)
+            .bind(model_version)
+            .bind(threshold)
+            .bind(equal_error_rate)
+            .bind(pair_count)
+            .execute(pool)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+pub async fn list_calibrated_thresholds(
+    backend: &DbBackend,
+) -> Result<Vec<BiometricThresholdRow>, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            sqlx::query_as(
+                "SELECT id::text, model_name, model_version, threshold, equal_error_rate, \
+                        pair_count, created_at::text \
+                 FROM biometric_thresholds ORDER BY model_name, model_version",
+            )
+            .fetch_all(pool)
+            .await
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query_as(
+                "SELECT id, model_name, model_version, threshold, equal_error_rate, \
+                        pair_count, created_at \
+                 FROM biometric_thresholds ORDER BY model_name, model_version",
+            )
+            .fetch_all(pool)
+            .await
+        }
+    }
 }
 
 #[cfg(test)]

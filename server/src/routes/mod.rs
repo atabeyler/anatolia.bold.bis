@@ -43,6 +43,10 @@ pub fn router(state: AppState) -> Router {
         .route("/users/:id/mfa-reset", post(admin::mfa_reset_route))
         .route("/users/:id/role", post(admin::change_role_route))
         .route(
+            "/biometric-thresholds",
+            get(admin::list_biometric_thresholds),
+        )
+        .route(
             "/users/:id",
             delete(admin::delete_user_route).patch(admin::update_user_route),
         )

@@ -68,7 +68,12 @@ export function AuditPage() {
               <input
                 type="datetime-local"
                 value={draftFilters.dateFrom ?? ''}
-                onChange={(event) => setDraftFilters((f) => ({ ...f, dateFrom: event.target.value || undefined }))}
+                onChange={(event) =>
+                  setDraftFilters((f) => ({
+                    ...f,
+                    dateFrom: event.target.value || undefined,
+                  }))
+                }
               />
             </label>
             <label className="auth-field">
@@ -76,7 +81,12 @@ export function AuditPage() {
               <input
                 type="datetime-local"
                 value={draftFilters.dateTo ?? ''}
-                onChange={(event) => setDraftFilters((f) => ({ ...f, dateTo: event.target.value || undefined }))}
+                onChange={(event) =>
+                  setDraftFilters((f) => ({
+                    ...f,
+                    dateTo: event.target.value || undefined,
+                  }))
+                }
               />
             </label>
           </div>
@@ -84,28 +94,52 @@ export function AuditPage() {
             <input
               type="text"
               placeholder={t('audit.filters.action') ?? ''}
+              aria-label={t('audit.filters.action') ?? ''}
               value={draftFilters.action ?? ''}
-              onChange={(event) => setDraftFilters((f) => ({ ...f, action: event.target.value || undefined }))}
+              onChange={(event) =>
+                setDraftFilters((f) => ({
+                  ...f,
+                  action: event.target.value || undefined,
+                }))
+              }
             />
             <input
               type="text"
               placeholder={t('audit.filters.result') ?? ''}
+              aria-label={t('audit.filters.result') ?? ''}
               value={draftFilters.result ?? ''}
-              onChange={(event) => setDraftFilters((f) => ({ ...f, result: event.target.value || undefined }))}
+              onChange={(event) =>
+                setDraftFilters((f) => ({
+                  ...f,
+                  result: event.target.value || undefined,
+                }))
+              }
             />
           </div>
           <div className="admin-form-row">
             <input
               type="text"
               placeholder={t('audit.filters.caseReference') ?? ''}
+              aria-label={t('audit.filters.caseReference') ?? ''}
               value={draftFilters.caseReference ?? ''}
-              onChange={(event) => setDraftFilters((f) => ({ ...f, caseReference: event.target.value || undefined }))}
+              onChange={(event) =>
+                setDraftFilters((f) => ({
+                  ...f,
+                  caseReference: event.target.value || undefined,
+                }))
+              }
             />
             <input
               type="text"
               placeholder={t('audit.filters.resourceType') ?? ''}
+              aria-label={t('audit.filters.resourceType') ?? ''}
               value={draftFilters.resourceType ?? ''}
-              onChange={(event) => setDraftFilters((f) => ({ ...f, resourceType: event.target.value || undefined }))}
+              onChange={(event) =>
+                setDraftFilters((f) => ({
+                  ...f,
+                  resourceType: event.target.value || undefined,
+                }))
+              }
             />
           </div>
           <p className="admin-hint">{t('audit.filters.hint')}</p>
@@ -122,8 +156,12 @@ export function AuditPage() {
 
       <section className="admin-user-list">
         {status === 'loading' && <p className="status-card__line">{t('audit.loading')}</p>}
-        {status === 'error' && <p className="status-card__line status-card__line--offline">{t('audit.loadError')}</p>}
-        {status === 'idle' && events !== null && events.length === 0 && <p className="status-card__line">{t('audit.empty')}</p>}
+        {status === 'error' && (
+          <p className="status-card__line status-card__line--offline">{t('audit.loadError')}</p>
+        )}
+        {status === 'idle' && events !== null && events.length === 0 && (
+          <p className="status-card__line">{t('audit.empty')}</p>
+        )}
 
         {status === 'idle' &&
           events?.map((event) => {
@@ -151,8 +189,12 @@ export function AuditPage() {
                     <p className="admin-user-card__note">
                       {event.actorUserCode ?? t('audit.unknownActor')}
                       {event.actorRole ? ` (${event.actorRole})` : ''}
-                      {event.caseReference ? ` · ${t('audit.filters.caseReference')}: ${event.caseReference}` : ''}
-                      {event.resourceType ? ` · ${event.resourceType}${event.resourceId ? `#${event.resourceId.slice(0, 8)}` : ''}` : ''}
+                      {event.caseReference
+                        ? ` · ${t('audit.filters.caseReference')}: ${event.caseReference}`
+                        : ''}
+                      {event.resourceType
+                        ? ` · ${event.resourceType}${event.resourceId ? `#${event.resourceId.slice(0, 8)}` : ''}`
+                        : ''}
                     </p>
                   </div>
                   <div className="admin-user-card__actions">
@@ -189,7 +231,12 @@ export function AuditPage() {
 
       {status === 'idle' && total > 0 && (
         <nav className="admin-pagination">
-          <button type="button" className="admin-icon-button" disabled={page <= 1} onClick={() => load(appliedFilters, page - 1)}>
+          <button
+            type="button"
+            className="admin-icon-button"
+            disabled={page <= 1}
+            onClick={() => load(appliedFilters, page - 1)}
+          >
             {t('audit.pagination.previous')}
           </button>
           <span className="status-card__line">{t('audit.pagination.pageOf', { page, totalPages })}</span>

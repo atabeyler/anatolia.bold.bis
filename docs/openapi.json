@@ -751,6 +751,24 @@
         }
       }
     },
+    "/api/v1/admin/biometric-thresholds": {
+      "get": {
+        "summary": "List calibrated FAR/FRR thresholds saved by calibrate --save-threshold",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
     "/api/v1/admin/organizations/{organization_id}/units": {
       "get": {
         "summary": "List units within an organization",
