@@ -1,0 +1,21 @@
+# cargo-audit configuration (docs/HARDENING_CHECKLIST.md item 65).
+#
+# Every entry here must name a specific advisory and explain, in this
+# file, why it does not apply to this deployment. Do not add an entry to
+# silence a finding without first confirming (`cargo tree -e features`)
+# that the vulnerable code path is genuinely unreachable — this file is
+# an audit trail of accepted risk, not a way to make CI quiet.
+
+[advisories]
+ignore = [
+    # rsa 0.9.10 (RUSTSEC-2023-0071, "Marvin Attack" timing side-channel,
+    # no fixed version exists upstream): pulled in only via sqlx-mysql's
+    # MySQL native-password auth path. This project never enables sqlx's
+    # "mysql" feature (only "postgres" and "sqlite" — see server/Cargo.toml)
+    # and `cargo tree -e features -p sqlx` confirms sqlx-mysql/rsa are not
+    # part of the actually-compiled dependency graph; their presence in
+    # Cargo.lock is a residual entry from sqlx's own manifest, not code
+    # that ships in this binary. Re-check this reasoning if the "mysql"
+    # feature is ever enabled.
+    "RUSTSEC-2023-0071",
+]
