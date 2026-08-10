@@ -2,17 +2,20 @@
 
 ## Target: Render
 
-The app deploys to Render as a **single service** — one native Rust
-binary, one URL. The Rust process serves the API under `/api/*` and the
-built frontend for everything else (with an SPA fallback to
-`index.html`), so there is no separate frontend resource and no "api"/
-"web" in the URL.
+The app deploys to Render as a **single service** — one Rust binary, one
+URL. The Rust process serves the API under `/api/*` and the built
+frontend for everything else (with an SPA fallback to `index.html`), so
+there is no separate frontend resource and no "api"/"web" in the URL.
 
-- **Build**: builds the frontend (`client/`) first, then the backend
-  (`cargo build --release` in `server/`) — see `buildCommand` in
-  `render.yaml`.
-- **Start**: the resulting `anatolia-bis-server` binary, run from the
-  repository root so it finds the built frontend at `STATIC_DIR`
+- **Build**: a Docker build (`runtime: docker` in `render.yaml`, root
+  `Dockerfile`) that builds the frontend (`client/`), then the backend
+  with the real `onnx-provider` Cargo feature enabled
+  (`ONNX_PROVIDER=true`, forwarded by Render as a Docker build arg — see
+  `docs/ENVIRONMENT.md`'s "Backend build-time Cargo features"). Not the
+  native Rust buildpack: that build image's glibc is too old to link the
+  ONNX Runtime the real biometric provider needs.
+- **Start**: the resulting `anatolia-bis-server` binary (the Docker
+  image's entrypoint), which finds the built frontend at `STATIC_DIR`
   (`client/dist`).
 - **Health check**: `GET /api/health`. Its `version` field is the exact
   commit SHA of the running build (embedded at compile time by
@@ -31,6 +34,16 @@ built frontend for everything else (with an SPA fallback to
   `render.yaml` opts in explicitly for the free-plan service it deploys.
   No-op outside Render regardless (the env var is unset locally), and
   unnecessary once on a paid plan.
+- **Model download on every restart**: the free plan gives this service
+  no persistent disk, so `MODEL_CACHE_DIR` (the YuNet/SFace model files,
+  see `docs/ENVIRONMENT.md`) is wiped on every restart/redeploy along
+  with the rest of the filesystem — `BIOMETRIC_PROVIDER=onnx` re-downloads
+  and re-verifies both models from `media.githubusercontent.com` at every
+  cold start, adding to the cold-start latency above and depending on
+  that host being reachable from Render's network. A paid plan with a
+  persistent disk mounted at `MODEL_CACHE_DIR` would remove this, but
+  that's a cost/infrastructure decision for whoever manages the Render
+  account, not something this repository enables by default.
 
 `render.yaml` at the repository root is a Render Blueprint defining one
 service, `anatolia-bis`. There is deliberately no `databases:` block:

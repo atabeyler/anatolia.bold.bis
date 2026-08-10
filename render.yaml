@@ -12,16 +12,28 @@ services:
   # resource, so the deployed URL never has "api" or "web" in it.
   - type: web
     name: anatolia-bis
-    env: rust
+    # Docker, not the native Rust buildpack: the real ONNX biometric
+    # provider (`onnx-provider` Cargo feature) statically links a
+    # prebuilt `libonnxruntime.a` that requires glibc >= 2.38, which the
+    # native buildpack's build image does not have — see the root
+    # `Dockerfile`'s comments and docs/ENVIRONMENT.md. `runtime` is the
+    # current field name (replaces the deprecated `env` field).
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     plan: free
     branch: main
     autoDeployTrigger: commit
-    # Builds the frontend first (its output is embedded into the service
-    # at STATIC_DIR below), then the backend binary.
-    buildCommand: cd client && npm install && npm run build && cd ../server && cargo build --release
-    startCommand: ./server/target/release/anatolia-bis-server
     healthCheckPath: /api/health
     envVars:
+      # Render passes every service env var to the Docker build as a
+      # `--build-arg` of the same name, which the `Dockerfile`'s
+      # `ARG ONNX_PROVIDER=false` (in its `server-builder` stage) picks
+      # up. This is also visible to the running container as a plain
+      # runtime env var, which is harmless — nothing in the server reads
+      # `ONNX_PROVIDER` at runtime, only `BIOMETRIC_PROVIDER` below does.
+      - key: ONNX_PROVIDER
+        value: "true"
       # Set in the Render dashboard: the existing Postgres instance's
       # "Internal Database URL" (from that database's own Render page).
       - key: DATABASE_URL
@@ -52,34 +64,20 @@ services:
       # this key makes every existing encrypted national ID undecryptable.
       - key: NATIONAL_ID_ENCRYPTION_KEY
         sync: false
-      # A real, server-side face provider exists (BIOMETRIC_PROVIDER=onnx)
-      # but this deployment does not run it —
-      # this native Rust buildpack service builds without the
-      # onnx-provider Cargo feature (see server/Cargo.toml), and switching
-      # BIOMETRIC_PROVIDER here alone would just panic at startup rather
-      # than silently do anything, per config.rs's hard-panic guard.
-      # Enabling the real provider on Render requires moving this service
-      # to a Docker-based deploy on a new-enough glibc image first (see
-      # docs/ENVIRONMENT.md and the Dockerfile's onnx-provider build arg) —
-      # a deliberate, separately verified infrastructure change, not a
-      # one-line flip of this file. Until that happens, this service
-      # intentionally runs the mock provider in production, which requires
-      # this explicit acknowledgment (BIOMETRIC_PROVIDER defaults to
-      # "mock", and production refuses to start under it without
-      # ALLOW_MOCK_BIOMETRICS=true — see server/src/config.rs). Flip this
-      # entry to sync: false (unset) once the Docker migration lands and
-      # BIOMETRIC_PROVIDER=onnx is set instead, so a future accidental
-      # redeploy without either fails loudly instead of silently serving
-      # mock "matches".
+      # This service builds with the onnx-provider Cargo feature (see
+      # ONNX_PROVIDER above) and runs the real, server-side YuNet/SFace
+      # biometric pipeline — see server/src/biometric/onnx_provider.rs
+      # and docs/SECURITY_ARCHITECTURE.md for exactly what it does and
+      # does not guarantee. Left unset deliberately: production refuses
+      # to start under the mock provider without this explicit override
+      # (see server/src/config.rs), and it is not needed once
+      # BIOMETRIC_PROVIDER=onnx below is set — an unset value here means
+      # a future accidental revert of BIOMETRIC_PROVIDER fails loudly at
+      # startup instead of silently serving mock "matches" again.
       - key: ALLOW_MOCK_BIOMETRICS
-        value: "true"
-      # Left unset deliberately: BIOMETRIC_PROVIDER defaults to "mock" (see
-      # above). Set to "onnx" only after this service has migrated to the
-      # Docker-based deploy described above — setting it here first would
-      # be a hard startup panic (server/src/db/mod.rs), not a silent
-      # no-op, since this buildpack build never includes the ONNX runtime.
-      - key: BIOMETRIC_PROVIDER
         sync: false
+      - key: BIOMETRIC_PROVIDER
+        value: onnx
       # Set in the Render dashboard (not this blueprint) once, then used to
       # seed the first SYSTEM_ADMIN via POST /api/v1/admin/seed-admin.
       - key: ADMIN_SEED_TOKEN

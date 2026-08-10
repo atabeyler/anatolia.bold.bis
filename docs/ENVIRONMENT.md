@@ -8,27 +8,33 @@ file — only placeholders belong in the repository.
 `server/Cargo.toml` defines one opt-in feature: **`onnx-provider`**,
 which compiles in the real `BiometricProvider` implementation (YuNet
 detection + SFace embedding via ONNX Runtime — see `server/src/biometric/onnx_provider.rs`).
-It is **off by default** on Render's native Rust buildpack
-(`render.yaml`'s `env: rust`, `buildCommand`) — enabling it there fails
-to link. The root cause, confirmed empirically (not just inferred from
-the error message): `ort`'s "download-binaries" feature statically links
-a prebuilt `libonnxruntime.a` at build time, and that archive requires
-glibc **>= 2.38** (the ISO C23 additions, e.g. `__isoc23_strtoll`).
-Render's build image, like Debian "bookworm" (glibc 2.36), is too old;
-Debian "trixie" (glibc 2.40) links it cleanly. Once linked, the binary is
-fully self-contained — no runtime network dependency for ONNX Runtime
-itself (`ldd` shows no `onnxruntime` entry at all); only the YuNet/SFace
-*model* files are a runtime download, already documented below
-(`MODEL_CACHE_DIR`).
+It was off by default on Render's native Rust buildpack — enabling it
+there fails to link. The root cause, confirmed empirically (not just
+inferred from the error message): `ort`'s "download-binaries" feature
+statically links a prebuilt `libonnxruntime.a` at build time, and that
+archive requires glibc **>= 2.38** (the ISO C23 additions, e.g.
+`__isoc23_strtoll`). Render's buildpack build image, like Debian
+"bookworm" (glibc 2.36), is too old; Debian "trixie" (glibc 2.40) links
+it cleanly. Once linked, the binary is fully self-contained — no
+runtime network dependency for ONNX Runtime itself (`ldd` shows no
+`onnxruntime` entry at all); only the YuNet/SFace *model* files are a
+runtime download, already documented below (`MODEL_CACHE_DIR`).
 
-**To enable it on Render**: switch the service from `env: rust` to
-`env: docker` in `render.yaml` and build with
-`--build-arg ONNX_PROVIDER=true` — `Dockerfile` (repository root) already
-targets Debian trixie and supports this build arg. This has been
-verified locally (Docker build reaching and successfully compiling
-`ort-sys` against the trixie toolchain) but not yet verified as a live
-Render deployment — do that as a deliberate, watched change, not a
-default flip, given this project's history of Render build breakage from
+**Enabled on Render**: `render.yaml` now deploys `anatolia-bis` as a
+`runtime: docker` service (`dockerfilePath: ./Dockerfile`, repository
+root, already targeting Debian trixie) rather than the native buildpack,
+with `ONNX_PROVIDER=true` set as a service env var — Render forwards
+every service env var to the Docker build as a matching `--build-arg`,
+which the `Dockerfile`'s `server-builder` stage consumes. `BIOMETRIC_PROVIDER=onnx`
+is set accordingly, and `ALLOW_MOCK_BIOMETRICS` is left unset (see the
+row below). This has been verified locally — both `cargo build --release
+--features onnx-provider` linking cleanly on a glibc 2.39 host, and a
+real YuNet/SFace inference run end to end on a sample photo — but a live
+Render deployment of the Docker runtime switch still needs to be watched
+through its first real deploy (build time, cold-start latency now that
+the free plan's ephemeral filesystem means `MODEL_CACHE_DIR` is
+re-downloaded on every restart, and memory/CPU headroom on the free
+plan) given this project's history of Render build breakage from
 under-tested biometric-provider changes.
 
 To build locally on a host you've confirmed can link `ort` (this
