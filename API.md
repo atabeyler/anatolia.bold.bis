@@ -317,15 +317,14 @@ Request: `{ "code": "..." }`. Verifies the code against the pending
 credential (TOTP-computed or the emailed code, depending on method); on
 success activates MFA and returns
 `{ "recoveryCodes": ["...", ...] }` — 10 single-use codes, shown this one
-time only (only their hashes are stored), valid for either method.
-**`401 Unauthorized`** (`errors.invalidMfaCode`) on a wrong or expired
-code; **`409 Conflict`** (`errors.mfaEnrollmentNotStarted`) if `enroll`
-was never called, or (`errors.mfaAlreadyEnabled`) if this credential was
-already enabled by an earlier call — e.g. a retried submission after the
-first call actually succeeded but its response was lost; the emailed code
-is consumed by the enable step, so a naive retry would otherwise look
-identical to a wrong code. Callers seeing this should treat it as success
-and resume via a normal login instead of resubmitting the code.
+time only (only their hashes are stored), valid for either method. A
+retried submission that lands on a credential an earlier call already
+enabled (e.g. the first call succeeded but its response was lost) is also
+treated as success, returning `{ "recoveryCodes": [] }` rather than an
+error — the code was already consumed by that earlier call, so re-sending
+it must not look like a wrong code. **`401 Unauthorized`**
+(`errors.invalidMfaCode`) on a wrong or expired code; **`409 Conflict`**
+(`errors.mfaEnrollmentNotStarted`) if `enroll` was never called.
 
 #### `POST /api/v1/auth/mfa/disable`
 

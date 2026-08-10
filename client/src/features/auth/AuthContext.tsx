@@ -144,7 +144,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         mfaToken,
         code,
       );
-      setPendingRecoveryCodes(recoveryCodes ?? []);
+      // A retried confirmation (the credential was already enabled by an
+      // earlier call whose response was lost) comes back with an empty
+      // array rather than a fresh set of codes — nothing new to show, so
+      // the recovery-codes modal is skipped rather than popping up empty.
+      if (recoveryCodes && recoveryCodes.length > 0) {
+        setPendingRecoveryCodes(recoveryCodes);
+      }
       applySession(accessToken, sessionUser, rememberMe);
     },
     [applySession],

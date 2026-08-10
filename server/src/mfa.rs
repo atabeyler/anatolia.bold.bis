@@ -313,16 +313,27 @@ pub async fn send_login_challenge_email_code(state: &AppState, user: &UserRow) {
     }
 }
 
+/// Outcome of `confirm_enrollment` — distinguishes a fresh confirmation
+/// (which mints new recovery codes) from a retry that lands on a
+/// credential an earlier, successfully-processed call already enabled.
+/// The two need different responses: a fresh confirmation returns the
+/// recovery codes, while a retry has none to return (they were already
+/// shown, or lost with the earlier call's response) but must still let
+/// the caller proceed — see the callers of `confirm_enrollment` below.
+enum ConfirmOutcome {
+    Enabled(Vec<String>),
+    AlreadyEnabled,
+}
+
 /// Verifies `code` against the pending secret for `user_id`, and if it
 /// matches, enables the credential and issues a fresh set of recovery
-/// codes (replacing any from a prior enrollment). Returns the raw
-/// recovery codes — the only time they are ever visible after generation.
+/// codes (replacing any from a prior enrollment).
 async fn confirm_enrollment(
     state: &AppState,
     user_id: &str,
     account_name: &str,
     code: &str,
-) -> Result<Vec<String>, ApiError> {
+) -> Result<ConfirmOutcome, ApiError> {
     let Some(pending) = crate::db::find_mfa_credential(&state.backend, user_id)
         .await
         .ok()
@@ -342,14 +353,10 @@ async fn confirm_enrollment(
     // already consumed and cleared by the successful enable, so retrying
     // it would otherwise fall through to a generic "invalid code" that
     // looks like the code was wrong rather than "you already finished
-    // this." Reporting it plainly here instead tells the caller to resume
-    // via a normal login rather than re-submitting the same code.
+    // this." Callers treat this the same as a fresh success rather than
+    // an error, so a retried submission still lets the user in.
     if pending.enabled_at.is_some() {
-        return Err(ApiError::new(
-            "MFA_ALREADY_ENABLED",
-            "errors.mfaAlreadyEnabled",
-            String::new(),
-        ));
+        return Ok(ConfirmOutcome::AlreadyEnabled);
     }
     let enabled = if pending.method == METHOD_EMAIL {
         let code_hash = sha256_hex(code.trim());
@@ -387,7 +394,7 @@ async fn confirm_enrollment(
     crate::db::replace_recovery_codes(&state.backend, user_id, &hashes)
         .await
         .map_err(|_| ApiError::new("INTERNAL_ERROR", "errors.internal", String::new()))?;
-    Ok(raw_codes)
+    Ok(ConfirmOutcome::Enabled(raw_codes))
 }
 
 fn totp_code_matches(totp: &totp_rs::Totp, code: &str) -> bool {
@@ -550,7 +557,7 @@ pub async fn enroll_confirm(
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
     };
     match confirm_enrollment(&state, &claims.id, &claims.user_code, &payload.code).await {
-        Ok(recovery_codes) => {
+        Ok(ConfirmOutcome::Enabled(recovery_codes)) => {
             // MANDATORY — see AuditRecorder::save_mandatory.
             if let Err(mut err) =
                 AuditRecorder::new(action::MFA_ENABLED, audit_result::SUCCESS, rid.clone())
@@ -563,6 +570,13 @@ pub async fn enroll_confirm(
                 return err.into_response();
             }
             Json(serde_json::json!({ "recoveryCodes": recovery_codes })).into_response()
+        }
+        // Already enabled by an earlier, successfully-processed call —
+        // report the same success shape (no recovery codes to return,
+        // since they were already shown, or lost with that earlier
+        // response) rather than erroring on a retry.
+        Ok(ConfirmOutcome::AlreadyEnabled) => {
+            Json(serde_json::json!({ "recoveryCodes": Vec::<String>::new() })).into_response()
         }
         Err(mut err) => {
             err.request_id = rid;
@@ -805,24 +819,32 @@ pub async fn challenge_enroll_confirm(
     };
     let recovery_codes =
         match confirm_enrollment(&state, &user.id, &user.user_code, &payload.code).await {
-            Ok(codes) => codes,
+            Ok(ConfirmOutcome::Enabled(codes)) => {
+                // MANDATORY — see AuditRecorder::save_mandatory.
+                if let Err(mut err) =
+                    AuditRecorder::new(action::MFA_ENABLED, audit_result::SUCCESS, rid.clone())
+                        .actor_by_id(&user.id, &user.user_code, &user.role)
+                        .headers(&headers)
+                        .save_mandatory(&state)
+                        .await
+                {
+                    err.request_id = rid;
+                    return err.into_response();
+                }
+                Some(codes)
+            }
+            // Already enabled by an earlier, successfully-processed call (the
+            // audit record for that first success was already written then,
+            // or is best-effort lost — no separate write here). Proceed
+            // straight to completing the login this retry is actually trying
+            // to finish, instead of erroring on a code that's already spent.
+            Ok(ConfirmOutcome::AlreadyEnabled) => None,
             Err(mut err) => {
                 err.request_id = rid;
                 return err.into_response();
             }
         };
-    // MANDATORY — see AuditRecorder::save_mandatory.
-    if let Err(mut err) =
-        AuditRecorder::new(action::MFA_ENABLED, audit_result::SUCCESS, rid.clone())
-            .actor_by_id(&user.id, &user.user_code, &user.role)
-            .headers(&headers)
-            .save_mandatory(&state)
-            .await
-    {
-        err.request_id = rid;
-        return err.into_response();
-    }
-    complete_login(&state, &user, &headers, rid, Some(recovery_codes)).await
+    complete_login(&state, &user, &headers, rid, recovery_codes).await
 }
 
 /// `POST /api/v1/auth/mfa/challenge/verify` — completes login for an

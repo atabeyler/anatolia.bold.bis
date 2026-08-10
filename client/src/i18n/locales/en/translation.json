@@ -104,7 +104,6 @@
     "internal": "Something went wrong. Please try again.",
     "invalidMfaCode": "That code is invalid or has expired. Please try again.",
     "mfaEnrollmentNotStarted": "Start MFA enrollment before confirming a code.",
-    "mfaAlreadyEnabled": "Multi-factor authentication was already enabled by a previous attempt. Please sign in again.",
     "mfaNotEnabled": "Multi-factor authentication is not enabled on this account.",
     "auditWriteFailed": "The audit trail could not be written for this action; nothing was changed.",
     "sameReviewerForbidden": "This candidate already has a first review from you; a different reviewer must provide the final decision.",

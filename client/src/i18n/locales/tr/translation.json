@@ -104,7 +104,6 @@
     "internal": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
     "invalidMfaCode": "Bu kod geçersiz veya süresi dolmuş. Lütfen tekrar deneyin.",
     "mfaEnrollmentNotStarted": "Bir kodu onaylamadan önce MFA kaydına başlayın.",
-    "mfaAlreadyEnabled": "Çok faktörlü kimlik doğrulama önceki bir denemeyle zaten etkinleştirildi. Lütfen tekrar giriş yapın.",
     "mfaNotEnabled": "Bu hesapta çok faktörlü kimlik doğrulama etkin değil.",
     "auditWriteFailed": "Bu işlem için denetim kaydı yazılamadı; hiçbir şey değiştirilmedi.",
     "sameReviewerForbidden": "Bu aday zaten sizin tarafınızdan ilk kez incelendi; nihai kararı farklı bir inceleyici vermelidir.",

@@ -740,7 +740,7 @@ async fn email_mfa_resend_endpoints_issue_a_fresh_code() {
 /// consumed by the first call, so a naive retry would otherwise look
 /// exactly like a wrong code.
 #[tokio::test]
-async fn confirming_an_already_enabled_email_credential_reports_a_clear_conflict() {
+async fn confirming_an_already_enabled_email_credential_succeeds_instead_of_erroring() {
     let _guard = ENV_GUARD.lock().await;
     let state = AppState::for_tests().await;
     let app = routes::router(state.clone());
@@ -769,8 +769,10 @@ async fn confirming_an_already_enabled_email_credential_reports_a_clear_conflict
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 
-    // Retrying with the same (now-consumed) code reports a distinct
-    // conflict, not "invalid code".
+    // Retrying with the same (now-consumed) code — standing in for a
+    // client that resubmits after losing the first response — succeeds
+    // rather than reporting "invalid code", since the credential really
+    // is already enabled.
     let response = app
         .clone()
         .oneshot(auth_json_request(
@@ -781,7 +783,101 @@ async fn confirming_an_already_enabled_email_credential_reports_a_clear_conflict
         ))
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::CONFLICT);
-    let body = body_json(response).await;
-    assert_eq!(body["code"], "MFA_ALREADY_ENABLED");
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(body_json(response).await["recoveryCodes"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+}
+
+/// The mandatory, login-time equivalent of the above: a retried
+/// `challenge/enroll/confirm` after an earlier call already enabled the
+/// credential must still complete the login it was trying to finish, not
+/// dead-end on an error — this is what actually lets the user into the
+/// app after a lost first response.
+#[tokio::test]
+async fn retried_challenge_enroll_confirm_completes_the_login_it_was_finishing() {
+    let _guard = ENV_GUARD.lock().await;
+    let mut state = AppState::for_tests().await;
+    state.mfa_required_roles = std::sync::Arc::new(vec!["SYSTEM_ADMIN".to_string()]);
+    let app = routes::router(state.clone());
+
+    std::env::set_var("ADMIN_SEED_TOKEN", "mfa-retry-seed-token");
+    std::env::set_var("ADMIN_USER_CODE", "MFARETRYADMIN");
+    std::env::set_var("ADMIN_PASSWORD", "AdminPass1!");
+    std::env::set_var("ADMIN_EMAIL", "mfa-retry-admin@example.test");
+    app.clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/admin/seed-admin")
+                .header("x-seed-token", "mfa-retry-seed-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/login",
+            json!({ "userCode": "MFARETRYADMIN", "password": "AdminPass1!" }),
+        ))
+        .await
+        .unwrap();
+    let login = body_json(response).await;
+    let mfa_token = login["mfaToken"].as_str().unwrap().to_string();
+
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/mfa/challenge/enroll",
+            json!({ "mfaToken": mfa_token.clone(), "method": "email" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let user_id = db::load_user_by_code(&state.backend, "MFARETRYADMIN")
+        .await
+        .unwrap()
+        .unwrap()
+        .id;
+    seed_email_mfa_code(&state, &user_id, "654321").await;
+
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/mfa/challenge/enroll/confirm",
+            json!({ "mfaToken": mfa_token.clone(), "code": "654321" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let confirmed = body_json(response).await;
+    assert!(confirmed["accessToken"].as_str().is_some());
+    assert_eq!(confirmed["recoveryCodes"].as_array().unwrap().len(), 10);
+
+    // Retrying with the same (now-consumed) code — as if the first
+    // response above had been lost — must still complete the login.
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/mfa/challenge/enroll/confirm",
+            json!({ "mfaToken": mfa_token, "code": "654321" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let retried = body_json(response).await;
+    assert!(retried["accessToken"].as_str().is_some());
+    assert!(
+        retried.get("recoveryCodes").is_none()
+            || retried["recoveryCodes"].as_array().unwrap().is_empty()
+    );
 }
