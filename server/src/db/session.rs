@@ -44,8 +44,20 @@ pub struct SessionRow {
     pub created_by: Option<String>,
 }
 
-const SESSION_COLUMNS_PG: &str = "id::text, user_id::text, refresh_token_hash, token_family_id::text, created_at::text, \
-     expires_at::text, last_used_at::text, revoked_at::text, user_agent, ip_address, rotation_counter, created_by";
+// Every timestamptz column here is cast via `to_char(... AT TIME ZONE
+// 'UTC', ...)` rather than a bare `::text` — Postgres's default
+// `timestamptz::text` output ("2026-08-10 19:19:41.123456+00", a space
+// separator and a bare "+00" offset) is not valid RFC 3339, so a value
+// re-parsed from it in Rust (see `auth::refresh`'s `expires_at` check)
+// fails unconditionally, and that failure reads as an expired/invalid
+// session, not a decode error. See `db/audit.rs`'s module doc for the
+// same bug in the audit hash chain, fixed the same way.
+const SESSION_COLUMNS_PG: &str = "id::text, user_id::text, refresh_token_hash, token_family_id::text, \
+     to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS created_at, \
+     to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS expires_at, \
+     to_char(last_used_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS last_used_at, \
+     to_char(revoked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS revoked_at, \
+     user_agent, ip_address, rotation_counter, created_by";
 const SESSION_COLUMNS_SQLITE: &str =
     "id, user_id, refresh_token_hash, token_family_id, created_at, \
      expires_at, last_used_at, revoked_at, user_agent, ip_address, rotation_counter, created_by";
@@ -416,8 +428,13 @@ pub struct ApprovalTokenRow {
     pub result: Option<String>,
 }
 
-const APPROVAL_TOKEN_COLUMNS_PG: &str =
-    "id::text, user_id::text, token_hash, purpose, created_at::text, expires_at::text, consumed_at::text, result";
+// Same reasoning as `SESSION_COLUMNS_PG` above: `expires_at` here is
+// re-parsed in Rust (`auth::reset_password`'s expiry check), so it must
+// come back as valid RFC 3339, not Postgres's default `::text` format.
+const APPROVAL_TOKEN_COLUMNS_PG: &str = "id::text, user_id::text, token_hash, purpose, \
+     to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS created_at, \
+     to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS expires_at, \
+     to_char(consumed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS consumed_at, result";
 const APPROVAL_TOKEN_COLUMNS_SQLITE: &str =
     "id, user_id, token_hash, purpose, created_at, expires_at, consumed_at, result";
 

@@ -369,8 +369,14 @@ pub async fn load_registration_tracking_status(
     use sqlx::Row;
     match backend {
         DbBackend::Postgres(pool) => {
+            // `to_char(... AT TIME ZONE 'UTC', ...)` rather than a bare
+            // `::text` cast — `auth::registration_status` re-parses
+            // `expires_at` in Rust, and Postgres's default `::text`
+            // output isn't valid RFC 3339 (see `db/audit.rs`'s module doc
+            // for the same bug elsewhere, fixed the same way).
             let row = sqlx::query(
-                "SELECT is_approved, is_banned, registration_tracking_expires_at::text AS expires_at \
+                "SELECT is_approved, is_banned, \
+                 to_char(registration_tracking_expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS expires_at \
                  FROM users WHERE registration_tracking_token = $1",
             )
             .bind(token)
