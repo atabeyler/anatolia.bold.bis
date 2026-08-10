@@ -1136,7 +1136,13 @@ pub struct SearchRow {
     pub status: String,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
-    pub top_k: Option<i64>,
+    // Matches the Postgres column's actual width (`INTEGER`, 32-bit) —
+    // same class of bug as `SessionRow::rotation_counter` (see
+    // `db/session.rs`): sqlx's Postgres decoder rejects a struct field
+    // wider than the column it reads from, which SQLite's untyped
+    // storage silently tolerates. This broke both creating a search and
+    // listing past ones on Postgres.
+    pub top_k: Option<i32>,
     pub started_at: Option<String>,
     pub completed_at: Option<String>,
     pub failure_code: Option<String>,
