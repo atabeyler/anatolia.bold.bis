@@ -16,7 +16,8 @@ authorized institutional use.
 Authentication and access control are built on JWT auth
 (register/login/refresh/logout/logout-all) backed by real server-side
 sessions with refresh-token rotation and reuse detection, bcrypt password
-hashing, TOTP multi-factor authentication, self-service session/device
+hashing, multi-factor authentication (TOTP or an emailed one-time code),
+self-service session/device
 management, RBAC (`SYSTEM_ADMIN`, `SECURITY_ADMIN`, `OPERATOR`,
 `REVIEWER`, `AUDITOR`), an organization/unit model with object-level
 authorization, and an admin-approval workflow for new registrations — see

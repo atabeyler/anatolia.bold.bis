@@ -565,27 +565,36 @@ what these controls defend against.
   already were, closing the one previously-deliberate exception noted
   under "Not yet implemented" below.
 
-- **Multi-factor authentication (TOTP)**: `server/src/mfa.rs`. RFC
-  6238-compliant TOTP, gated for `SYSTEM_ADMIN`/`SECURITY_ADMIN`/`REVIEWER`
-  by default (`MFA_REQUIRED_ROLES`), voluntary for every other role. An
-  account with MFA enabled never receives an access/refresh token pair
-  from `POST /api/v1/auth/login` directly — login instead returns a
-  short-lived, single-purpose challenge token (signed with its own
-  `MFA_TOKEN_SECRET`, distinct from the JWT/refresh/approval secrets) that
-  by itself grants no access. A required role with no enrollment yet
-  cannot obtain a session at all until enrollment is completed through
-  that same challenge-token flow — this is enforced server-side (no code
-  path skips it), not a frontend-only redirect. Recovery codes are
-  high-entropy, single-use, and stored hashed (never their raw value); the
-  TOTP secret itself is stored as-is (verification needs to recompute a
-  code from it) but is never returned by any route after enrollment is
-  confirmed, logged, or placed in an audit event. `MFA_ENABLED`,
-  `MFA_DISABLED`, `MFA_CHALLENGE_FAILED`, `MFA_RECOVERY_CODE_USED`, and
-  `MFA_RESET_BY_ADMIN` are recorded in the audit trail. An administrator
-  can reset (remove) a target account's MFA credential
-  (`POST /api/v1/admin/users/{id}/mfa-reset`) — the recovery path when a
-  MFA-required account loses its device, since it cannot self-recover
-  without first logging in.
+- **Multi-factor authentication**: `server/src/mfa.rs`, gated for
+  `SYSTEM_ADMIN`/`SECURITY_ADMIN`/`REVIEWER` by default
+  (`MFA_REQUIRED_ROLES`), voluntary for every other role. Two interchangeable
+  methods, chosen at enrollment time and stored on the credential row: RFC
+  6238-compliant TOTP (authenticator app), or a 6-digit code emailed to the
+  account's address on file (`server/src/email.rs`), valid for 10 minutes
+  and single-use — for accounts that would rather not install an app. The
+  email method requires an email on file; there is no separate storage
+  path or privilege distinction between the two beyond that. An account
+  with MFA enabled never receives an access/refresh token pair from `POST
+  /api/v1/auth/login` directly — login instead returns a short-lived,
+  single-purpose challenge token (signed with its own `MFA_TOKEN_SECRET`,
+  distinct from the JWT/refresh/approval secrets) that by itself grants no
+  access; for the email method, `login` also auto-sends a fresh code as
+  part of the same call, with a rate-limited resend endpoint if it never
+  arrives. A required role with no enrollment yet cannot obtain a session
+  at all until enrollment is completed through that same challenge-token
+  flow — this is enforced server-side (no code path skips it), not a
+  frontend-only redirect. Recovery codes are high-entropy, single-use, and
+  stored hashed (never their raw value) regardless of method; the TOTP
+  secret is stored as-is (verification needs to recompute a code from it),
+  while an emailed code's hash is overwritten (never accumulated) on every
+  send and cleared once consumed — neither is ever returned by any route
+  after enrollment is confirmed, logged, or placed in an audit event.
+  `MFA_ENABLED`, `MFA_DISABLED`, `MFA_CHALLENGE_FAILED`,
+  `MFA_RECOVERY_CODE_USED`, and `MFA_RESET_BY_ADMIN` are recorded in the
+  audit trail. An administrator can reset (remove) a target account's MFA
+  credential (`POST /api/v1/admin/users/{id}/mfa-reset`) — the recovery
+  path when an MFA-required account loses its device or email access,
+  since it cannot self-recover without first logging in.
 - **Organization/unit model and object-level authorization**
   (`db/org.rs`, `permission::can_view_scoped_resource`): `organizations`,
   `organization_units` (self-referencing `parent_unit_id`, arbitrary

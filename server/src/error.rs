@@ -70,6 +70,7 @@ impl ApiError {
             "RATE_LIMITED" => StatusCode::TOO_MANY_REQUESTS,
             "INVALID_MFA_CODE" => StatusCode::UNAUTHORIZED,
             "MFA_ENROLLMENT_NOT_STARTED" | "MFA_NOT_ENABLED" => StatusCode::CONFLICT,
+            "MFA_EMAIL_NOT_AVAILABLE" => StatusCode::BAD_REQUEST,
             "SAME_REVIEWER_FORBIDDEN" => StatusCode::CONFLICT,
             // Real biometric-pipeline rejections (biometric/mod.rs's
             // `BiometricError`) — the probe image itself is unusable, not

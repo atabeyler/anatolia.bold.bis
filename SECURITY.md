@@ -237,9 +237,11 @@ Implemented controls:
 - **OpenAPI drift guard**: `docs/openapi.json` plus
   `server/tests/openapi_drift.rs`, which fails if a documented route stops
   matching a real one.
-- **TOTP multi-factor authentication**: `server/src/mfa.rs`, mandatory by
+- **Multi-factor authentication**: `server/src/mfa.rs`, mandatory by
   default for `SYSTEM_ADMIN`/`SECURITY_ADMIN`/`REVIEWER`
-  (`MFA_REQUIRED_ROLES`), voluntary for other roles. Fail-closed: no
+  (`MFA_REQUIRED_ROLES`), voluntary for other roles. Two methods: TOTP
+  (RFC 6238, authenticator app) or a 10-minute emailed one-time code, for
+  accounts that would rather not install an app. Fail-closed: no
   access/refresh token pair is ever issued to an MFA-gated account without
   MFA actually being satisfied first — see `docs/SECURITY_ARCHITECTURE.md`.
 - **Audit hash chaining and mandatory audit**: every audit event is

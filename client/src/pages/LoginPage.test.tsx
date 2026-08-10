@@ -57,6 +57,7 @@ describe('LoginPage', () => {
       mfaRequired: true,
       mfaToken: 'challenge-token',
       userCode: 'ADMIN1',
+      method: 'totp',
     });
     const verifySpy = vi.spyOn(authClient, 'mfaChallengeVerify').mockResolvedValue({
       accessToken: 'access-token',
@@ -91,5 +92,73 @@ describe('LoginPage', () => {
     });
 
     await waitFor(() => expect(verifySpy).toHaveBeenCalledWith('challenge-token', '123456'));
+  });
+
+  it('shows the MFA challenge step when login requires an emailed code, and offers a resend', async () => {
+    vi.spyOn(authClient, 'refresh').mockRejectedValue(new Error('no session'));
+    vi.spyOn(authClient, 'login').mockResolvedValue({
+      mfaRequired: true,
+      mfaToken: 'email-challenge-token',
+      userCode: 'ADMIN1',
+      method: 'email',
+    });
+    const requestCodeSpy = vi
+      .spyOn(authClient, 'mfaChallengeRequestCode')
+      .mockResolvedValue({ emailSentTo: 'ad***@example.test' });
+    await i18n.changeLanguage('en');
+    const { container } = renderLoginPage();
+
+    const userCodeInput = container.querySelector('input[maxlength="20"]') as HTMLInputElement;
+    const passwordInput = container.querySelector('input[type="password"]') as HTMLInputElement;
+    fireEvent.change(userCodeInput, { target: { value: 'ADMIN1' } });
+    fireEvent.change(passwordInput, { target: { value: 'AdminPass1!' } });
+    const form = container.querySelector('form.auth-panel') as HTMLFormElement;
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    await waitFor(() => expect(screen.getByText('Resend code')).toBeInTheDocument());
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Resend code'));
+    });
+
+    await waitFor(() => expect(requestCodeSpy).toHaveBeenCalledWith('email-challenge-token'));
+    await waitFor(() => expect(screen.getByText('A new code has been sent.')).toBeInTheDocument());
+  });
+
+  it('shows a method choice for mandatory enrollment, then starts email enrollment', async () => {
+    vi.spyOn(authClient, 'refresh').mockRejectedValue(new Error('no session'));
+    vi.spyOn(authClient, 'login').mockResolvedValue({
+      mfaEnrollmentRequired: true,
+      mfaToken: 'enroll-token',
+      userCode: 'ADMIN1',
+    });
+    const enrollSpy = vi.spyOn(authClient, 'mfaChallengeEnroll').mockResolvedValue({
+      method: 'email',
+      emailSentTo: 'ad***@example.test',
+    });
+    await i18n.changeLanguage('en');
+    const { container } = renderLoginPage();
+
+    const userCodeInput = container.querySelector('input[maxlength="20"]') as HTMLInputElement;
+    const passwordInput = container.querySelector('input[type="password"]') as HTMLInputElement;
+    fireEvent.change(userCodeInput, { target: { value: 'ADMIN1' } });
+    fireEvent.change(passwordInput, { target: { value: 'AdminPass1!' } });
+    const form = container.querySelector('form.auth-panel') as HTMLFormElement;
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    await waitFor(() => expect(screen.getByText('Send codes by email')).toBeInTheDocument());
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Send codes by email'));
+    });
+
+    await waitFor(() => expect(enrollSpy).toHaveBeenCalledWith('enroll-token', 'email'));
+    await waitFor(() =>
+      expect(screen.getByText('A verification code has been sent to ad***@example.test.')).toBeInTheDocument(),
+    );
   });
 });

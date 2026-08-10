@@ -66,6 +66,13 @@
       "manualEntryKey": "Clé de saisie manuelle",
       "codeLabel": "Code de vérification",
       "verifyCode": "Vérifier",
+      "methodChoiceIntro": "Votre rôle nécessite une authentification multifacteur. Choisissez comment recevoir vos codes de vérification.",
+      "chooseTotp": "Utiliser une application d'authentification",
+      "chooseEmail": "Envoyer les codes par e-mail",
+      "emailSent": "Un code de vérification a été envoyé à votre adresse e-mail.",
+      "emailSentTo": "Un code de vérification a été envoyé à {{email}}.",
+      "resendCode": "Renvoyer le code",
+      "codeResent": "Un nouveau code a été envoyé.",
       "recoveryCodesTitle": "Enregistrez vos codes de récupération",
       "recoveryCodesIntro": "Chaque code peut être utilisé une fois pour vous connecter si vous perdez l'accès à votre application d'authentification. Conservez-les en lieu sûr — ils ne seront plus affichés.",
       "recoveryCodesWarning": "Ces codes ne seront affichés qu'une seule fois.",
@@ -110,7 +117,8 @@
     "biometricProviderUnavailable": "Le fournisseur biométrique est actuellement indisponible.",
     "candidateReferenceCodeTaken": "Un candidat avec ce code de référence existe déjà.",
     "invalidRole": "Ce n'est pas un rôle valide.",
-    "roleUnchanged": "L'utilisateur a déjà ce rôle."
+    "roleUnchanged": "L'utilisateur a déjà ce rôle.",
+    "mfaEmailNotAvailable": "La vérification par e-mail n'est pas disponible pour ce compte — aucune adresse e-mail enregistrée."
   },
   "settings": {
     "openLabel": "Paramètres",

@@ -603,7 +603,7 @@
     },
     "/api/v1/auth/mfa/enroll": {
       "post": {
-        "summary": "Begin voluntary TOTP MFA enrollment for the caller",
+        "summary": "Begin voluntary MFA enrollment for the caller (TOTP or email)",
         "security": [
           {
             "bearerAuth": []
@@ -611,7 +611,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Pending TOTP secret + otpauth URL"
+            "description": "Pending credential: TOTP secret + otpauth URL, or a masked emailed-code destination"
           },
           "401": {
             "description": "Unauthorized"
@@ -619,9 +619,33 @@
         }
       }
     },
+    "/api/v1/auth/mfa/enroll/resend": {
+      "post": {
+        "summary": "Resend a fresh emailed code for a pending voluntary email-method enrollment",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fresh code sent; returns the masked destination address"
+          },
+          "400": {
+            "description": "Account has no email on file"
+          },
+          "409": {
+            "description": "No pending email-method enrollment"
+          },
+          "429": {
+            "description": "Too many resend attempts"
+          }
+        }
+      }
+    },
     "/api/v1/auth/mfa/enroll/confirm": {
       "post": {
-        "summary": "Confirm voluntary TOTP MFA enrollment with a code",
+        "summary": "Confirm voluntary MFA enrollment with a code",
         "security": [
           {
             "bearerAuth": []
@@ -660,13 +684,32 @@
     },
     "/api/v1/auth/mfa/challenge/enroll": {
       "post": {
-        "summary": "Begin mandatory login-time MFA enrollment (role requires MFA, none enrolled yet)",
+        "summary": "Begin mandatory login-time MFA enrollment (role requires MFA, none enrolled yet; TOTP or email)",
         "responses": {
           "200": {
-            "description": "Pending TOTP secret + otpauth URL"
+            "description": "Pending credential: TOTP secret + otpauth URL, or a masked emailed-code destination"
           },
           "401": {
             "description": "Invalid or expired MFA challenge token"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/challenge/enroll/resend": {
+      "post": {
+        "summary": "Resend a fresh emailed code during mandatory login-time email-method enrollment",
+        "responses": {
+          "200": {
+            "description": "Fresh code sent; returns the masked destination address"
+          },
+          "400": {
+            "description": "Account has no email on file"
+          },
+          "401": {
+            "description": "Invalid or expired MFA challenge token"
+          },
+          "429": {
+            "description": "Too many resend attempts"
           }
         }
       }
@@ -686,7 +729,7 @@
     },
     "/api/v1/auth/mfa/challenge/verify": {
       "post": {
-        "summary": "Complete login for an account with MFA already enabled",
+        "summary": "Complete login for an account with MFA already enabled (TOTP, emailed, or recovery code)",
         "responses": {
           "200": {
             "description": "Login completed; returns access token"
@@ -696,6 +739,25 @@
           },
           "429": {
             "description": "Too many attempts"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/mfa/challenge/request-code": {
+      "post": {
+        "summary": "Resend a fresh emailed code during login for an account enrolled with the email method",
+        "responses": {
+          "200": {
+            "description": "Fresh code sent; returns the masked destination address"
+          },
+          "400": {
+            "description": "Account's enrolled method is not email"
+          },
+          "401": {
+            "description": "Invalid or expired MFA challenge token"
+          },
+          "429": {
+            "description": "Too many resend attempts"
           }
         }
       }

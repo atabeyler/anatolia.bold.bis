@@ -1,4 +1,11 @@
-//! TOTP-based multi-factor authentication.
+//! Multi-factor authentication, with two interchangeable methods
+//! (`METHOD_TOTP`/`METHOD_EMAIL`) selected at enrollment time and stored
+//! on the credential row: RFC 6238 TOTP (authenticator app), or a 6-digit
+//! code emailed to the account's address on file via `crate::email`,
+//! valid for 10 minutes. The email method exists for accounts that would
+//! rather not install an authenticator app; it requires an email on file
+//! and otherwise behaves identically to TOTP from every caller's
+//! perspective (same enrollment/challenge/recovery-code flow).
 //!
 //! Two distinct flows share this module:
 //!
@@ -11,7 +18,7 @@
 //!   `login_mfa_outcome`). Instead it hands back a short-lived,
 //!   single-purpose JWT ("challenge token") that only ever authorizes
 //!   finishing that one login — it grants no access on its own, since
-//!   completing the flow still requires a valid TOTP/recovery code
+//!   completing the flow still requires a valid TOTP/emailed/recovery code
 //!   (`challenge_verify`) or, for first-time mandatory enrollment,
 //!   completing enrollment itself (`challenge_enroll`,
 //!   `challenge_enroll_confirm`). This is what makes MFA fail-closed for
@@ -20,11 +27,13 @@
 //!   MFA actually being satisfied first.
 //!
 //! The TOTP secret is stored as-is (not hashed — verification needs to
-//! recompute a code from it, not compare a fixed value) but is never
-//! returned by any route after enrollment is confirmed, never logged, and
-//! never placed in an audit event. Recovery codes are high-entropy bearer
-//! secrets and are hashed exactly like the session/approval/reset tokens
-//! elsewhere in this codebase.
+//! recompute a code from it, not compare a fixed value); an emailed
+//! code's hash is stored the same way recovery codes are (see below) and
+//! overwritten on every resend. Neither is ever returned by any route
+//! after enrollment is confirmed, never logged, and never placed in an
+//! audit event. Recovery codes are high-entropy bearer secrets and are
+//! hashed exactly like the session/approval/reset tokens elsewhere in
+//! this codebase.
 
 use axum::extract::State;
 use axum::http::HeaderMap;
@@ -46,6 +55,10 @@ use crate::error::{request_id, ApiError};
 const ISSUER: &str = "Anatolia B.I.S.";
 const CHALLENGE_TTL_MINUTES: i64 = 10;
 const RECOVERY_CODE_COUNT: usize = 10;
+const EMAIL_CODE_TTL_MINUTES: i64 = 10;
+
+pub const METHOD_TOTP: &str = "totp";
+pub const METHOD_EMAIL: &str = "email";
 
 pub const PURPOSE_LOGIN: &str = "mfa_login";
 pub const PURPOSE_ENROLLMENT: &str = "mfa_enrollment";
@@ -62,8 +75,12 @@ fn sha256_hex(value: &str) -> String {
 pub enum LoginMfaOutcome {
     NotRequired,
     /// MFA is already enabled on this account — the login must be
-    /// completed with `challenge_verify`.
-    ChallengeRequired,
+    /// completed with `challenge_verify`. Carries the enrolled method
+    /// (`METHOD_TOTP`/`METHOD_EMAIL`) so the caller knows whether to
+    /// auto-send an emailed code.
+    ChallengeRequired {
+        method: String,
+    },
     /// This account's role requires MFA (see `MFA_REQUIRED_ROLES`) but it
     /// has never been enrolled — the login must be completed with
     /// `challenge_enroll` + `challenge_enroll_confirm`.
@@ -71,13 +88,15 @@ pub enum LoginMfaOutcome {
 }
 
 pub async fn login_mfa_outcome(state: &AppState, user: &UserRow) -> LoginMfaOutcome {
-    let enabled = crate::db::find_mfa_credential(&state.backend, &user.id)
+    let credential = crate::db::find_mfa_credential(&state.backend, &user.id)
         .await
         .ok()
         .flatten()
-        .is_some_and(|row| row.enabled_at.is_some());
-    if enabled {
-        return LoginMfaOutcome::ChallengeRequired;
+        .filter(|row| row.enabled_at.is_some());
+    if let Some(credential) = credential {
+        return LoginMfaOutcome::ChallengeRequired {
+            method: credential.method,
+        };
     }
     if state
         .mfa_required_roles
@@ -148,6 +167,26 @@ fn build_totp(secret_b32: &str, account_name: &str) -> Option<totp_rs::Totp> {
         .ok()
 }
 
+/// A 6-digit numeric code — short enough to type from an email, long
+/// enough (1 in a million, plus the rate limiter on verification attempts)
+/// to resist guessing within its 10-minute lifetime.
+fn generate_email_code() -> String {
+    let mut buf = [0u8; 4];
+    rand::thread_rng().fill_bytes(&mut buf);
+    let value = u32::from_be_bytes(buf) % 1_000_000;
+    format!("{value:06}")
+}
+
+/// Formatted to match the `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` pattern
+/// SQLite uses elsewhere in this module, so the lexical `>` comparison in
+/// `db/mfa.rs`'s expiry checks stays valid on the SQLite backend; PostgreSQL
+/// parses it as ISO 8601 regardless via the `::timestamptz` cast.
+fn email_code_expiry() -> String {
+    (Utc::now() + ChronoDuration::minutes(EMAIL_CODE_TTL_MINUTES))
+        .format("%Y-%m-%dT%H:%M:%.3fZ")
+        .to_string()
+}
+
 fn generate_recovery_codes() -> Vec<String> {
     (0..RECOVERY_CODE_COUNT)
         .map(|_| {
@@ -159,10 +198,20 @@ fn generate_recovery_codes() -> Vec<String> {
         .collect()
 }
 
-/// Begins (or restarts) enrollment for `user_id`, storing the freshly
+fn mask_email(email: &str) -> String {
+    match email.split_once('@') {
+        Some((local, domain)) if !local.is_empty() => {
+            let visible: String = local.chars().take(2).collect();
+            format!("{visible}***@{domain}")
+        }
+        _ => "***".to_string(),
+    }
+}
+
+/// Begins (or restarts) TOTP enrollment for `user_id`, storing the freshly
 /// generated secret as pending (not yet usable to complete a login/gate a
 /// disable) until `confirm_enrollment` verifies a code against it.
-async fn begin_enrollment(
+async fn begin_totp_enrollment(
     state: &AppState,
     user_id: &str,
     account_name: &str,
@@ -175,9 +224,93 @@ async fn begin_enrollment(
         .ok_or_else(|| ApiError::new("INTERNAL_ERROR", "errors.internal", String::new()))?;
     let otpauth_url = totp.to_url().unwrap_or_default();
     Ok(serde_json::json!({
+        "method": METHOD_TOTP,
         "secret": secret,
         "otpauthUrl": otpauth_url,
     }))
+}
+
+/// Begins (or restarts) email-method enrollment for `user_id`: generates a
+/// fresh code, stores its hash as pending, and emails it. Requires the
+/// account to have an email on file — email MFA cannot be enrolled
+/// otherwise.
+async fn begin_email_enrollment(
+    state: &AppState,
+    user_id: &str,
+    email: &str,
+) -> Result<serde_json::Value, ApiError> {
+    let code = generate_email_code();
+    crate::db::upsert_pending_email_mfa_credential(
+        &state.backend,
+        user_id,
+        &sha256_hex(&code),
+        &email_code_expiry(),
+    )
+    .await
+    .map_err(|_| ApiError::new("INTERNAL_ERROR", "errors.internal", String::new()))?;
+    crate::email::send_mfa_code(email, &code).await;
+    Ok(serde_json::json!({
+        "method": METHOD_EMAIL,
+        "emailSentTo": mask_email(email),
+    }))
+}
+
+async fn begin_enrollment(
+    state: &AppState,
+    user_id: &str,
+    account_name: &str,
+    method: &str,
+    email: Option<&str>,
+) -> Result<serde_json::Value, ApiError> {
+    match method {
+        METHOD_EMAIL => {
+            let Some(email) = email else {
+                return Err(ApiError::new(
+                    "MFA_EMAIL_NOT_AVAILABLE",
+                    "errors.mfaEmailNotAvailable",
+                    String::new(),
+                ));
+            };
+            begin_email_enrollment(state, user_id, email).await
+        }
+        _ => begin_totp_enrollment(state, user_id, account_name).await,
+    }
+}
+
+/// Resends a fresh emailed code for a pending or already-enabled
+/// email-method credential — used both during voluntary enrollment and a
+/// login-time challenge, when the first code expired or never arrived.
+async fn resend_email_code(state: &AppState, user_id: &str, email: &str) -> Result<(), ApiError> {
+    let code = generate_email_code();
+    let updated = crate::db::update_email_mfa_code(
+        &state.backend,
+        user_id,
+        &sha256_hex(&code),
+        &email_code_expiry(),
+    )
+    .await
+    .map_err(|_| ApiError::new("INTERNAL_ERROR", "errors.internal", String::new()))?;
+    if !updated {
+        return Err(ApiError::new(
+            "MFA_ENROLLMENT_NOT_STARTED",
+            "errors.mfaEnrollmentNotStarted",
+            String::new(),
+        ));
+    }
+    crate::email::send_mfa_code(email, &code).await;
+    Ok(())
+}
+
+/// Auto-sends a fresh emailed code the moment `auth::login` determines the
+/// account uses the email MFA method — the account has nothing to type
+/// otherwise, unlike TOTP where the code source (the app) is already in
+/// the user's hand. Best-effort: a delivery failure here surfaces to the
+/// user as an empty inbox, at which point `challenge_request_code` lets
+/// them ask for a resend rather than failing the whole login attempt.
+pub async fn send_login_challenge_email_code(state: &AppState, user: &UserRow) {
+    if let Some(email) = user.email.as_deref() {
+        let _ = resend_email_code(state, &user.id, email).await;
+    }
 }
 
 /// Verifies `code` against the pending secret for `user_id`, and if it
@@ -201,27 +334,34 @@ async fn confirm_enrollment(
             String::new(),
         ));
     };
-    let Some(totp) = build_totp(&pending.secret, account_name) else {
-        return Err(ApiError::new(
-            "INTERNAL_ERROR",
-            "errors.internal",
-            String::new(),
-        ));
+    let enabled = if pending.method == METHOD_EMAIL {
+        let code_hash = sha256_hex(code.trim());
+        crate::db::enable_email_mfa_credential(&state.backend, user_id, &code_hash)
+            .await
+            .map_err(|_| ApiError::new("INTERNAL_ERROR", "errors.internal", String::new()))?
+    } else {
+        let Some(totp) = build_totp(&pending.secret, account_name) else {
+            return Err(ApiError::new(
+                "INTERNAL_ERROR",
+                "errors.internal",
+                String::new(),
+            ));
+        };
+        if !totp_code_matches(&totp, code) {
+            return Err(ApiError::new(
+                "INVALID_MFA_CODE",
+                "errors.invalidMfaCode",
+                String::new(),
+            ));
+        }
+        crate::db::enable_mfa_credential(&state.backend, user_id, &pending.secret)
+            .await
+            .map_err(|_| ApiError::new("INTERNAL_ERROR", "errors.internal", String::new()))?
     };
-    if !totp_code_matches(&totp, code) {
+    if !enabled {
         return Err(ApiError::new(
             "INVALID_MFA_CODE",
             "errors.invalidMfaCode",
-            String::new(),
-        ));
-    }
-    let enabled = crate::db::enable_mfa_credential(&state.backend, user_id, &pending.secret)
-        .await
-        .map_err(|_| ApiError::new("INTERNAL_ERROR", "errors.internal", String::new()))?;
-    if !enabled {
-        return Err(ApiError::new(
-            "MFA_ENROLLMENT_NOT_STARTED",
-            "errors.mfaEnrollmentNotStarted",
             String::new(),
         ));
     }
@@ -247,7 +387,7 @@ fn totp_code_matches(totp: &totp_rs::Totp, code: &str) -> bool {
 /// `MFA_RECOVERY_CODE_USED` by the caller (this function only reports
 /// which kind matched, so the caller can decide what to audit).
 enum VerifyOutcome {
-    Totp,
+    Primary,
     Recovery,
     Failed,
 }
@@ -270,10 +410,18 @@ async fn verify_code(
             String::new(),
         ));
     };
-    if let Some(totp) = build_totp(&credential.secret, account_name) {
+    if credential.method == METHOD_EMAIL {
+        let code_hash = sha256_hex(code.trim());
+        if crate::db::consume_email_mfa_code(&state.backend, user_id, &code_hash)
+            .await
+            .unwrap_or(false)
+        {
+            return Ok(VerifyOutcome::Primary);
+        }
+    } else if let Some(totp) = build_totp(&credential.secret, account_name) {
         if totp_code_matches(&totp, code) {
             let _ = crate::db::touch_mfa_last_used(&state.backend, user_id).await;
-            return Ok(VerifyOutcome::Totp);
+            return Ok(VerifyOutcome::Primary);
         }
     }
     let code_hash = sha256_hex(code.trim());
@@ -293,15 +441,80 @@ pub struct EnrollConfirmPayload {
     pub code: String,
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnrollPayload {
+    /// `"totp"` (default) or `"email"` — which method to (re)start
+    /// enrollment for.
+    #[serde(default)]
+    pub method: Option<String>,
+}
+
 /// `POST /api/v1/auth/mfa/enroll` — voluntary enrollment start for an
-/// already-authenticated user.
-pub async fn enroll(State(state): State<AppState>, headers: HeaderMap) -> Response {
+/// already-authenticated user. The body is optional (an empty body means
+/// `"totp"`, the original behavior before the email method existed).
+pub async fn enroll(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
     let rid = request_id(&headers);
     let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
     };
-    match begin_enrollment(&state, &claims.id, &claims.user_code).await {
+    let payload: EnrollPayload = if body.is_empty() {
+        EnrollPayload::default()
+    } else {
+        serde_json::from_slice(&body).unwrap_or_default()
+    };
+    let method = payload.method.as_deref().unwrap_or(METHOD_TOTP);
+    let Ok(Some(user)) = crate::db::load_user_by_id(&state.backend, &claims.id).await else {
+        return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
+    };
+    match begin_enrollment(
+        &state,
+        &claims.id,
+        &claims.user_code,
+        method,
+        user.email.as_deref(),
+    )
+    .await
+    {
         Ok(body) => Json(body).into_response(),
+        Err(mut err) => {
+            err.request_id = rid;
+            err.into_response()
+        }
+    }
+}
+
+/// `POST /api/v1/auth/mfa/enroll/resend` — resends a fresh emailed code for
+/// a pending email-method enrollment (voluntary flow).
+pub async fn enroll_resend(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let rid = request_id(&headers);
+    let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
+        return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
+    };
+    let Ok(Some(user)) = crate::db::load_user_by_id(&state.backend, &claims.id).await else {
+        return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
+    };
+    let Some(email) = user.email.as_deref() else {
+        return ApiError::new(
+            "MFA_EMAIL_NOT_AVAILABLE",
+            "errors.mfaEmailNotAvailable",
+            rid,
+        )
+        .into_response();
+    };
+    if !state.rate_limiter.check(
+        &format!("mfa-email-resend:{}", claims.id),
+        5,
+        Duration::from_secs(15 * 60),
+    ) {
+        return ApiError::new("RATE_LIMITED", "errors.rateLimited", rid).into_response();
+    }
+    match resend_email_code(&state, &claims.id, email).await {
+        Ok(()) => Json(serde_json::json!({ "emailSentTo": mask_email(email) })).into_response(),
         Err(mut err) => {
             err.request_id = rid;
             err.into_response()
@@ -422,9 +635,52 @@ async fn load_user_or_unauthorized(
     }
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChallengeEnrollPayload {
+    pub mfa_token: String,
+    /// `"totp"` (default) or `"email"`.
+    #[serde(default)]
+    pub method: Option<String>,
+}
+
 /// `POST /api/v1/auth/mfa/challenge/enroll` — begins mandatory,
 /// login-time enrollment for a role that requires MFA but has none yet.
 pub async fn challenge_enroll(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<ChallengeEnrollPayload>,
+) -> Response {
+    let rid = request_id(&headers);
+    let Some(user_id) = decode_challenge_token(&state, &payload.mfa_token, PURPOSE_ENROLLMENT)
+    else {
+        return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
+    };
+    let user = match load_user_or_unauthorized(&state, &user_id, &rid).await {
+        Ok(user) => user,
+        Err(resp) => return resp,
+    };
+    let method = payload.method.as_deref().unwrap_or(METHOD_TOTP);
+    match begin_enrollment(
+        &state,
+        &user.id,
+        &user.user_code,
+        method,
+        user.email.as_deref(),
+    )
+    .await
+    {
+        Ok(body) => Json(body).into_response(),
+        Err(mut err) => {
+            err.request_id = rid;
+            err.into_response()
+        }
+    }
+}
+
+/// `POST /api/v1/auth/mfa/challenge/enroll/resend` — resends a fresh
+/// emailed code during mandatory, login-time email-method enrollment.
+pub async fn challenge_enroll_resend(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(payload): Json<ChallengeTokenPayload>,
@@ -438,8 +694,74 @@ pub async fn challenge_enroll(
         Ok(user) => user,
         Err(resp) => return resp,
     };
-    match begin_enrollment(&state, &user.id, &user.user_code).await {
-        Ok(body) => Json(body).into_response(),
+    let Some(email) = user.email.as_deref() else {
+        return ApiError::new(
+            "MFA_EMAIL_NOT_AVAILABLE",
+            "errors.mfaEmailNotAvailable",
+            rid,
+        )
+        .into_response();
+    };
+    if !state.rate_limiter.check(
+        &format!("mfa-email-resend:{}", user.id),
+        5,
+        Duration::from_secs(15 * 60),
+    ) {
+        return ApiError::new("RATE_LIMITED", "errors.rateLimited", rid).into_response();
+    }
+    match resend_email_code(&state, &user.id, email).await {
+        Ok(()) => Json(serde_json::json!({ "emailSentTo": mask_email(email) })).into_response(),
+        Err(mut err) => {
+            err.request_id = rid;
+            err.into_response()
+        }
+    }
+}
+
+/// `POST /api/v1/auth/mfa/challenge/request-code` — resends a fresh emailed
+/// code during login for an account already enrolled with the email
+/// method. `challenge_verify` has no code to check yet at this point, so
+/// this must be called first for email-method accounts (the frontend does
+/// this automatically once it sees `method: "email"` on the login
+/// response).
+pub async fn challenge_request_code(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<ChallengeTokenPayload>,
+) -> Response {
+    let rid = request_id(&headers);
+    let Some(user_id) = decode_challenge_token(&state, &payload.mfa_token, PURPOSE_LOGIN) else {
+        return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
+    };
+    let user = match load_user_or_unauthorized(&state, &user_id, &rid).await {
+        Ok(user) => user,
+        Err(resp) => return resp,
+    };
+    let is_email_method = crate::db::find_mfa_credential(&state.backend, &user.id)
+        .await
+        .ok()
+        .flatten()
+        .is_some_and(|row| row.enabled_at.is_some() && row.method == METHOD_EMAIL);
+    if !is_email_method {
+        return ApiError::new("MFA_NOT_ENABLED", "errors.mfaNotEnabled", rid).into_response();
+    }
+    let Some(email) = user.email.as_deref() else {
+        return ApiError::new(
+            "MFA_EMAIL_NOT_AVAILABLE",
+            "errors.mfaEmailNotAvailable",
+            rid,
+        )
+        .into_response();
+    };
+    if !state.rate_limiter.check(
+        &format!("mfa-email-resend:{}", user.id),
+        5,
+        Duration::from_secs(15 * 60),
+    ) {
+        return ApiError::new("RATE_LIMITED", "errors.rateLimited", rid).into_response();
+    }
+    match resend_email_code(&state, &user.id, email).await {
+        Ok(()) => Json(serde_json::json!({ "emailSentTo": mask_email(email) })).into_response(),
         Err(mut err) => {
             err.request_id = rid;
             err.into_response()
@@ -538,7 +860,7 @@ pub async fn challenge_verify(
             .await;
             complete_login(&state, &user, &headers, rid, None).await
         }
-        Ok(VerifyOutcome::Totp) => complete_login(&state, &user, &headers, rid, None).await,
+        Ok(VerifyOutcome::Primary) => complete_login(&state, &user, &headers, rid, None).await,
     }
 }
 

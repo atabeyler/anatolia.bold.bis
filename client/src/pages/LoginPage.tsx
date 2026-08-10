@@ -8,6 +8,7 @@ import { brandMark } from '../lib/brand';
 import { playChimeIfEnabled } from '../lib/sound';
 import { apiErrorMessageKey } from '../services/apiClient';
 import * as authClient from '../services/authClient';
+import type { MfaMethod } from '../services/authClient';
 
 type Mode = 'login' | 'register' | 'forgot';
 
@@ -15,13 +16,22 @@ const USER_CODE_PATTERN = /^[A-Z0-9]{4,20}$/;
 const NATIONAL_ID_PATTERN = /^[0-9]{11}$/;
 
 type MfaStep =
-  | { kind: 'challenge'; mfaToken: string }
-  | { kind: 'enroll'; mfaToken: string; secret: string; otpauthUrl: string };
+  | { kind: 'methodChoice'; mfaToken: string }
+  | { kind: 'challenge'; mfaToken: string; method: MfaMethod; emailSentTo?: string }
+  | { kind: 'enroll'; mfaToken: string; method: MfaMethod; secret?: string; otpauthUrl?: string; emailSentTo?: string };
 
 export function LoginPage() {
   const { t, i18n } = useTranslation();
-  const { login, completeMfaChallenge, beginMfaEnrollmentChallenge, completeMfaEnrollmentChallenge, register, rememberedUserCode } =
-    useAuth();
+  const {
+    login,
+    completeMfaChallenge,
+    requestMfaChallengeCode,
+    beginMfaEnrollmentChallenge,
+    resendMfaEnrollmentChallengeCode,
+    completeMfaEnrollmentChallenge,
+    register,
+    rememberedUserCode,
+  } = useAuth();
   const geolocation = useGeolocation();
 
   const [mode, setMode] = useState<Mode>('login');
@@ -41,6 +51,7 @@ export function LoginPage() {
   const [forgotSuccess, setForgotSuccess] = useState(false);
   const [mfaStep, setMfaStep] = useState<MfaStep | null>(null);
   const [mfaCode, setMfaCode] = useState('');
+  const [mfaResendSent, setMfaResendSent] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -77,15 +88,9 @@ export function LoginPage() {
         if (step.type === 'signedIn') {
           playChimeIfEnabled();
         } else if (step.type === 'mfaChallenge') {
-          setMfaStep({ kind: 'challenge', mfaToken: step.mfaToken });
+          setMfaStep({ kind: 'challenge', mfaToken: step.mfaToken, method: step.method });
         } else {
-          const enrollment = await beginMfaEnrollmentChallenge(step.mfaToken);
-          setMfaStep({
-            kind: 'enroll',
-            mfaToken: step.mfaToken,
-            secret: enrollment.secret,
-            otpauthUrl: enrollment.otpauthUrl,
-          });
+          setMfaStep({ kind: 'methodChoice', mfaToken: step.mfaToken });
         }
       } else if (mode === 'register') {
         const code = userCode.trim().toUpperCase();
@@ -108,7 +113,7 @@ export function LoginPage() {
 
   async function handleMfaSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!mfaStep) {
+    if (!mfaStep || mfaStep.kind === 'methodChoice') {
       return;
     }
     setErrorKey(null);
@@ -129,6 +134,85 @@ export function LoginPage() {
     }
   }
 
+  async function handleMfaMethodChoice(mfaToken: string, method: MfaMethod) {
+    setErrorKey(null);
+    setSubmitting(true);
+    try {
+      const enrollment = await beginMfaEnrollmentChallenge(mfaToken, method);
+      setMfaStep({
+        kind: 'enroll',
+        mfaToken,
+        method,
+        secret: enrollment.secret,
+        otpauthUrl: enrollment.otpauthUrl,
+        emailSentTo: enrollment.emailSentTo,
+      });
+    } catch (err) {
+      setErrorKey(apiErrorMessageKey(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleMfaResend() {
+    if (!mfaStep || mfaStep.kind === 'methodChoice' || mfaStep.method !== 'email') {
+      return;
+    }
+    setErrorKey(null);
+    setMfaResendSent(false);
+    try {
+      const emailSentTo =
+        mfaStep.kind === 'challenge'
+          ? await requestMfaChallengeCode(mfaStep.mfaToken)
+          : await resendMfaEnrollmentChallengeCode(mfaStep.mfaToken);
+      setMfaStep({ ...mfaStep, emailSentTo });
+      setMfaResendSent(true);
+    } catch (err) {
+      setErrorKey(apiErrorMessageKey(err));
+    }
+  }
+
+  if (mfaStep?.kind === 'methodChoice') {
+    return (
+      <div className="auth-shell">
+        <Logo />
+        <div className="auth-brand">
+          <h1 className="auth-brand__title">{brandMark(i18n.resolvedLanguage)}</h1>
+        </div>
+        <div className="auth-panel">
+          <p className="auth-mfa-intro">{t('auth.mfa.methodChoiceIntro')}</p>
+          {errorKey && <p className="auth-message auth-message--error">{t(errorKey)}</p>}
+          <button
+            type="button"
+            className="auth-submit"
+            disabled={submitting}
+            onClick={() => handleMfaMethodChoice(mfaStep.mfaToken, 'totp')}
+          >
+            {t('auth.mfa.chooseTotp')}
+          </button>
+          <button
+            type="button"
+            className="auth-submit"
+            disabled={submitting}
+            onClick={() => handleMfaMethodChoice(mfaStep.mfaToken, 'email')}
+          >
+            {t('auth.mfa.chooseEmail')}
+          </button>
+          <button
+            type="button"
+            className="auth-link-button"
+            onClick={() => {
+              setMfaStep(null);
+              setErrorKey(null);
+            }}
+          >
+            {t('auth.backToLogin')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (mfaStep) {
     return (
       <div className="auth-shell">
@@ -140,13 +224,26 @@ export function LoginPage() {
           <p className="auth-mfa-intro">
             {mfaStep.kind === 'challenge' ? t('auth.mfa.challengeIntro') : t('auth.mfa.enrollIntro')}
           </p>
-          {mfaStep.kind === 'enroll' && (
+          {mfaStep.kind === 'enroll' && mfaStep.method === 'totp' && (
             <div className="auth-mfa-enroll">
               <label className="auth-field">
                 <span>{t('auth.mfa.manualEntryKey')}</span>
                 <input value={mfaStep.secret} readOnly onFocus={(e) => e.currentTarget.select()} />
               </label>
               <small className="auth-mfa-enroll__url">{mfaStep.otpauthUrl}</small>
+            </div>
+          )}
+          {mfaStep.method === 'email' && (
+            <div className="auth-mfa-enroll">
+              <p className="auth-mfa-enroll__url">
+                {mfaStep.emailSentTo
+                  ? t('auth.mfa.emailSentTo', { email: mfaStep.emailSentTo })
+                  : t('auth.mfa.emailSent')}
+              </p>
+              <button type="button" className="auth-link-button" onClick={handleMfaResend}>
+                {t('auth.mfa.resendCode')}
+              </button>
+              {mfaResendSent && <p className="auth-message auth-message--success">{t('auth.mfa.codeResent')}</p>}
             </div>
           )}
           <label className="auth-field">
@@ -169,6 +266,7 @@ export function LoginPage() {
             onClick={() => {
               setMfaStep(null);
               setMfaCode('');
+              setMfaResendSent(false);
               setErrorKey(null);
             }}
           >

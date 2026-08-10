@@ -140,8 +140,12 @@ If the account has MFA enabled, or its role is listed in
 `MFA_REQUIRED_ROLES` and has never enrolled, a correct password does
 **not** issue a session. Instead the response is **`200 OK`** with one of:
 
-- `{ "mfaRequired": true, "mfaToken": "...", "userCode": "..." }` — MFA is
-  already enabled; complete login with `POST /api/v1/auth/mfa/challenge/verify`.
+- `{ "mfaRequired": true, "mfaToken": "...", "userCode": "...", "method": "totp" | "email" }`
+  — MFA is already enabled; complete login with `POST
+  /api/v1/auth/mfa/challenge/verify`. If `method` is `"email"`, a fresh
+  code has already been emailed to the account by this same call — no
+  separate request is needed before verifying, though
+  `POST /api/v1/auth/mfa/challenge/request-code` can be used to resend one.
 - `{ "mfaEnrollmentRequired": true, "mfaToken": "...", "userCode": "..." }`
   — this role requires MFA but none is enrolled yet; complete enrollment
   with `POST /api/v1/auth/mfa/challenge/enroll` +
@@ -258,8 +262,19 @@ never be used to probe or revoke someone else's session.
 
 ### Multi-factor authentication (MFA)
 
-TOTP-based (RFC 6238), implemented in `server/src/mfa.rs`. Two independent
-flows:
+Implemented in `server/src/mfa.rs`, with two methods a user can enroll
+with:
+
+- **`totp`** — RFC 6238 authenticator-app codes (the original, and still
+  the default when `method` is omitted).
+- **`email`** — a 6-digit numeric code emailed to the account's address on
+  file (via `server/src/email.rs`), valid for 10 minutes; requires the
+  account to have an email set, since there is nowhere else to send it.
+  Chosen for accounts that would rather not install an authenticator app.
+
+Both methods share the same underlying credential row and the same
+recovery-code mechanism; a credential's method is fixed at enrollment
+time (re-enrolling can switch it). Two independent flows:
 
 - **Voluntary** — any authenticated user may enroll, confirm, or disable
   MFA on their own account.
@@ -267,42 +282,65 @@ flows:
   /api/v1/auth/login` (see above). These are short-lived (10 minutes),
   single-purpose JWTs signed with a dedicated `MFA_TOKEN_SECRET`; by
   themselves they grant no access — completing the flow still requires a
-  correct TOTP/recovery code (or, for first-time mandatory enrollment,
-  completing enrollment itself). No code path issues an access/refresh
-  token pair for an MFA-gated account without MFA actually being
-  satisfied — this is deliberately fail-closed, not a frontend-only
+  correct TOTP/emailed/recovery code (or, for first-time mandatory
+  enrollment, completing enrollment itself). No code path issues an
+  access/refresh token pair for an MFA-gated account without MFA actually
+  being satisfied — this is deliberately fail-closed, not a frontend-only
   redirect.
 
 #### `POST /api/v1/auth/mfa/enroll`
 
-Requires `Authorization: Bearer <accessToken>`. Generates a new TOTP
-secret, stores it as pending (not yet active), and returns
-`{ "secret": "...", "otpauthUrl": "otpauth://..." }` for a manual-entry
-key or QR code. Re-calling this replaces any not-yet-confirmed pending
-secret.
+Requires `Authorization: Bearer <accessToken>`. Request (body optional):
+`{ "method": "totp" | "email" }` — defaults to `"totp"` if omitted or the
+body is empty. For `"totp"`, generates a new secret, stores it as
+pending, and returns `{ "method": "totp", "secret": "...", "otpauthUrl":
+"otpauth://..." }` for a manual-entry key or QR code. For `"email"`,
+generates and emails a 6-digit code, stores its hash as pending, and
+returns `{ "method": "email", "emailSentTo": "ad***@example.com" }` (a
+masked address, not the raw code). **`400 Bad Request`**
+(`errors.mfaEmailNotAvailable`) for `"email"` if the account has no email
+on file. Re-calling this replaces any not-yet-confirmed pending
+credential, including switching method.
+
+#### `POST /api/v1/auth/mfa/enroll/resend`
+
+Requires `Authorization: Bearer <accessToken>`. Re-sends a fresh emailed
+code for a pending `"email"`-method enrollment, replacing the previous
+one. Rate-limited per account (5 / 15 min). **`400 Bad Request`**
+(`errors.mfaEmailNotAvailable`) if the account has no email; **`409
+Conflict`** (`errors.mfaEnrollmentNotStarted`) if there is no pending
+email-method enrollment.
 
 #### `POST /api/v1/auth/mfa/enroll/confirm`
 
 Request: `{ "code": "..." }`. Verifies the code against the pending
-secret; on success activates MFA and returns
+credential (TOTP-computed or the emailed code, depending on method); on
+success activates MFA and returns
 `{ "recoveryCodes": ["...", ...] }` — 10 single-use codes, shown this one
-time only (only their hashes are stored). **`401 Unauthorized`**
-(`errors.invalidMfaCode`) on a wrong code; **`409 Conflict`**
-(`errors.mfaEnrollmentNotStarted`) if `enroll` was never called.
+time only (only their hashes are stored), valid for either method.
+**`401 Unauthorized`** (`errors.invalidMfaCode`) on a wrong or expired
+code; **`409 Conflict`** (`errors.mfaEnrollmentNotStarted`) if `enroll`
+was never called.
 
 #### `POST /api/v1/auth/mfa/disable`
 
 Request: `{ "password": "...", "code": "..." }`. Requires both the
-account's current password and a valid TOTP/recovery code, so a stolen
-access token alone cannot turn MFA off. Deletes the credential and all
-recovery codes. If the account's role is in `MFA_REQUIRED_ROLES`, the next
-login will require re-enrollment.
+account's current password and a valid TOTP/emailed/recovery code, so a
+stolen access token alone cannot turn MFA off. Deletes the credential and
+all recovery codes. If the account's role is in `MFA_REQUIRED_ROLES`, the
+next login will require re-enrollment.
 
 #### `POST /api/v1/auth/mfa/challenge/enroll`
 
-Request: `{ "mfaToken": "..." }` (from a `mfaEnrollmentRequired` login
-response). Same as `enroll` above but authorized by the challenge token
-instead of a bearer token — used when a required role has no MFA yet.
+Request: `{ "mfaToken": "...", "method": "totp" | "email" }` (from a
+`mfaEnrollmentRequired` login response; `method` defaults to `"totp"`).
+Same as `enroll` above but authorized by the challenge token instead of a
+bearer token — used when a required role has no MFA yet.
+
+#### `POST /api/v1/auth/mfa/challenge/enroll/resend`
+
+Request: `{ "mfaToken": "..." }`. Same as `enroll/resend` above but for
+the mandatory, login-time enrollment flow.
 
 #### `POST /api/v1/auth/mfa/challenge/enroll/confirm`
 
@@ -314,12 +352,21 @@ plus the refresh cookie.
 #### `POST /api/v1/auth/mfa/challenge/verify`
 
 Request: `{ "mfaToken": "...", "code": "..." }` (from a `mfaRequired`
-login response). Verifies a TOTP or recovery code for an account that
-already has MFA enabled and, on success, completes login:
+login response). Verifies a TOTP/emailed or recovery code for an account
+that already has MFA enabled and, on success, completes login:
 `{ "accessToken": "...", "user": { ... } }`, plus the refresh cookie. Rate
 limited per account (8 / 15 min) independent of the login rate limits
 already applied when the password was checked. **`401 Unauthorized`**
 (`errors.invalidMfaCode`) on a wrong code.
+
+#### `POST /api/v1/auth/mfa/challenge/request-code`
+
+Request: `{ "mfaToken": "..." }`. Re-sends a fresh emailed code during
+login for an account already enrolled with the `"email"` method — `POST
+/api/v1/auth/login` already sends one automatically, so this exists only
+for a "didn't receive it" resend. Rate-limited per account (5 / 15 min).
+**`400 Bad Request`** (`errors.mfaNotEnabled`) if the account's enrolled
+method is not `"email"`.
 
 ### Administration
 

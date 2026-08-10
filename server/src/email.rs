@@ -163,6 +163,33 @@ pub async fn send_password_reset_request(
     .await;
 }
 
+/// Sends a one-time multi-factor login code — the email-method alternative
+/// to a TOTP authenticator app. Reuses the same silent-skip-if-unconfigured
+/// behavior as every other sender here.
+pub async fn send_mfa_code(email: &str, code: &str) {
+    let text = format!(
+        "Your Anatolia B.I.S. verification code is: {code}\n\nThis code expires in 10 minutes. \
+         If you did not request this code, you can ignore this email.\n\n\
+         Bold Askeri Teknoloji ve Savunma Sanayi A.Ş."
+    );
+    let html = format!(
+        r#"<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="background:#0b0e14;color:#e4e7ee;font-family:system-ui,sans-serif;padding:32px;max-width:480px;margin:0 auto">
+<h2 style="color:#3b82f6;font-size:14px;letter-spacing:.1em;margin-bottom:20px">ANATOLIA B.I.S. — VERIFICATION CODE</h2>
+<p style="font-size:32px;font-weight:bold;letter-spacing:.15em;margin:0 0 20px">{}</p>
+<p style="font-size:13px;color:#8b93a7">This code expires in 10 minutes. If you did not request it, you can ignore this email.</p>
+</body></html>"#,
+        escape_html(code),
+    );
+    deliver(
+        email,
+        "Anatolia B.I.S. — Your verification code",
+        &text,
+        Some(&html),
+    )
+    .await;
+}
+
 pub async fn send_rejection_email(first_name: &str, last_name: &str, email: &str) {
     let text = format!(
         "Dear {first_name} {last_name},\n\nYour registration request has been rejected. For questions, contact {}.\n\nBold Askeri Teknoloji ve Savunma Sanayi A.Ş.",

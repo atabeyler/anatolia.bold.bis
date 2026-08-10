@@ -21,14 +21,23 @@ pub fn router(state: AppState) -> Router {
             get(auth::registration_status),
         )
         .route("/mfa/enroll", post(mfa::enroll))
+        .route("/mfa/enroll/resend", post(mfa::enroll_resend))
         .route("/mfa/enroll/confirm", post(mfa::enroll_confirm))
         .route("/mfa/disable", post(mfa::disable))
         .route("/mfa/challenge/enroll", post(mfa::challenge_enroll))
         .route(
+            "/mfa/challenge/enroll/resend",
+            post(mfa::challenge_enroll_resend),
+        )
+        .route(
             "/mfa/challenge/enroll/confirm",
             post(mfa::challenge_enroll_confirm),
         )
-        .route("/mfa/challenge/verify", post(mfa::challenge_verify));
+        .route("/mfa/challenge/verify", post(mfa::challenge_verify))
+        .route(
+            "/mfa/challenge/request-code",
+            post(mfa::challenge_request_code),
+        );
 
     let admin_routes = Router::new()
         .route("/seed-admin", post(admin::seed_admin))

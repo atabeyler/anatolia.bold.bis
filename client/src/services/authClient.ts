@@ -15,10 +15,13 @@ interface LoginResponse {
   recoveryCodes?: string[];
 }
 
+export type MfaMethod = 'totp' | 'email';
+
 interface MfaChallengeResponse {
   mfaRequired: true;
   mfaToken: string;
   userCode: string;
+  method: MfaMethod;
 }
 
 interface MfaEnrollmentRequiredResponse {
@@ -37,9 +40,14 @@ export function isMfaEnrollmentRequired(outcome: LoginOutcome): outcome is MfaEn
   return 'mfaEnrollmentRequired' in outcome;
 }
 
+// TOTP enrollment carries `secret`/`otpauthUrl` (for the QR code); email
+// enrollment carries `emailSentTo` (a masked address) instead — the two
+// methods have nothing else in common to show the user.
 export interface MfaEnrollmentStart {
-  secret: string;
-  otpauthUrl: string;
+  method: MfaMethod;
+  secret?: string;
+  otpauthUrl?: string;
+  emailSentTo?: string;
 }
 
 export interface RegisterPayload {
@@ -57,8 +65,13 @@ export async function login(userCode: string, password: string): Promise<LoginOu
 }
 
 // Voluntary MFA management for an already-authenticated user.
-export async function mfaEnrollStart(): Promise<MfaEnrollmentStart> {
-  const { data } = await apiClient.post<MfaEnrollmentStart>('/v1/auth/mfa/enroll');
+export async function mfaEnrollStart(method: MfaMethod = 'totp'): Promise<MfaEnrollmentStart> {
+  const { data } = await apiClient.post<MfaEnrollmentStart>('/v1/auth/mfa/enroll', { method });
+  return data;
+}
+
+export async function mfaEnrollResend(): Promise<{ emailSentTo: string }> {
+  const { data } = await apiClient.post<{ emailSentTo: string }>('/v1/auth/mfa/enroll/resend');
   return data;
 }
 
@@ -73,8 +86,18 @@ export async function mfaDisable(password: string, code: string): Promise<void> 
 
 // Login-time challenge — completes (or, for a required role with no prior
 // enrollment, first sets up) MFA and only then issues a session.
-export async function mfaChallengeEnroll(mfaToken: string): Promise<MfaEnrollmentStart> {
-  const { data } = await apiClient.post<MfaEnrollmentStart>('/v1/auth/mfa/challenge/enroll', { mfaToken });
+export async function mfaChallengeEnroll(mfaToken: string, method: MfaMethod = 'totp'): Promise<MfaEnrollmentStart> {
+  const { data } = await apiClient.post<MfaEnrollmentStart>('/v1/auth/mfa/challenge/enroll', {
+    mfaToken,
+    method,
+  });
+  return data;
+}
+
+export async function mfaChallengeEnrollResend(mfaToken: string): Promise<{ emailSentTo: string }> {
+  const { data } = await apiClient.post<{ emailSentTo: string }>('/v1/auth/mfa/challenge/enroll/resend', {
+    mfaToken,
+  });
   return data;
 }
 
@@ -88,6 +111,17 @@ export async function mfaChallengeEnrollConfirm(mfaToken: string, code: string):
 
 export async function mfaChallengeVerify(mfaToken: string, code: string): Promise<LoginResponse> {
   const { data } = await apiClient.post<LoginResponse>('/v1/auth/mfa/challenge/verify', { mfaToken, code });
+  return data;
+}
+
+// Resends a fresh emailed code during login, for an account already
+// enrolled with the email method — the frontend does not need to call this
+// on the first attempt (the server auto-sends one, see `auth::login`) but
+// offers it as a "resend" action.
+export async function mfaChallengeRequestCode(mfaToken: string): Promise<{ emailSentTo: string }> {
+  const { data } = await apiClient.post<{ emailSentTo: string }>('/v1/auth/mfa/challenge/request-code', {
+    mfaToken,
+  });
   return data;
 }
 

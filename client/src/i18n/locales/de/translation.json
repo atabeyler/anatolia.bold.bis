@@ -66,6 +66,13 @@
       "manualEntryKey": "Manueller Eingabeschlüssel",
       "codeLabel": "Bestätigungscode",
       "verifyCode": "Bestätigen",
+      "methodChoiceIntro": "Ihre Rolle erfordert Multi-Faktor-Authentifizierung. Wählen Sie, wie Sie Ihre Verifizierungscodes erhalten möchten.",
+      "chooseTotp": "Authenticator-App verwenden",
+      "chooseEmail": "Codes per E-Mail senden",
+      "emailSent": "Ein Verifizierungscode wurde an Ihre E-Mail-Adresse gesendet.",
+      "emailSentTo": "Ein Verifizierungscode wurde an {{email}} gesendet.",
+      "resendCode": "Code erneut senden",
+      "codeResent": "Ein neuer Code wurde gesendet.",
       "recoveryCodesTitle": "Speichern Sie Ihre Wiederherstellungscodes",
       "recoveryCodesIntro": "Jeder Code kann einmal verwendet werden, um sich anzumelden, falls Sie den Zugriff auf Ihre Authenticator-App verlieren. Bewahren Sie sie sicher auf — sie werden nicht erneut angezeigt.",
       "recoveryCodesWarning": "Diese Codes werden nur dieses eine Mal angezeigt.",
@@ -110,7 +117,8 @@
     "biometricProviderUnavailable": "Der biometrische Anbieter ist derzeit nicht verfügbar.",
     "candidateReferenceCodeTaken": "Ein Kandidat mit diesem Referenzcode existiert bereits.",
     "invalidRole": "Das ist keine gültige Rolle.",
-    "roleUnchanged": "Der Benutzer hat bereits diese Rolle."
+    "roleUnchanged": "Der Benutzer hat bereits diese Rolle.",
+    "mfaEmailNotAvailable": "E-Mail-basierte Verifizierung ist für dieses Konto nicht verfügbar — keine E-Mail-Adresse hinterlegt."
   },
   "settings": {
     "openLabel": "Einstellungen",

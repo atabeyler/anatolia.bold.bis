@@ -66,6 +66,13 @@
       "manualEntryKey": "Manual entry key",
       "codeLabel": "Verification code",
       "verifyCode": "Verify",
+      "methodChoiceIntro": "Your role requires multi-factor authentication. Choose how you want to receive your verification codes.",
+      "chooseTotp": "Use an authenticator app",
+      "chooseEmail": "Send codes by email",
+      "emailSent": "A verification code has been sent to your email.",
+      "emailSentTo": "A verification code has been sent to {{email}}.",
+      "resendCode": "Resend code",
+      "codeResent": "A new code has been sent.",
       "recoveryCodesTitle": "Save your recovery codes",
       "recoveryCodesIntro": "Each code can be used once to sign in if you lose access to your authenticator app. Store them somewhere safe — they will not be shown again.",
       "recoveryCodesWarning": "This is the only time these codes will be displayed.",
@@ -110,7 +117,8 @@
     "biometricProviderUnavailable": "The biometric provider is currently unavailable.",
     "candidateReferenceCodeTaken": "A candidate with this reference code already exists.",
     "invalidRole": "That is not a valid role.",
-    "roleUnchanged": "The user already has this role."
+    "roleUnchanged": "The user already has this role.",
+    "mfaEmailNotAvailable": "Email-based verification is not available for this account — no email is on file."
   },
   "settings": {
     "openLabel": "Settings",

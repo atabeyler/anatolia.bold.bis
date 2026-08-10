@@ -66,6 +66,13 @@
       "manualEntryKey": "Manuel giriş anahtarı",
       "codeLabel": "Doğrulama kodu",
       "verifyCode": "Doğrula",
+      "methodChoiceIntro": "Rolünüz çok faktörlü kimlik doğrulama gerektiriyor. Doğrulama kodlarını nasıl almak istediğinizi seçin.",
+      "chooseTotp": "Kimlik doğrulama uygulaması kullan",
+      "chooseEmail": "Kodları e-posta ile gönder",
+      "emailSent": "E-posta adresinize bir doğrulama kodu gönderildi.",
+      "emailSentTo": "{{email}} adresine bir doğrulama kodu gönderildi.",
+      "resendCode": "Kodu yeniden gönder",
+      "codeResent": "Yeni bir kod gönderildi.",
       "recoveryCodesTitle": "Kurtarma kodlarınızı kaydedin",
       "recoveryCodesIntro": "Kimlik doğrulama uygulamanıza erişiminizi kaybederseniz her kod bir kez kullanılarak giriş yapmanızı sağlar. Bu kodları güvenli bir yerde saklayın — tekrar gösterilmeyecektir.",
       "recoveryCodesWarning": "Bu kodlar yalnızca bu kez gösterilmektedir.",
@@ -110,7 +117,8 @@
     "biometricProviderUnavailable": "Biyometrik sağlayıcı şu anda kullanılamıyor.",
     "candidateReferenceCodeTaken": "Bu referans koduna sahip bir aday zaten mevcut.",
     "invalidRole": "Bu geçerli bir rol değil.",
-    "roleUnchanged": "Kullanıcı zaten bu role sahip."
+    "roleUnchanged": "Kullanıcı zaten bu role sahip.",
+    "mfaEmailNotAvailable": "Bu hesap için e-posta tabanlı doğrulama kullanılamıyor — kayıtlı bir e-posta adresi yok."
   },
   "settings": {
     "openLabel": "Ayarlar",

@@ -4,7 +4,7 @@ import { setAccessToken } from '../../services/apiClient';
 import { createAuthBroadcastChannel, isSignedOutMessage, postSignedOut } from '../../services/authBroadcast';
 import * as authClient from '../../services/authClient';
 import { isMfaChallenge, isMfaEnrollmentRequired } from '../../services/authClient';
-import type { LoginOutcome, MfaEnrollmentStart, PublicUser, RegisterPayload } from '../../services/authClient';
+import type { LoginOutcome, MfaEnrollmentStart, MfaMethod, PublicUser, RegisterPayload } from '../../services/authClient';
 
 const REMEMBERED_USER_CODE_KEY = 'anatolia_remembered_user_code';
 
@@ -14,7 +14,7 @@ const REMEMBERED_USER_CODE_KEY = 'anatolia_remembered_user_code';
 // until then).
 export type LoginStep =
   | { type: 'signedIn' }
-  | { type: 'mfaChallenge'; mfaToken: string }
+  | { type: 'mfaChallenge'; mfaToken: string; method: MfaMethod }
   | { type: 'mfaEnrollmentRequired'; mfaToken: string };
 
 interface AuthContextValue {
@@ -23,7 +23,9 @@ interface AuthContextValue {
   rememberedUserCode: string;
   login: (userCode: string, password: string, rememberMe: boolean) => Promise<LoginStep>;
   completeMfaChallenge: (mfaToken: string, code: string, rememberMe: boolean) => Promise<void>;
-  beginMfaEnrollmentChallenge: (mfaToken: string) => Promise<MfaEnrollmentStart>;
+  requestMfaChallengeCode: (mfaToken: string) => Promise<string>;
+  beginMfaEnrollmentChallenge: (mfaToken: string, method: MfaMethod) => Promise<MfaEnrollmentStart>;
+  resendMfaEnrollmentChallengeCode: (mfaToken: string) => Promise<string>;
   completeMfaEnrollmentChallenge: (mfaToken: string, code: string, rememberMe: boolean) => Promise<void>;
   // Shown once, immediately after MFA enrollment completes — see the
   // `RecoveryCodesModal` rendered in App.tsx. Cleared by
@@ -102,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (userCode: string, password: string, rememberMe: boolean): Promise<LoginStep> => {
       const outcome: LoginOutcome = await authClient.login(userCode, password);
       if (isMfaChallenge(outcome)) {
-        return { type: 'mfaChallenge', mfaToken: outcome.mfaToken };
+        return { type: 'mfaChallenge', mfaToken: outcome.mfaToken, method: outcome.method };
       }
       if (isMfaEnrollmentRequired(outcome)) {
         return { type: 'mfaEnrollmentRequired', mfaToken: outcome.mfaToken };
@@ -121,10 +123,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applySession],
   );
 
+  const requestMfaChallengeCode = useCallback(async (mfaToken: string) => {
+    const { emailSentTo } = await authClient.mfaChallengeRequestCode(mfaToken);
+    return emailSentTo;
+  }, []);
+
   const beginMfaEnrollmentChallenge = useCallback(
-    async (mfaToken: string) => authClient.mfaChallengeEnroll(mfaToken),
+    async (mfaToken: string, method: MfaMethod) => authClient.mfaChallengeEnroll(mfaToken, method),
     [],
   );
+
+  const resendMfaEnrollmentChallengeCode = useCallback(async (mfaToken: string) => {
+    const { emailSentTo } = await authClient.mfaChallengeEnrollResend(mfaToken);
+    return emailSentTo;
+  }, []);
 
   const completeMfaEnrollmentChallenge = useCallback(
     async (mfaToken: string, code: string, rememberMe: boolean) => {
@@ -165,7 +177,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       rememberedUserCode,
       login,
       completeMfaChallenge,
+      requestMfaChallengeCode,
       beginMfaEnrollmentChallenge,
+      resendMfaEnrollmentChallengeCode,
       completeMfaEnrollmentChallenge,
       pendingRecoveryCodes,
       acknowledgeRecoveryCodes,
@@ -179,7 +193,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       rememberedUserCode,
       login,
       completeMfaChallenge,
+      requestMfaChallengeCode,
       beginMfaEnrollmentChallenge,
+      resendMfaEnrollmentChallengeCode,
       completeMfaEnrollmentChallenge,
       pendingRecoveryCodes,
       acknowledgeRecoveryCodes,

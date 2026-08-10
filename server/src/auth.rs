@@ -723,7 +723,7 @@ pub async fn login(
     // redirect. Neither branch below issues an access/refresh token pair.
     match crate::mfa::login_mfa_outcome(&state, &user).await {
         crate::mfa::LoginMfaOutcome::NotRequired => {}
-        crate::mfa::LoginMfaOutcome::ChallengeRequired => {
+        crate::mfa::LoginMfaOutcome::ChallengeRequired { method } => {
             let token =
                 match crate::mfa::sign_challenge_token(&state, &user.id, crate::mfa::PURPOSE_LOGIN)
                 {
@@ -733,10 +733,14 @@ pub async fn login(
                             .into_response()
                     }
                 };
+            if method == crate::mfa::METHOD_EMAIL {
+                crate::mfa::send_login_challenge_email_code(&state, &user).await;
+            }
             return Json(serde_json::json!({
                 "mfaRequired": true,
                 "mfaToken": token,
                 "userCode": user.user_code,
+                "method": method,
             }))
             .into_response();
         }

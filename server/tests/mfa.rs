@@ -1,8 +1,10 @@
-use anatolia_bis_server::{db::AppState, routes};
+use anatolia_bis_server::{db, db::AppState, routes};
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
+use chrono::{Duration as ChronoDuration, Utc};
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 use totp_rs::{Builder, Secret};
 use tower::ServiceExt;
@@ -39,6 +41,26 @@ fn auth_json_request(method: &str, uri: &str, token: &str, body: Value) -> Reque
 /// Computes the current TOTP code for a base32 secret exactly the way an
 /// authenticator app would, so tests can drive the real verification path
 /// instead of poking internal state.
+fn sha256_hex(value: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(value.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+/// Overwrites the pending/enabled email-method code with a known value,
+/// standing in for "the code the user actually received by email" — email
+/// delivery is skipped in tests since `RESEND_API_KEY` is unset, so the raw
+/// code the server generated internally never appears in any HTTP response
+/// (same rationale as `seed_reset_token` in `tests/password_reset.rs`).
+async fn seed_email_mfa_code(state: &AppState, user_id: &str, code: &str) {
+    let expires_at = (Utc::now() + ChronoDuration::minutes(10))
+        .format("%Y-%m-%dT%H:%M:%.3fZ")
+        .to_string();
+    db::update_email_mfa_code(&state.backend, user_id, &sha256_hex(code), &expires_at)
+        .await
+        .unwrap();
+}
+
 fn totp_code(secret_b32: &str) -> String {
     let secret = Secret::try_from_base32(secret_b32).unwrap();
     let totp = Builder::new()
@@ -521,4 +543,192 @@ async fn admin_reset_clears_mfa_so_the_next_login_is_a_plain_challenge_or_enroll
         .unwrap();
     let login = body_json(response).await;
     assert!(login["accessToken"].as_str().is_some());
+}
+
+#[tokio::test]
+async fn email_method_enrollment_then_login_requires_emailed_code() {
+    let _guard = ENV_GUARD.lock().await;
+    let state = AppState::for_tests().await;
+    let app = routes::router(state.clone());
+    let (token, user_id) = register_and_login_operator(&app, "MFAEML").await;
+
+    // Start email-method enrollment.
+    let response = app
+        .clone()
+        .oneshot(auth_json_request(
+            "POST",
+            "/api/v1/auth/mfa/enroll",
+            &token,
+            json!({ "method": "email" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let enroll = body_json(response).await;
+    assert_eq!(enroll["method"], "email");
+    assert!(enroll["emailSentTo"].as_str().unwrap().contains('@'));
+
+    seed_email_mfa_code(&state, &user_id, "123456").await;
+
+    // Wrong code is rejected.
+    let response = app
+        .clone()
+        .oneshot(auth_json_request(
+            "POST",
+            "/api/v1/auth/mfa/enroll/confirm",
+            &token,
+            json!({ "code": "000000" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // Correct code confirms enrollment and returns recovery codes.
+    let response = app
+        .clone()
+        .oneshot(auth_json_request(
+            "POST",
+            "/api/v1/auth/mfa/enroll/confirm",
+            &token,
+            json!({ "code": "123456" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let confirm = body_json(response).await;
+    assert_eq!(confirm["recoveryCodes"].as_array().unwrap().len(), 10);
+
+    // A plain login now reports the email method, not a plain session.
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/login",
+            json!({ "userCode": "MFAEML", "password": "OperatorPass1!" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let login = body_json(response).await;
+    assert_eq!(login["mfaRequired"], true);
+    assert_eq!(login["method"], "email");
+    assert!(login.get("accessToken").is_none());
+    let mfa_token = login["mfaToken"].as_str().unwrap().to_string();
+
+    // The login handler auto-sends a fresh code, which is unobservable in
+    // this test (no RESEND_API_KEY) — stand in for "the code the user
+    // received" the same way enrollment did above.
+    seed_email_mfa_code(&state, &user_id, "654321").await;
+
+    // Wrong code at the challenge step is rejected.
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/mfa/challenge/verify",
+            json!({ "mfaToken": mfa_token.clone(), "code": "000000" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // Correct emailed code completes login.
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/mfa/challenge/verify",
+            json!({ "mfaToken": mfa_token, "code": "654321" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let verified = body_json(response).await;
+    assert!(verified["accessToken"].as_str().is_some());
+}
+
+#[tokio::test]
+async fn email_mfa_resend_endpoints_issue_a_fresh_code() {
+    let _guard = ENV_GUARD.lock().await;
+    let state = AppState::for_tests().await;
+    let app = routes::router(state.clone());
+    let (token, user_id) = register_and_login_operator(&app, "MFARSND").await;
+
+    app.clone()
+        .oneshot(auth_json_request(
+            "POST",
+            "/api/v1/auth/mfa/enroll",
+            &token,
+            json!({ "method": "email" }),
+        ))
+        .await
+        .unwrap();
+
+    // Voluntary-flow resend replaces the pending code.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/mfa/enroll/resend")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // The resend replaced the pending code — seed the (new) value that
+    // would have been re-emailed and confirm with it.
+    seed_email_mfa_code(&state, &user_id, "111111").await;
+    let response = app
+        .clone()
+        .oneshot(auth_json_request(
+            "POST",
+            "/api/v1/auth/mfa/enroll/confirm",
+            &token,
+            json!({ "code": "111111" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Once enabled, the login-time request-code endpoint issues a fresh
+    // code too, ahead of `challenge_verify`.
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/login",
+            json!({ "userCode": "MFARSND", "password": "OperatorPass1!" }),
+        ))
+        .await
+        .unwrap();
+    let login = body_json(response).await;
+    let mfa_token = login["mfaToken"].as_str().unwrap().to_string();
+
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/mfa/challenge/request-code",
+            json!({ "mfaToken": mfa_token.clone() }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    seed_email_mfa_code(&state, &user_id, "222222").await;
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/v1/auth/mfa/challenge/verify",
+            json!({ "mfaToken": mfa_token, "code": "222222" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(body_json(response).await["accessToken"].as_str().is_some());
 }
