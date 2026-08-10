@@ -225,15 +225,26 @@ what these controls defend against.
   it downstream. Re-encoding drops that metadata unconditionally, since
   the `image` crate's encoders never write EXIF/XMP chunks back out; no
   separate metadata-scrubbing pass is needed.
-- **National ID response masking** (`admin::mask_national_id`): `GET`/
-  `PATCH /api/v1/admin/users` responses only ever return the last two
-  digits of a stored national ID (e.g. `"*********12"`); the full value
-  is used server-side (registration uniqueness check) but never sent to
-  a client. The admin panel's edit form tracks whether the field was
-  actually edited (`nationalIdTouched`) so re-submitting the masked
-  display value on an unrelated field change can never overwrite the
-  real stored value. Encryption of the stored value itself is not yet
-  implemented — see "Not yet implemented" below.
+- **National ID encryption at rest and response masking**
+  (`national_id.rs`, `admin::mask_national_id`): registration and admin
+  user-management no longer write the plaintext national ID to the
+  database. Instead, `national_id_encrypted` stores an AES-256-GCM
+  ciphertext (random 96-bit nonce, `NATIONAL_ID_ENCRYPTION_KEY`), and
+  `national_id_lookup_hash` stores a deterministic HMAC-SHA256 of the
+  plaintext under the same key, which carries the duplicate-detection
+  `UNIQUE` constraint that used to sit directly on the plaintext column.
+  The server decrypts a value only where genuinely needed — today, solely
+  to mask it before `GET`/`PATCH /api/v1/admin/users` return it (e.g.
+  `"*********12"`); the full plaintext is never sent to a client. The
+  admin panel's edit form tracks whether the field was actually edited
+  (`nationalIdTouched`) so re-submitting the masked display value on an
+  unrelated field change can never overwrite the real stored value. The
+  old plaintext `national_id` column is left in the schema (unused,
+  un-backfilled) rather than force-migrated — see item 20 in
+  `docs/HARDENING_CHECKLIST.md` for what a follow-up backfill/drop would
+  need to decide. There is no key-rotation tool: rotating
+  `NATIONAL_ID_ENCRYPTION_KEY` makes every existing `national_id_encrypted`
+  value undecryptable.
 - **Cross-tab sign-out sync** (`client/src/services/authBroadcast.ts`,
   used from `AuthContext`): logging out (or `logout-all`) posts a message
   on a same-origin `BroadcastChannel` so every other open tab clears its
@@ -286,11 +297,7 @@ what these controls defend against.
 
 Organization/unit-scoped authorization and enterprise SSO are planned
 (see `docs/ROADMAP.md`) but not present in the codebase yet. Do not
-assume either is active. National IDs are masked in every API
-response but are still stored in plaintext in the database;
-encryption-at-rest requires a key-management and existing-data migration
-decision the repository owner hasn't made yet (see item 32 in
-`docs/HARDENING_CHECKLIST.md`). There is also no endpoint to change an
+assume either is active. There is also no endpoint to change an
 already-active account's role, so a role-downgrade session-revoke
 protection (item 11) has nothing to attach to yet — adding one is real
 feature work (who may assign which role to whom, self-role-change

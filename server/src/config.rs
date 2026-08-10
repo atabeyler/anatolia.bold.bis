@@ -12,6 +12,10 @@ const DEV_JWT_SECRET: &str = "anatolia-bis-local-access-secret-dev-only-not-for-
 const DEV_JWT_REFRESH_SECRET: &str = "anatolia-bis-local-refresh-secret-dev-only-not-for-prod";
 const DEV_APPROVAL_TOKEN_SECRET: &str = "anatolia-bis-local-approval-secret-dev-only-not-for-prod";
 const DEV_MFA_TOKEN_SECRET: &str = "anatolia-bis-local-mfa-secret-dev-only-not-for-prod";
+/// 32 bytes of fixed hex, used only outside production — see
+/// `resolve_national_id_key`.
+const DEV_NATIONAL_ID_ENCRYPTION_KEY: &str =
+    "616e61746f6c69612d6269732d6e61746c2d69642d6465762d6b657921212121";
 
 /// Roles required to have MFA enabled before login can complete, when
 /// `MFA_REQUIRED_ROLES` is unset — see `mfa.rs`.
@@ -31,6 +35,9 @@ pub struct Config {
     pub jwt_refresh_secret: String,
     pub approval_token_secret: String,
     pub mfa_token_secret: String,
+    /// AES-256-GCM key for encrypting national ID numbers at rest — see
+    /// `national_id.rs`. Always exactly 32 bytes.
+    pub national_id_encryption_key: [u8; 32],
     pub search_default_top_k: i64,
     pub search_max_top_k: i64,
     /// Which `BiometricProvider` implementation to run — see
@@ -94,6 +101,7 @@ impl Config {
             production,
         );
         let mfa_token_secret = resolve_secret("MFA_TOKEN_SECRET", DEV_MFA_TOKEN_SECRET, production);
+        let national_id_encryption_key = resolve_national_id_key(production);
 
         let mfa_required_roles = match env::var("MFA_REQUIRED_ROLES") {
             Ok(value) => value
@@ -129,6 +137,7 @@ impl Config {
             jwt_refresh_secret,
             approval_token_secret,
             mfa_token_secret,
+            national_id_encryption_key,
             search_default_top_k,
             search_max_top_k,
             biometric_provider,
@@ -197,6 +206,42 @@ fn resolve_secret(env_var: &'static str, dev_default: &'static str, production: 
             panic!("{env_var} is required in production and was not set; refusing to start");
         }
         _ => dev_default.to_string(),
+    }
+}
+
+/// Resolves `NATIONAL_ID_ENCRYPTION_KEY` — 64 hex characters (32 raw
+/// bytes) for AES-256-GCM. In production, missing/malformed/wrong-length
+/// is a hard startup failure, matching the other secrets above.
+fn resolve_national_id_key(production: bool) -> [u8; 32] {
+    let hex_value = match env::var("NATIONAL_ID_ENCRYPTION_KEY") {
+        Ok(value) if !value.trim().is_empty() => value,
+        _ if production => {
+            panic!(
+                "NATIONAL_ID_ENCRYPTION_KEY is required in production and was not set; \
+                 refusing to start"
+            );
+        }
+        _ => DEV_NATIONAL_ID_ENCRYPTION_KEY.to_string(),
+    };
+    let decoded = hex::decode(hex_value.trim()).unwrap_or_else(|_| {
+        if production {
+            panic!(
+                "NATIONAL_ID_ENCRYPTION_KEY must be 64 hex characters (32 bytes); \
+                 refusing to start in production with a malformed key"
+            );
+        }
+        Vec::new()
+    });
+    match <[u8; 32]>::try_from(decoded.as_slice()) {
+        Ok(key) => key,
+        Err(_) if production => panic!(
+            "NATIONAL_ID_ENCRYPTION_KEY must decode to exactly 32 bytes; \
+             refusing to start in production with a key of the wrong length"
+        ),
+        Err(_) => hex::decode(DEV_NATIONAL_ID_ENCRYPTION_KEY)
+            .expect("DEV_NATIONAL_ID_ENCRYPTION_KEY is a fixed, valid hex constant")
+            .try_into()
+            .expect("DEV_NATIONAL_ID_ENCRYPTION_KEY is a fixed 32-byte constant"),
     }
 }
 
@@ -298,6 +343,40 @@ mod tests {
         let config = Config::from_env();
         env::remove_var("MFA_REQUIRED_ROLES");
         assert_eq!(config.mfa_required_roles, vec!["SYSTEM_ADMIN", "OPERATOR"]);
+    }
+
+    #[test]
+    fn national_id_key_falls_back_to_dev_default_outside_production() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        env::remove_var("NATIONAL_ID_ENCRYPTION_KEY");
+        assert_eq!(resolve_national_id_key(false).len(), 32);
+    }
+
+    #[test]
+    #[should_panic(expected = "NATIONAL_ID_ENCRYPTION_KEY is required in production")]
+    fn national_id_key_missing_in_production_panics() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        env::remove_var("NATIONAL_ID_ENCRYPTION_KEY");
+        resolve_national_id_key(true);
+    }
+
+    #[test]
+    #[should_panic(expected = "must decode to exactly 32 bytes")]
+    fn national_id_key_wrong_length_in_production_panics() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        env::set_var("NATIONAL_ID_ENCRYPTION_KEY", "aabbcc");
+        resolve_national_id_key(true);
+    }
+
+    #[test]
+    fn national_id_key_valid_hex_in_production_succeeds() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        let key_hex = "a".repeat(64);
+        env::set_var("NATIONAL_ID_ENCRYPTION_KEY", &key_hex);
+        let key = resolve_national_id_key(true);
+        env::remove_var("NATIONAL_ID_ENCRYPTION_KEY");
+        assert_eq!(key.len(), 32);
+        assert_eq!(key[0], 0xaa);
     }
 
     #[test]

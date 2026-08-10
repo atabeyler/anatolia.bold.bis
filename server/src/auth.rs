@@ -444,13 +444,16 @@ pub async fn register(
     };
 
     let email = payload.email.trim().to_lowercase();
+    let (national_id_encrypted, national_id_lookup_hash) =
+        crate::national_id::encrypt(&state.secrets.national_id_encryption_key, national_id);
     match create_user(
         &state.backend,
         &code,
         Some(&email),
         payload.first_name.trim(),
         payload.last_name.trim(),
-        Some(national_id),
+        Some(&national_id_encrypted),
+        Some(&national_id_lookup_hash),
         &hashed,
         roles::PENDING,
         false,

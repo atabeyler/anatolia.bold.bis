@@ -35,6 +35,7 @@ pub struct Secrets {
     pub jwt_refresh_secret: String,
     pub approval_token_secret: String,
     pub mfa_token_secret: String,
+    pub national_id_encryption_key: [u8; 32],
 }
 
 /// Search tuning resolved once at startup by `Config::from_env`.
@@ -83,6 +84,7 @@ impl AppState {
                 jwt_refresh_secret: config.jwt_refresh_secret.clone(),
                 approval_token_secret: config.approval_token_secret.clone(),
                 mfa_token_secret: config.mfa_token_secret.clone(),
+                national_id_encryption_key: config.national_id_encryption_key,
             }),
             search_limits: Arc::new(SearchLimits {
                 default_top_k: config.search_default_top_k,
@@ -112,6 +114,7 @@ impl AppState {
                 jwt_refresh_secret: "test-refresh-secret-not-for-prod-use-only".to_string(),
                 approval_token_secret: "test-approval-secret-not-for-prod-use-only".to_string(),
                 mfa_token_secret: "test-mfa-secret-not-for-prod-use-only".to_string(),
+                national_id_encryption_key: [0x42u8; 32],
             }),
             search_limits: Arc::new(SearchLimits {
                 default_top_k: 10,
@@ -254,6 +257,29 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             sqlx::query("ALTER TABLE users ALTER COLUMN email DROP NOT NULL")
                 .execute(pool)
                 .await?;
+            // Encryption-at-rest for national ID numbers (see
+            // national_id.rs): `national_id_encrypted` (AES-256-GCM,
+            // base64) replaces the plaintext `national_id` column above for
+            // every write going forward; `national_id_lookup_hash`
+            // (HMAC-SHA256, deterministic) carries the duplicate-detection
+            // uniqueness the old column's UNIQUE constraint provided,
+            // without the database ever holding a readable value. The old
+            // `national_id` column is left in place (not backfilled or
+            // dropped) so any pre-existing plaintext data isn't touched by
+            // a migration that can't itself decide how to re-key it; it is
+            // simply never read or written by the application anymore.
+            sqlx::query("ALTER TABLE users ADD COLUMN IF NOT EXISTS national_id_encrypted TEXT")
+                .execute(pool)
+                .await?;
+            sqlx::query("ALTER TABLE users ADD COLUMN IF NOT EXISTS national_id_lookup_hash TEXT")
+                .execute(pool)
+                .await?;
+            sqlx::query(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_national_id_lookup_hash \
+                 ON users (national_id_lookup_hash) WHERE national_id_lookup_hash IS NOT NULL",
+            )
+            .execute(pool)
+            .await?;
             // Unguessable pointer a pending applicant polls with instead of
             // their own (guessable) user code — see
             // auth::registration_status and the enumeration-protection note
@@ -553,6 +579,18 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             let _ = sqlx::query("ALTER TABLE users ADD COLUMN deleted_at TEXT")
                 .execute(pool)
                 .await;
+            let _ = sqlx::query("ALTER TABLE users ADD COLUMN national_id_encrypted TEXT")
+                .execute(pool)
+                .await;
+            let _ = sqlx::query("ALTER TABLE users ADD COLUMN national_id_lookup_hash TEXT")
+                .execute(pool)
+                .await;
+            sqlx::query(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_national_id_lookup_hash \
+                 ON users (national_id_lookup_hash)",
+            )
+            .execute(pool)
+            .await?;
 
             sqlx::query(
                 r#"
@@ -830,7 +868,14 @@ pub struct UserRow {
     pub user_code: String,
     pub first_name: String,
     pub last_name: String,
-    pub national_id: Option<String>,
+    /// AES-256-GCM ciphertext (base64) — see `national_id.rs`. Never the
+    /// plaintext national ID; decrypt only where genuinely needed (today:
+    /// solely to mask it for display, see `admin::mask_national_id`).
+    pub national_id_encrypted: Option<String>,
+    /// Deterministic HMAC-SHA256 of the plaintext — carries the
+    /// duplicate-detection uniqueness that used to sit on a plaintext
+    /// `UNIQUE` column.
+    pub national_id_lookup_hash: Option<String>,
     pub email: Option<String>,
     pub password_hash: String,
     pub role: String,
@@ -845,7 +890,8 @@ struct PgUserRow {
     user_code: String,
     first_name: String,
     last_name: String,
-    national_id: Option<String>,
+    national_id_encrypted: Option<String>,
+    national_id_lookup_hash: Option<String>,
     email: Option<String>,
     password_hash: String,
     role: String,
@@ -861,7 +907,8 @@ impl From<PgUserRow> for UserRow {
             user_code: row.user_code,
             first_name: row.first_name,
             last_name: row.last_name,
-            national_id: row.national_id,
+            national_id_encrypted: row.national_id_encrypted,
+            national_id_lookup_hash: row.national_id_lookup_hash,
             email: row.email,
             password_hash: row.password_hash,
             role: row.role,
@@ -878,7 +925,8 @@ struct SqliteUserRow {
     user_code: String,
     first_name: String,
     last_name: String,
-    national_id: Option<String>,
+    national_id_encrypted: Option<String>,
+    national_id_lookup_hash: Option<String>,
     email: Option<String>,
     password_hash: String,
     role: String,
@@ -894,7 +942,8 @@ impl From<SqliteUserRow> for UserRow {
             user_code: row.user_code,
             first_name: row.first_name,
             last_name: row.last_name,
-            national_id: row.national_id,
+            national_id_encrypted: row.national_id_encrypted,
+            national_id_lookup_hash: row.national_id_lookup_hash,
             email: row.email,
             password_hash: row.password_hash,
             role: row.role,
@@ -905,8 +954,8 @@ impl From<SqliteUserRow> for UserRow {
     }
 }
 
-const USER_COLUMNS: &str =
-    "id, user_code, first_name, last_name, national_id, email, password_hash, role, is_approved, is_banned, ban_reason";
+const USER_COLUMNS: &str = "id, user_code, first_name, last_name, national_id_encrypted, \
+     national_id_lookup_hash, email, password_hash, role, is_approved, is_banned, ban_reason";
 
 pub async fn load_user_by_code(
     backend: &DbBackend,
@@ -1072,7 +1121,8 @@ pub async fn create_user(
     email: Option<&str>,
     first_name: &str,
     last_name: &str,
-    national_id: Option<&str>,
+    national_id_encrypted: Option<&str>,
+    national_id_lookup_hash: Option<&str>,
     password_hash: &str,
     role: &str,
     is_approved: bool,
@@ -1080,15 +1130,16 @@ pub async fn create_user(
     match backend {
         DbBackend::Postgres(pool) => {
             let row = sqlx::query_as::<_, PgUserRow>(&format!(
-                "INSERT INTO users (user_code, email, first_name, last_name, national_id, password_hash, role, is_approved)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                "INSERT INTO users (user_code, email, first_name, last_name, national_id_encrypted, national_id_lookup_hash, password_hash, role, is_approved)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                  RETURNING {USER_COLUMNS}"
             ))
             .bind(user_code)
             .bind(email)
             .bind(first_name)
             .bind(last_name)
-            .bind(national_id)
+            .bind(national_id_encrypted)
+            .bind(national_id_lookup_hash)
             .bind(password_hash)
             .bind(role)
             .bind(is_approved)
@@ -1099,15 +1150,16 @@ pub async fn create_user(
         DbBackend::Sqlite(pool) => {
             let id = Uuid::new_v4().to_string();
             sqlx::query(
-                "INSERT INTO users (id, user_code, email, first_name, last_name, national_id, password_hash, role, is_approved)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                "INSERT INTO users (id, user_code, email, first_name, last_name, national_id_encrypted, national_id_lookup_hash, password_hash, role, is_approved)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             )
             .bind(&id)
             .bind(user_code)
             .bind(email)
             .bind(first_name)
             .bind(last_name)
-            .bind(national_id)
+            .bind(national_id_encrypted)
+            .bind(national_id_lookup_hash)
             .bind(password_hash)
             .bind(role)
             .bind(is_approved as i64)
@@ -1271,7 +1323,8 @@ pub async fn update_user_profile(
     id: &str,
     first_name: &str,
     email: Option<&str>,
-    national_id: Option<&str>,
+    national_id_encrypted: Option<&str>,
+    national_id_lookup_hash: Option<&str>,
     password_hash: &str,
 ) -> Result<Option<UserRow>, sqlx::Error> {
     match backend {
@@ -1280,11 +1333,12 @@ pub async fn update_user_profile(
                 return Ok(None);
             };
             sqlx::query(
-                "UPDATE users SET first_name = $1, email = $2, national_id = $3, password_hash = $4, updated_at = NOW() WHERE id = $5",
+                "UPDATE users SET first_name = $1, email = $2, national_id_encrypted = $3, national_id_lookup_hash = $4, password_hash = $5, updated_at = NOW() WHERE id = $6",
             )
             .bind(first_name)
             .bind(email)
-            .bind(national_id)
+            .bind(national_id_encrypted)
+            .bind(national_id_lookup_hash)
             .bind(password_hash)
             .bind(uuid)
             .execute(pool)
@@ -1292,11 +1346,12 @@ pub async fn update_user_profile(
         }
         DbBackend::Sqlite(pool) => {
             sqlx::query(
-                "UPDATE users SET first_name = ?1, email = ?2, national_id = ?3, password_hash = ?4, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?5",
+                "UPDATE users SET first_name = ?1, email = ?2, national_id_encrypted = ?3, national_id_lookup_hash = ?4, password_hash = ?5, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?6",
             )
             .bind(first_name)
             .bind(email)
-            .bind(national_id)
+            .bind(national_id_encrypted)
+            .bind(national_id_lookup_hash)
             .bind(password_hash)
             .bind(id)
             .execute(pool)

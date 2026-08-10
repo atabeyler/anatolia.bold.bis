@@ -36,6 +36,7 @@ async fn login_as(app: &axum::Router, state: &AppState, role: &str) -> String {
         "Role",
         "Tester",
         None,
+        None,
         &hashed,
         role,
         true,

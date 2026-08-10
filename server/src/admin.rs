@@ -71,13 +71,18 @@ fn mask_national_id(value: &str) -> String {
     format!("{}{}", "*".repeat(len - 2), visible)
 }
 
-fn user_json(user: &crate::db::UserRow) -> serde_json::Value {
+fn user_json(user: &crate::db::UserRow, national_id_key: &[u8; 32]) -> serde_json::Value {
+    let national_id = user
+        .national_id_encrypted
+        .as_deref()
+        .and_then(|encrypted| crate::national_id::decrypt(national_id_key, encrypted))
+        .map(|plaintext| mask_national_id(&plaintext));
     json!({
         "id": user.id,
         "userCode": user.user_code,
         "firstName": user.first_name,
         "lastName": user.last_name,
-        "nationalId": user.national_id.as_deref().map(mask_national_id),
+        "nationalId": national_id,
         "email": user.email,
         "role": user.role,
         "isApproved": user.is_approved,
@@ -128,7 +133,7 @@ pub async fn list_users(
     let page_size = query.page_size.unwrap_or(DEFAULT_USER_PAGE_SIZE);
     match load_users_page(&state.backend, page, page_size).await {
         Ok((rows, total)) => Json(json!({
-            "items": rows.iter().map(user_json).collect::<Vec<_>>(),
+            "items": rows.iter().map(|row| user_json(row, &state.secrets.national_id_encryption_key)).collect::<Vec<_>>(),
             "page": page,
             "pageSize": page_size.clamp(1, 200),
             "total": total,
@@ -200,13 +205,16 @@ pub async fn create_user_route(
         roles::DEFAULT_APPROVED_ROLE
     };
 
+    let (national_id_encrypted, national_id_lookup_hash) =
+        crate::national_id::encrypt(&state.secrets.national_id_encryption_key, national_id);
     match create_user(
         &state.backend,
         &code,
         Some(&email),
         &first_name,
         &last_name,
-        Some(national_id),
+        Some(&national_id_encrypted),
+        Some(&national_id_lookup_hash),
         &hashed,
         role,
         true,
@@ -220,7 +228,8 @@ pub async fn create_user_route(
                 .resource("user", &user.id)
                 .save(&state)
                 .await;
-            Json(json!({ "user": user_json(&user) })).into_response()
+            Json(json!({ "user": user_json(&user, &state.secrets.national_id_encryption_key) }))
+                .into_response()
         }
         Ok(None) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
         Err(err) if err.to_string().to_lowercase().contains("unique") => {
@@ -258,15 +267,25 @@ pub async fn update_user_route(
         .unwrap_or(&current.first_name)
         .to_string();
 
-    let national_id = match payload.national_id.as_deref().map(str::trim) {
-        Some(v) if !v.is_empty() => {
-            if v.len() != 11 || !v.chars().all(|c| c.is_ascii_digit()) {
-                return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
+    let (national_id_encrypted, national_id_lookup_hash) =
+        match payload.national_id.as_deref().map(str::trim) {
+            Some(v) if !v.is_empty() => {
+                if v.len() != 11 || !v.chars().all(|c| c.is_ascii_digit()) {
+                    return ApiError::new("VALIDATION_ERROR", "errors.validation", rid)
+                        .into_response();
+                }
+                let (encrypted, hash) =
+                    crate::national_id::encrypt(&state.secrets.national_id_encryption_key, v);
+                (Some(encrypted), Some(hash))
             }
-            Some(v.to_string())
-        }
-        _ => current.national_id.clone(),
-    };
+            // Untouched — keep whatever is already stored rather than
+            // re-encrypting (a fresh nonce each save is harmless, but
+            // pointless work; carrying the existing value over is simplest).
+            _ => (
+                current.national_id_encrypted.clone(),
+                current.national_id_lookup_hash.clone(),
+            ),
+        };
 
     let email = match payload.email.as_deref().map(str::trim) {
         Some(v) if !v.is_empty() => Some(v.to_lowercase()),
@@ -293,7 +312,8 @@ pub async fn update_user_route(
         &id,
         &first_name,
         email.as_deref(),
-        national_id.as_deref(),
+        national_id_encrypted.as_deref(),
+        national_id_lookup_hash.as_deref(),
         &password_hash,
     )
     .await
@@ -305,7 +325,8 @@ pub async fn update_user_route(
                 .resource("user", &user.id)
                 .save(&state)
                 .await;
-            Json(json!({ "user": user_json(&user) })).into_response()
+            Json(json!({ "user": user_json(&user, &state.secrets.national_id_encryption_key) }))
+                .into_response()
         }
         Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
         Err(err) if err.to_string().to_lowercase().contains("unique") => {
@@ -605,6 +626,7 @@ pub async fn seed_admin(State(state): State<AppState>, headers: HeaderMap) -> Re
         Some(&email),
         "System",
         "Administrator",
+        None,
         None,
         &hashed,
         roles::SYSTEM_ADMIN,

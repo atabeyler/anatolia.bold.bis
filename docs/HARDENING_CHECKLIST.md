@@ -184,15 +184,24 @@ eşleşme bu dosyanın sonunda listelidir.
     tek bir oturumda riske atmak yerine bilinçli olarak ertelendi;
     audit örneği deseni kanıtladı, geri kalanı ayrı bir batch'te
     yapılmalı.
-32. [~] National ID hassasiyeti — `GET`/`PATCH /api/v1/admin/users`
-    yanıtlarında `nationalId` artık son iki hane dışında maskeleniyor
+32. [x] National ID hassasiyeti — `GET`/`PATCH /api/v1/admin/users`
+    yanıtlarında `nationalId` son iki hane dışında maskeleniyor
     (`admin::mask_national_id`); admin panelindeki düzenleme formu da
     dokunulmayan (maskeli) değeri sunucuya geri göndermeyecek şekilde
-    güncellendi (`nationalIdTouched` bayrağı). **Eksik kalan:** veritabanı
-    tarafında hâlâ plaintext saklanıyor — encrypted-at-rest/lookup-hash
-    (madde başlığındaki ikinci kısım) bir şifreleme anahtarı yönetimi ve
-    mevcut prod verisinin migrate edilme stratejisi kararı gerektiriyor,
-    bu oturumda başlanmadı.
+    güncellendi (`nationalIdTouched` bayrağı). Encrypted-at-rest tamamlandı:
+    `national_id.rs` — AES-256-GCM (`NATIONAL_ID_ENCRYPTION_KEY`,
+    production'da zorunlu, 32 byte) ile `national_id_encrypted` sütununda
+    şifreli saklanıyor; deterministic HMAC-SHA256 `national_id_lookup_hash`
+    sütunu eski plaintext `UNIQUE` kısıtının yerini duplicate-detection
+    için alıyor. Sunucu tam değeri yalnızca maskelemek için decrypt ediyor,
+    hiçbir response'ta plaintext dönmüyor. Eski plaintext `national_id`
+    sütunu şemada bırakıldı (backfill/drop edilmedi) — gerçek prod verisi
+    olmadığı için bu oturumda buna gerek yoktu; gerçek veri olan bir
+    deployment'ta backfill+drop ayrı bir migration gerektirir. Key rotation
+    aracı yok — `NATIONAL_ID_ENCRYPTION_KEY` değiştirilirse mevcut şifreli
+    değerler çözülemez hale gelir, bu bilinçli bir sınırlama. Test:
+    `national_id.rs` içinde round-trip/wrong-key/garbage-input/uniqueness
+    testleri.
 33. [x] Database index/constraint — `sessions`, `audit_events`,
     `verification_events` için indexler zaten vardı (Milestone A/B/C).
     Eklendi: `search_candidates (search_id, candidate_id)` üzerinde unique

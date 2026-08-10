@@ -9,6 +9,7 @@ pub mod error;
 pub mod image_validation;
 pub mod mfa;
 pub mod middleware;
+pub mod national_id;
 pub mod permission;
 pub mod ratelimit;
 pub mod roles;

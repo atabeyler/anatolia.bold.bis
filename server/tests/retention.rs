@@ -18,6 +18,7 @@ async fn purge_removes_only_expired_sessions_and_approval_tokens() {
         "Retention",
         "Tester",
         None,
+        None,
         &hash("Password1!", bcrypt::DEFAULT_COST).unwrap(),
         anatolia_bis_server::roles::OPERATOR,
         true,
