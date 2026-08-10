@@ -632,6 +632,33 @@ Available to anyone who can view search results
 
 **`200 OK`**: `{ "items": [ <evidence item, same shape as above> ] }`.
 
+### Entity resolution
+
+#### `GET /api/v1/candidates/{candidate_id}/possible-duplicates`
+
+Requires `Authorization: Bearer <accessToken>` and
+`permission::can_view_search`. Conservative, **advisory-only** entity
+resolution over non-biometric signals (`server/src/entity_resolution.rs`):
+Jaro-Winkler name similarity (default threshold `0.90`) plus any
+candidates sharing an OSINT evidence URL with this one. Never merges or
+auto-links anything — it only surfaces other candidate records a human
+reviewer may want to compare, same "candidates, not verdicts" principle
+as biometric scores. Deliberately does not use the national ID field for
+matching — it's encrypted specifically so it can't be used for
+fuzzy/plaintext comparison (see `national_id.rs`).
+
+**`200 OK`**:
+```json
+{
+  "items": [
+    {
+      "candidateId": "...", "referenceCode": "...", "fullName": "...",
+      "nameSimilarity": 0.97, "sharedEvidenceUrls": []
+    }
+  ]
+}
+```
+
 ### Audit trail
 
 #### `GET /api/v1/audit`

@@ -18,6 +18,7 @@ use crate::db::{
     create_candidate, insert_template, list_templates_for_candidate, load_candidate_by_id,
     revoke_template, AppState, BiometricTemplateRow,
 };
+use crate::entity_resolution::{find_possible_duplicates, DEFAULT_NAME_SIMILARITY_THRESHOLD};
 use crate::error::{request_id, ApiError};
 use crate::permission;
 
@@ -278,6 +279,44 @@ pub async fn revoke_template_route(
             Json(json!({ "revoked": true })).into_response()
         }
         Ok(false) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
+        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    }
+}
+
+/// `GET /api/v1/candidates/{id}/possible-duplicates` — conservative
+/// entity resolution over non-biometric signals (name similarity, shared
+/// OSINT evidence URLs — see `entity_resolution.rs`). Advisory only: it
+/// never merges or auto-links candidate records, it only surfaces other
+/// candidates a human reviewer may want to compare.
+pub async fn possible_duplicates_route(
+    State(state): State<AppState>,
+    Path(candidate_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    let rid = request_id(&headers);
+    let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
+        return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
+    };
+    if !permission::can_view_search(&claims.role) {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
+    match find_possible_duplicates(
+        &state.backend,
+        &candidate_id,
+        DEFAULT_NAME_SIMILARITY_THRESHOLD,
+    )
+    .await
+    {
+        Ok(matches) => Json(json!({
+            "items": matches.iter().map(|m| json!({
+                "candidateId": m.candidate.id,
+                "referenceCode": m.candidate.reference_code,
+                "fullName": m.candidate.full_name,
+                "nameSimilarity": m.name_similarity,
+                "sharedEvidenceUrls": m.shared_evidence_urls,
+            })).collect::<Vec<_>>(),
+        }))
+        .into_response(),
         Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }
 }

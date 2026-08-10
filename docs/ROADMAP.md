@@ -155,9 +155,15 @@ the individual items.
       this environment); `candidate_evidence` storage and
       `POST/GET /api/v1/candidates/{id}/evidence[/collect]`. See `API.md`.
       **Not implemented**: a real connector, declared per-connector
-      authorization type/capabilities/rate limits, entity resolution over
-      the collected evidence, entity graph, reverse image search, and an
-      OSINT-specific frontend UI — each is its own, larger piece of work
+      authorization type/capabilities/rate limits, entity graph, reverse
+      image search, and an OSINT-specific frontend UI — each is its own,
+      larger piece of work
+- [x] Conservative entity resolution over non-biometric signals —
+      `server/src/entity_resolution.rs`,
+      `GET /api/v1/candidates/{id}/possible-duplicates`: Jaro-Winkler name
+      similarity plus shared OSINT-evidence-URL detection, advisory only
+      (never auto-merges/links candidates). Not implemented: phonetic
+      matching, a persisted entity graph
 - [x] Secondary verification workflow — `REQUIRE_SECOND_REVIEW` four-eyes
       policy (`db::record_review_decision`); see
       `docs/SECURITY_ARCHITECTURE.md`

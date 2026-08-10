@@ -495,11 +495,23 @@ eşleşme bu dosyanın sonunda listelidir.
   `GET /api/v1/candidates/{id}/evidence` endpoint'leri
   (`server/src/evidence.rs`), `permission::can_manage_candidates` /
   `can_view_search` ile aynı yetkilendirme desenini kullanıyor.
-  **Yapılmadı, kapsam dışı bırakıldı:** entity resolution (madde 13'te ayrı
-  iş kalemi), entity graph, reverse image search, OSINT'e özel frontend
-  UI — her biri kendi başına büyük bir iş; sahte bir implementasyonla
-  doldurmak CLAUDE.md'nin "never fake unimplemented capabilities"
-  kuralına aykırı olurdu.
+  **Yapılmadı, kapsam dışı bırakıldı:** entity graph, reverse image
+  search, OSINT'e özel frontend UI — her biri kendi başına büyük bir iş;
+  sahte bir implementasyonla doldurmak CLAUDE.md'nin "never fake
+  unimplemented capabilities" kuralına aykırı olurdu.
+
+- [x] **Entity resolution (konservatif, non-biometric sinyaller
+  üzerinden)** — `server/src/entity_resolution.rs`,
+  `GET /api/v1/candidates/{id}/possible-duplicates`. Jaro-Winkler isim
+  benzerliği (normalize edilmiş tam ad, varsayılan eşik `0.90`) ve
+  paylaşılan OSINT evidence URL'leri iki gerçek, çalışan sinyal olarak
+  kullanılıyor. **Hiçbir zaman otomatik birleştirme/bağlama yapmıyor** —
+  yalnızca bir insan reviewer'ın karşılaştırması için aday listesi
+  üretiyor, biyometrik skorlarla aynı "candidates, not verdicts" ilkesi.
+  National ID alanı kasıtlı olarak eşleştirmede kullanılmıyor — o alan
+  tam olarak fuzzy/plaintext eşleştirmeye kapatmak için şifrelendi
+  (`national_id.rs`). Bilinçli olarak yapılmayanlar: fonetik eşleştirme,
+  kalıcı bir entity graph — her ikisi de ayrı, daha büyük bir iş.
 
 ## P2 — Test
 

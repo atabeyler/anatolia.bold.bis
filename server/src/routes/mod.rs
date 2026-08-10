@@ -107,6 +107,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/:candidate_id/evidence",
             get(evidence::list_evidence_route),
+        )
+        .route(
+            "/:candidate_id/possible-duplicates",
+            get(candidates::possible_duplicates_route),
         );
 
     Router::new()

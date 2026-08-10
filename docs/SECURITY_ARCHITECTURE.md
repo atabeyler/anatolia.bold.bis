@@ -313,10 +313,25 @@ what these controls defend against.
     reviewer to weigh — same "candidates, not verdicts" principle as
     biometric scores.
   - **Not implemented** (each a separate, larger piece of work, not a
-    faked stand-in): entity resolution over collected evidence, an entity
-    graph, reverse image search, an OSINT-specific frontend UI, and a
-    real (non-mock) connector with declared per-connector authorization
-    type, capabilities, and rate limits.
+    faked stand-in): an entity graph, reverse image search, an
+    OSINT-specific frontend UI, and a real (non-mock) connector with
+    declared per-connector authorization type, capabilities, and rate
+    limits.
+- **Conservative entity resolution** (`server/src/entity_resolution.rs`,
+  `GET /api/v1/candidates/{id}/possible-duplicates`): two real, working
+  non-biometric signals — Jaro-Winkler name similarity over normalized
+  full names, and candidates that share an OSINT evidence URL — surface
+  other candidate records a human reviewer may want to compare. This is
+  strictly advisory: nothing here ever merges, links, or otherwise alters
+  a candidate record automatically, same "candidates, not verdicts"
+  principle as biometric scores. The national ID field is deliberately
+  never used for this matching — it exists as encrypted ciphertext plus a
+  deterministic lookup hash specifically to prevent fuzzy/plaintext
+  comparison (see the national ID encryption entry above), and using it
+  here would undermine that. Not implemented: phonetic name matching and
+  a persisted entity graph (a many-to-many resolved-identity structure) —
+  the current endpoint recomputes similarity on each request rather than
+  maintaining resolved clusters.
 - **Last-admin protection** (`server/src/admin.rs`
   `would_remove_last_admin`): `ban_user` and `delete_user_route` both check
   `db::count_active_system_admins` before acting and refuse

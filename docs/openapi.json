@@ -923,6 +923,24 @@
           }
         }
       }
+    },
+    "/api/v1/candidates/{candidateId}/possible-duplicates": {
+      "get": {
+        "summary": "Conservative, advisory entity resolution over non-biometric signals (name similarity, shared OSINT evidence)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {
