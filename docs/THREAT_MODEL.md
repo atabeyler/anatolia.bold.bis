@@ -32,7 +32,7 @@ lightweight STRIDE-style pass over the system's main assets.
   notification email doesn't go out).
 - **Backend ↔ biometric provider**: in-process, no network boundary for
   either implementation. The mock provider does no real inference. The
-  real provider (`BIOMETRIC_PROVIDER=onnx`, `docs/ROADMAP.md` Phase 4)
+  real provider (`BIOMETRIC_PROVIDER=onnx`)
   runs ONNX Runtime in-process too — inference stays server-side, never
   on-device, precisely so this boundary remains centrally governed and
   auditable rather than being pushed onto a client the operator doesn't
@@ -98,32 +98,26 @@ lightweight STRIDE-style pass over the system's main assets.
 | An admin locking the platform out of its own administration (banning/deleting the last admin) | `would_remove_last_admin` refuses the action with `409 Conflict`. |
 | A banned/deleted user's still-valid access token continuing to work | Ban and soft-delete both immediately revoke every active session for the account, not just future logins. |
 | Role-based route access bypass | `require_role` checked on every admin/search/candidate/audit route; RBAC roles are a fixed, closed set (`server/src/roles.rs`). |
-| **Not yet addressed**: revoking a *downgraded* (not banned/deleted) user's stale-privilege session | No role-change endpoint exists in the API today, so this specific gap has no live exploit path yet — but adding one without also revoking sessions on downgrade would reopen it. Tracked as `docs/HARDENING_CHECKLIST.md` item 11. |
+| A *downgraded* (not banned/deleted) user's stale-privilege session continuing to work | `POST /api/v1/admin/users/{id}/role` immediately revokes all of the user's active sessions, whether the change is a promotion or a demotion — a session issued under the old role can never keep working under stale claims. |
 
-## Explicitly out of scope today (tracked, not ignored)
+## Known gaps (tracked, not ignored)
 
-These are known gaps, not oversights — each has a reason it isn't done
-yet, recorded in `docs/HARDENING_CHECKLIST.md`:
-
-- **Organization/unit-scoped authorization** (item 12): every authorized
-  role currently sees all data platform-wide; there is no per-organization
-  data boundary. This is a large, deliberate architectural decision
-  awaiting the repository owner's input, not a hardening oversight.
-- **Real biometric matching** (items 20–26): a real `BiometricProvider`
-  (`BIOMETRIC_PROVIDER=onnx`, YuNet + SFace) now exists alongside the mock
+- **Real biometric matching**: a real `BiometricProvider`
+  (`BIOMETRIC_PROVIDER=onnx`, YuNet + SFace) exists alongside the mock
   one — see `docs/SECURITY_ARCHITECTURE.md` for what it does and does
   not guarantee. The mock provider is still the default; production
   requires an explicit `ALLOW_MOCK_BIOMETRICS=true` acknowledgment
   specifically so running it cannot be silently deployed and mistaken for
-  the real thing. What's still genuinely missing: duplicate-candidate
-  detection at enrollment time, and FAR/FRR/ROC calibration against a
-  real labeled dataset (none exists in this environment).
-- **MFA** (item 10): password-only authentication today.
-- **National ID protection at rest** (item 32): stored in plaintext, not
-  encrypted or masked in admin responses.
-- **OSINT/connector layer** (P2 appendix): not started — any future work
-  here must use only authorized, licensed data sources and must never
-  bypass a platform's own protections (login walls, CAPTCHAs, rate
+  the real thing, and the ONNX provider itself has not yet been exercised
+  as a live production deployment — see `docs/ENTERPRISE_DEPLOYMENT.md`.
+  FAR/FRR/ROC calibration tooling exists but cannot itself be verified
+  against a real labeled dataset (none exists in this environment).
+- **OSINT/connector layer**: web-search and news connectors have real,
+  non-mock implementations; a real `AuthorizedSocialProvider` does not —
+  every candidate social-platform API requires its own developer
+  agreement, not available in this environment. Any future
+  implementation must use only authorized, licensed data sources and must
+  never bypass a platform's own protections (login walls, CAPTCHAs, rate
   limits), per the project's own constraints.
 - **Database-level audit tamper resistance**: append-only is enforced in
   application code, not by database permissions (e.g. a `REVOKE UPDATE,

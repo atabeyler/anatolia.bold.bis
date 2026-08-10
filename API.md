@@ -60,9 +60,9 @@ a pushed commit to confirm a deployment has actually gone live.
 Readiness check: runs a trivial query against the real database backend.
 Use this, not `/api/health`, to gate whether traffic should be routed to
 this instance. Also reports the active biometric provider and search
-mode (item 1/2 in `docs/HARDENING_CHECKLIST.md`) — read-only facts about
-how this instance is configured, not signals of a degraded instance, so
-they're present on both `200` and `503` responses.
+mode — read-only facts about how this instance is configured, not
+signals of a degraded instance, so they're present on both `200` and
+`503` responses.
 
 **Response `200 OK`**
 ```json
@@ -218,7 +218,7 @@ public profile.
 
 ### Session/device management
 
-Item 12 in the V1 closure checklist: a self-service "where am I signed in"
+A self-service "where am I signed in"
 view over the same `sessions` table that already backs refresh-token
 rotation (`db/session.rs`) — no new storage, just new read/write access
 patterns over it.
@@ -402,7 +402,7 @@ never lock itself out of its own administration.
   Saving a threshold again for the same model name+version replaces the
   previous row rather than adding a new one.
 
-- `GET /api/v1/admin/connectors` — item 7 in the V1 closure checklist:
+- `GET /api/v1/admin/connectors` —
   read-only status of each OSINT connector slot (`web_search`, `news`,
   `social`). Response:
   `{ "items": [ { "slot": "web_search", "providerName": "brave-web-search", "isMock": false } ] }`.
@@ -468,9 +468,11 @@ Multipart form: `caseReference`, `purpose`, `image` (file), optional
 `topK` (integer; defaults to `SEARCH_DEFAULT_TOP_K`, clamped to
 `SEARCH_MAX_TOP_K` — never rejected for being too large, just capped), and
 optional `latitude`/`longitude` (the operator's captured geolocation, sent
-by the frontend from `useGeolocation`'s last known coordinate — see
-`docs/ROADMAP.md`'s "Operator geolocation"; either both coordinates must be
-present and in range, or neither — one without the other is
+by the frontend from `useGeolocation`'s last known coordinate — the
+sign-in screen requests it on load and shows an explicit "unavailable"
+message on denial rather than a synthetic fallback coordinate; either
+both coordinates must be present and in range, or neither — one without
+the other is
 **`400 Bad Request`** `errors.invalidCoordinates`). Requires `OPERATOR`,
 `REVIEWER`, `SECURITY_ADMIN`, or `SYSTEM_ADMIN`.
 
@@ -492,7 +494,7 @@ a fresh re-encode of the decoded pixel data, not the original upload
 bytes, which strips any EXIF/XMP metadata (GPS coordinates, device
 make/model, capture timestamp) the original file carried.
 
-**Async search flow (madde 18-19).** Validation (image, case reference,
+**Async search flow.** Validation (image, case reference,
 purpose, coordinates) happens synchronously and can still fail this
 request directly with `400`/`403` as described above. Once validation
 passes, the request does **not** wait for the biometric pipeline to run:
@@ -553,7 +555,7 @@ ranked candidates:
 | `POOR_LIGHTING` | Mean-brightness check failed (too dark or too bright). |
 | `LOW_FACE_QUALITY` | Detector confidence below the search-time threshold. |
 | `BIOMETRIC_PROVIDER_UNAVAILABLE` | The provider itself couldn't run (e.g. a transient inference error; startup-time model failures are a fail-closed process panic, not a runtime state). |
-| `AUDIT_WRITE_FAILED` | The search's own completion audit record failed to write — the search is downgraded to `failed` rather than ever reporting `completed` on an untrustworthy basis (madde 17's MANDATORY-audit guarantee, applied to the async path). |
+| `AUDIT_WRITE_FAILED` | The search's own completion audit record failed to write — the search is downgraded to `failed` rather than ever reporting `completed` on an untrustworthy basis (the MANDATORY-audit guarantee, applied to the async path). |
 
 #### `GET /api/v1/search/{search_id}/status`
 
@@ -621,7 +623,7 @@ the same candidate (see the history endpoint above). Returns the updated
 candidate row (current status only — fetch the history endpoint for the
 full trail).
 
-If `REQUIRE_SECOND_REVIEW=true` (four-eyes, madde 15): a `confirmed`/
+If `REQUIRE_SECOND_REVIEW=true` (four-eyes review): a `confirmed`/
 `rejected` decision on a candidate that isn't already
 `needs_second_review` only ever moves it *to* `needs_second_review` — it
 does not finalize it. A second, *different* reviewer's subsequent
@@ -703,10 +705,9 @@ is excluded from every future search — see `db::list_active_templates`.
 All routes below require `Authorization: Bearer <accessToken>`. Provider
 abstractions (`WebSearchProvider`/`NewsProvider`/`AuthorizedSocialProvider`),
 per-provider failure isolation, timeout/retry/circuit-breaker resilience,
-and real (non-mock) web-search and news providers are implemented — see
-item 6 in `docs/HARDENING_CHECKLIST.md`. Reverse image search and an
-OSINT-specific frontend workspace are separate, larger pieces of work and
-are not implemented here.
+and real (non-mock) web-search and news providers are implemented; a
+real `AuthorizedSocialProvider` and reverse image search are not — see
+`docs/ENTERPRISE_DEPLOYMENT.md`.
 
 #### `POST /api/v1/candidates/{candidate_id}/evidence/collect`
 
@@ -796,9 +797,8 @@ score, so a reviewer can judge the strength of a match themselves.
 
 ### Entity graph
 
-Item 10 in `docs/HARDENING_CHECKLIST.md`: candidate-centric relations to
-aliases, usernames, organizations, and websites
-(`server/src/db/entity_graph.rs`). A star graph around the candidate, not
+Candidate-centric relations to aliases, usernames, organizations, and
+websites (`server/src/db/entity_graph.rs`). A star graph around the candidate, not
 a general node-to-node graph. `website` relations are recorded
 automatically from evidence URLs (see above); `alias`/`username`/
 `organization` (and additional `website`) relations are recorded manually

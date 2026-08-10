@@ -3,8 +3,8 @@
 This document traces how data moves through the system for the two flows
 that matter most from a privacy/security standpoint: registration/
 authentication, and a biometric search. It describes what is actually
-implemented today — see `docs/ROADMAP.md` for what is planned but not yet
-built.
+implemented today — see `docs/ENTERPRISE_DEPLOYMENT.md` for what is
+planned but not yet built.
 
 ## Registration and admin approval
 
@@ -79,8 +79,8 @@ built.
 3. Once validation passes, a `queued` search row is written and the
    request returns **`202 Accepted`** immediately with that row's id —
    the biometric pipeline itself runs in a background task, not inline
-   with the request (madde 18-19's async search flow; see
-   `docs/SECURITY_ARCHITECTURE.md`). The caller polls `GET
+   with the request (see `docs/SECURITY_ARCHITECTURE.md`'s "Async search"
+   section). The caller polls `GET
    /api/v1/search/{id}/status` until the search leaves `queued`/
    `processing`.
 4. In that background task, the active `BiometricProvider`
@@ -101,14 +101,12 @@ built.
    rather than leaving a partial candidate list visible, and marks the
    search `failed` for traceability instead. There is no HTTP response
    left in-flight at this point, so a mandatory-audit write failure
-   (madde 17) downgrades a would-be `completed` search to `failed`
+   downgrades a would-be `completed` search to `failed`
    rather than reporting an untrustworthy success to a poller.
 6. The probe image bytes themselves are **not persisted** — they exist
    only for the duration of the background task, passed to the provider
-   and then dropped. Only the resulting scores and candidate references
-   are stored. (Retention/discard policy for a future real biometric provider
-   that may need to keep intermediate embeddings is tracked as planned
-   work — see `docs/ROADMAP.md` Phase 4.)
+   and then dropped, for both the mock and the real ONNX provider. Only
+   the resulting scores and candidate references are stored.
 7. Ranked candidates, once the poller observes `status: "completed"`, are
    **candidates, not verdicts** — every one of them is `pending` until a
    human reviewer acts.

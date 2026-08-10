@@ -1,8 +1,6 @@
-//! Candidate evidence storage (P2 OSINT appendix in
-//! `docs/HARDENING_CHECKLIST.md`): one row per evidence item collected by
+//! Candidate evidence storage: one row per evidence item collected by
 //! an `osint::EvidenceOrchestrator` run and attached to a candidate. Split
-//! out as its own domain module (see item 31 in
-//! `docs/HARDENING_CHECKLIST.md`).
+//! out as its own domain module.
 //!
 //! An evidence row is never a verdict about the candidate — same
 //! "candidates, not verdicts" principle as biometric scores in

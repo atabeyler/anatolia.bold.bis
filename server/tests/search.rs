@@ -117,7 +117,7 @@ async fn seed_admin_and_login(app: &axum::Router, user_code: &str) -> String {
         .to_string()
 }
 
-/// Submits a search (async flow, madde 18-19: `POST /api/v1/search/face`
+/// Submits a search (async flow: `POST /api/v1/search/face`
 /// returns `202 Accepted` immediately) and polls
 /// `GET /api/v1/search/{id}/status` until the background pipeline leaves
 /// `queued`/`processing`, returning the final `{ "search": ..., "candidates": [...] }`

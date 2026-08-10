@@ -266,7 +266,7 @@ Implemented controls:
   with regression tests covering the previously-unchecked paths
   (`server/tests/entity_graph.rs`).
 
-## Planned (see `docs/ROADMAP.md` and `docs/SECURITY_ARCHITECTURE.md`)
+## Planned (see `docs/SECURITY_ARCHITECTURE.md`)
 
 Enterprise SSO, SCIM provisioning, thin Android/iOS clients, and a real
 `AuthorizedSocialProvider` are designed but not yet implemented. Do not

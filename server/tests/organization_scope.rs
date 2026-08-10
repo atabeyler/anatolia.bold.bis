@@ -1,5 +1,5 @@
 //! Object-level authorization tests for the organization/unit model
-//! (madde 12-13): a member of one organization must never be able to see
+//!: a member of one organization must never be able to see
 //! another organization's searches or audit events, regardless of role —
 //! except SYSTEM_ADMIN, the one explicit global exception. Legacy/
 //! unassigned (orgless) data stays visible to everyone the role check
@@ -180,7 +180,7 @@ async fn create_search(app: &axum::Router, token: &str, case_reference: &str) ->
         )
         .await
         .unwrap();
-    // Async search flow (madde 18-19): accepted immediately; poll until
+    // Async search flow: accepted immediately; poll until
     // the background pipeline has produced candidates, since several
     // callers below immediately fetch this search's candidates.
     assert_eq!(response.status(), StatusCode::ACCEPTED);

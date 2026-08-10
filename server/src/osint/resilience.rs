@@ -1,5 +1,5 @@
 //! Generic timeout/retry/circuit-breaker behavior for real OSINT
-//! providers (item 6 in `docs/HARDENING_CHECKLIST.md`). Deliberately not
+//! providers. Deliberately not
 //! provider-specific: `RealWebSearchProvider`/`RealNewsProvider` both
 //! wrap their HTTP call through `CircuitBreaker::call`, so a struggling
 //! upstream (timeouts, 5xx errors) degrades the same way regardless of

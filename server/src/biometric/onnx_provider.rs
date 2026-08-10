@@ -9,8 +9,7 @@
 //! thread rather than being offloaded to a dedicated blocking pool (e.g.
 //! `tokio::task::spawn_blocking`) — under concurrent load this can starve
 //! other requests on the same worker thread. This is a real performance
-//! gap, not something this module claims to have solved; see madde 44
-//! (performance work) in `docs/HARDENING_CHECKLIST.md`.
+//! gap, not something this module claims to have solved.
 
 use std::path::PathBuf;
 use std::sync::Mutex;

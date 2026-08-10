@@ -1,5 +1,4 @@
-//! `db::purge_expired_auth_records` (item 58 in
-//! `docs/HARDENING_CHECKLIST.md`): expired `sessions`/`approval_tokens`
+//! `db::purge_expired_auth_records`: expired `sessions`/`approval_tokens`
 //! rows are deleted, unexpired ones are left alone.
 
 use anatolia_bis_server::db;

@@ -1,5 +1,5 @@
-//! Identity/user-account domain (docs/HARDENING_CHECKLIST.md item 31):
-//! the `users` table and every query against it — lookup, listing,
+//! Identity/user-account domain: the `users` table and every query
+//! against it — lookup, listing,
 //! creation, moderation flags (approve/ban/role), profile edits, password
 //! updates, and soft/hard delete. Split out of `db/mod.rs` as its own
 //! domain module, following the same boundary `db/audit.rs` established
@@ -220,8 +220,7 @@ pub async fn list_users(backend: &DbBackend) -> Result<Vec<UserRow>, sqlx::Error
 
 const USER_PAGE_MAX_SIZE: i64 = 200;
 
-/// Server-side paginated variant of `list_users` — see item 30 in
-/// `docs/HARDENING_CHECKLIST.md`. `list_users` (unpaged) is kept for
+/// Server-side paginated variant of `list_users`. `list_users` (unpaged) is kept for
 /// callers (e.g. `count_active_system_admins`-adjacent internal checks)
 /// that genuinely need every row; `GET /api/v1/admin/users` uses this one.
 pub async fn list_users_page(

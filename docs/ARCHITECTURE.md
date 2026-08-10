@@ -47,7 +47,7 @@ anatolia.bold.bis/
   (refresh-token sessions and approval tokens). Connection setup, schema
   migration, and the search/candidate/verification tables — more
   interdependent with the others than a mechanical split allows — still
-  live in `db/mod.rs`; see item 31 in `docs/HARDENING_CHECKLIST.md`.
+  live in `db/mod.rs`.
 - **Background jobs**: a retention task (`main.rs::spawn_retention_job`)
   purges expired `sessions`/`approval_tokens` rows on a fixed interval
   (`db::purge_expired_auth_records`); configurable via

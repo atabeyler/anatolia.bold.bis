@@ -1,4 +1,4 @@
-//! Biometric threshold calibration/evaluation math (madde 25): real,
+//! Biometric threshold calibration/evaluation math: real,
 //! working FAR/FRR/ROC/EER/AUC computation over caller-supplied scored
 //! pairs. This module cannot and does not claim to produce a real-world
 //! accuracy number for this deployment's biometric provider — that would

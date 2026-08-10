@@ -1,5 +1,4 @@
-//! Threshold calibration/evaluation CLI (madde 25, extended by item 3 in
-//! the newer V1-closure checklist). Reads a CSV of `score,label` pairs
+//! Threshold calibration/evaluation CLI. Reads a CSV of `score,label` pairs
 //! and reports FAR/FRR at the observed thresholds, the equal-error-rate
 //! point, and AUC — see `calibration.rs` for what this math does and
 //! does not prove (it verifies the calibration math itself, not this

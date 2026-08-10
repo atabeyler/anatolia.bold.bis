@@ -1,5 +1,5 @@
-//! `GET /api/v1/admin/biometric-thresholds` (item 3 in the V1-closure
-//! checklist): admin-only visibility into calibrated FAR/FRR thresholds
+//! `GET /api/v1/admin/biometric-thresholds`: admin-only visibility into
+//! calibrated FAR/FRR thresholds
 //! recorded by `server/src/bin/calibrate.rs --save-threshold`.
 
 use anatolia_bis_server::{db, db::AppState, routes};

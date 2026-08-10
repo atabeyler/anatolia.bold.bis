@@ -1,4 +1,4 @@
-//! Four-eyes / second-review policy (madde 15): when
+//! Four-eyes / second-review policy: when
 //! `AppState::require_second_review` is `true`, a candidate's first
 //! confirm/reject decision only moves it to `needs_second_review`; a
 //! second, different reviewer's decision is what actually finalizes it.
@@ -131,7 +131,7 @@ async fn create_search(app: &axum::Router, token: &str, case_reference: &str) ->
         )
         .await
         .unwrap();
-    // Async search flow (madde 18-19): the search is accepted immediately
+    // Async search flow: the search is accepted immediately
     // and the biometric pipeline runs in a background task — poll
     // GET /api/v1/search/{id}/status until it leaves queued/processing.
     assert_eq!(response.status(), StatusCode::ACCEPTED);

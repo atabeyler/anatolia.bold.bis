@@ -1,15 +1,16 @@
-//! OSINT/evidence provider abstraction (P2 "Connector / OSINT Katmanı"
-//! appendix in `docs/HARDENING_CHECKLIST.md` — planned as its own
-//! milestone, unstarted before this). This module implements a first,
-//! deliberately scoped slice of it: provider abstractions
+//! OSINT/evidence provider abstraction: provider traits
 //! (`WebSearchProvider`/`NewsProvider`/`AuthorizedSocialProvider`), a
 //! `SourceRegistry` of which named sources are actually enabled, a mock
-//! implementation of each (no real external API calls — this environment
-//! has no authorized OSINT API access), and an orchestrator that isolates
-//! one provider's failure from the others. Entity resolution over the
-//! collected evidence, an entity graph, reverse image search, and an
-//! OSINT-specific frontend UI are explicitly out of scope here — each is
-//! its own, larger piece of work.
+//! implementation of each, real implementations for web search (Brave
+//! Search API) and news (NewsAPI.org), and an orchestrator that isolates
+//! one provider's failure from the others. `AuthorizedSocialProvider`
+//! remains mock-only — every real candidate social-platform API requires
+//! its own developer agreement, not available in this environment. Entity
+//! resolution over the collected evidence, an entity graph, and a
+//! per-candidate frontend workspace exist elsewhere in the codebase (see
+//! `entity_resolution.rs`, `db/entity_graph.rs`,
+//! `client/src/components/OsintWorkspace.tsx`); reverse image search does
+//! not.
 //!
 //! Mirrors the `biometric` module's shape: a trait per capability, a
 //! `Mock*` implementation for every trait, and a real implementation
@@ -198,11 +199,10 @@ impl EvidenceOrchestrator {
     }
 
     /// Read-only visibility into which provider is actually active in
-    /// each slot (item 7 in the V1 closure checklist — "connector
-    /// management API", scoped to status reporting since configuration
+    /// each slot — scoped to status reporting since configuration
     /// itself stays environment-variable-based, the same pattern every
     /// other provider toggle in this codebase already uses; see
-    /// `from_env`'s doc comment). A provider counts as mock when its own
+    /// `from_env`'s doc comment. A provider counts as mock when its own
     /// `name()` carries the `mock-` prefix every `Mock*` implementation in
     /// `osint::mock` uses — there is no separate "is this real" flag to
     /// drift out of sync with that naming.

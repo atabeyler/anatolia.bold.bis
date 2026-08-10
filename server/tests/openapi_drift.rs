@@ -1,5 +1,4 @@
-//! Docs-drift guard for `docs/openapi.json` (item 40 in
-//! `docs/HARDENING_CHECKLIST.md`): every path/method listed there must
+//! Docs-drift guard for `docs/openapi.json`: every path/method listed there must
 //! correspond to a route the router actually serves. This won't catch a
 //! route added to `routes::router` and never documented (axum 0.7 doesn't
 //! expose a way to enumerate a built `Router`'s paths), but it does catch

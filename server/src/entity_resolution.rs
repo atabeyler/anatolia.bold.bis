@@ -15,8 +15,7 @@
 //!   pointing at the same URL are flagged — two people who otherwise look
 //!   different but share a source is a genuine (if weak) resolution
 //!   signal.
-//! - **Shared entity-graph relation** (item 9 in
-//!   `docs/HARDENING_CHECKLIST.md`): candidates that share the same
+//! - **Shared entity-graph relation**: candidates that share the same
 //!   recorded `alias`, `username`, or `organization` value (see
 //!   `db::entity_graph`) — same normalization as name comparison
 //!   (lowercased, whitespace-collapsed), compared per relation type so a

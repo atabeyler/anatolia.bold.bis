@@ -1,5 +1,5 @@
-//! Comparative test for the pgvector-indexed biometric search path (item
-//! 2 in `docs/HARDENING_CHECKLIST.md`): on a small dataset, the indexed
+//! Comparative test for the pgvector-indexed biometric search path: on a
+//! small dataset, the indexed
 //! HNSW/pgvector search and the existing brute-force in-memory scan must
 //! agree on both ranking and (near enough) score.
 //!

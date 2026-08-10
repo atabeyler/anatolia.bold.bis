@@ -146,8 +146,8 @@ pub async fn list_users(
 }
 
 /// `GET /api/v1/admin/biometric-thresholds` — every model/version that
-/// has had a real `calibrate --save-threshold` run against it (item 3 in
-/// the hardening checklist). Advisory only — see
+/// has had a real `calibrate --save-threshold` run against it.
+/// Advisory only — see
 /// `db::BiometricThresholdRow`'s doc comment: nothing reads this table to
 /// gate a search result, it exists purely so a real calibration run's
 /// result is visible to an administrator rather than left in a terminal.
@@ -166,8 +166,8 @@ pub async fn list_biometric_thresholds(
     }
 }
 
-/// `GET /api/v1/admin/connectors` — item 7 in the V1 closure checklist:
-/// read-only visibility into which OSINT connector is active in each
+/// `GET /api/v1/admin/connectors` — read-only visibility into which
+/// OSINT connector is active in each
 /// provider slot (web search, news, social) and whether it's real or the
 /// mock fallback. See `osint::EvidenceOrchestrator::provider_status`'s
 /// doc comment for why this stops at reporting rather than adding
@@ -592,7 +592,7 @@ pub struct ChangeRolePayload {
 /// issued under the old role must never keep working under either the
 /// old permission set (a stale downgrade) or an unexpectedly different
 /// one (a stale upgrade) — the account must re-authenticate to pick up
-/// its new claims. See docs/HARDENING_CHECKLIST.md item 11.
+/// its new claims.
 pub async fn change_role_route(
     State(state): State<AppState>,
     Path(id): Path<String>,

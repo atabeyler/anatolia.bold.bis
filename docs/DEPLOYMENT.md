@@ -140,7 +140,7 @@ account for.
 `biometric_templates` deserves the same handling care as `national_id`:
 it stores each enrolled candidate's face embedding vector (on Postgres,
 also mirrored into a native `vector(128)` column for the indexed search
-path — see `docs/HARDENING_CHECKLIST.md` item 2). A leaked backup exposes
+path). A leaked backup exposes
 biometric data, not just account records — encrypt and store it with at
 least the same rigor described below, and restrict who can request a
 restore. Probe images uploaded to `POST /api/v1/search/face` themselves

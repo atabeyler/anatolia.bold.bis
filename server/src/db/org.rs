@@ -1,5 +1,5 @@
-//! Organization / organization-unit model (madde 12-13). Split out as its
-//! own domain module (see item 31 in `docs/HARDENING_CHECKLIST.md`).
+//! Organization / organization-unit model, split out as its own domain
+//! module.
 //!
 //! - `organizations`: the top-level tenant/institution.
 //! - `organization_units`: an optional hierarchy underneath an
@@ -384,7 +384,7 @@ pub async fn user_organization_ids(
 /// The organization a newly-created resource (a search, an audit event)
 /// should be stamped with: the first organization `user_id` is a member
 /// of, or `None` if they belong to none. Deliberately server-derived —
-/// never accepts a client-supplied organization id (madde 13).
+/// never accepts a client-supplied organization id.
 pub async fn primary_organization_id(
     backend: &DbBackend,
     user_id: &str,

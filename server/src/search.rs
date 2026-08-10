@@ -71,7 +71,7 @@ fn verification_event_json(event: &VerificationEventRow) -> serde_json::Value {
 }
 
 /// `POST /api/v1/search/face` — multipart form: `caseReference`, `purpose`,
-/// `image`, optional `topK`. Async search flow (madde 18-19): validates
+/// `image`, optional `topK`. Async search flow: validates
 /// the probe image and request synchronously (fast — no biometric
 /// inference yet), writes a `queued` search row, and returns
 /// **`202 Accepted`** with that row's id immediately. The (potentially
@@ -166,7 +166,7 @@ pub async fn create_search_route(
         _ => claims.user_code.clone(),
     };
     // Server-derived only — never accepted from the client. See
-    // permission::can_view_scoped_resource / madde 13.
+    // permission::can_view_scoped_resource.
     let organization_id = crate::db::primary_organization_id(&state.backend, &claims.id)
         .await
         .ok()
@@ -416,7 +416,7 @@ pub async fn list_searches_route(
     if !permission::can_view_search(&claims.role) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
-    // Object-level authorization (madde 12-13): SYSTEM_ADMIN sees every
+    // Object-level authorization: SYSTEM_ADMIN sees every
     // organization's searches; everyone else only sees their own
     // organization's (plus any search with no owning organization at
     // all — see db::push_search_org_scope_pg/_sqlite).
@@ -649,7 +649,7 @@ async fn review(
                 "inconclusive" => action::CANDIDATE_MARKED_INCONCLUSIVE,
                 _ => action::CANDIDATE_REJECTED,
             };
-            // MANDATORY: a verification decision (madde 17) must never be
+            // MANDATORY: a verification decision must never be
             // reported as successful if its audit trail entry failed to
             // write — see AuditRecorder::save_mandatory.
             if let Err(mut err) =

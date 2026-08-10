@@ -129,7 +129,7 @@ async fn candidates_sharing_an_alias_are_surfaced_even_with_dissimilar_names() {
     let second_id = create_candidate(&app, &token, "RC-ENTRES-006", "Totally Unrelated Name").await;
     create_candidate(&app, &token, "RC-ENTRES-007", "Another Unrelated Name").await;
 
-    // Item 9 in docs/HARDENING_CHECKLIST.md: a shared entity-graph
+    // A shared entity-graph
     // relation (alias, username, or organization) is its own resolution
     // signal, independent of name similarity.
     for id in [&first_id, &second_id] {

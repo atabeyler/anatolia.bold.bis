@@ -60,7 +60,7 @@ pub mod action {
     pub const CANDIDATE_CONFIRMED: &str = "CANDIDATE_CONFIRMED";
     pub const CANDIDATE_REJECTED: &str = "CANDIDATE_REJECTED";
     pub const CANDIDATE_MARKED_INCONCLUSIVE: &str = "CANDIDATE_MARKED_INCONCLUSIVE";
-    // Four-eyes review (madde 15) — only emitted when REQUIRE_SECOND_REVIEW=true.
+    // Four-eyes review — only emitted when REQUIRE_SECOND_REVIEW=true.
     pub const CANDIDATE_FIRST_REVIEW_RECORDED: &str = "CANDIDATE_FIRST_REVIEW_RECORDED";
     pub const CANDIDATE_SECOND_REVIEW_DENIED: &str = "CANDIDATE_SECOND_REVIEW_DENIED";
 
@@ -71,7 +71,7 @@ pub mod action {
     // Audit trail access itself
     pub const AUDIT_LOG_VIEWED: &str = "AUDIT_LOG_VIEWED";
 
-    // Organization / unit administration (madde 12-13)
+    // Organization / unit administration
     pub const ORGANIZATION_CREATED: &str = "ORGANIZATION_CREATED";
     pub const ORGANIZATION_UNIT_CREATED: &str = "ORGANIZATION_UNIT_CREATED";
     pub const MEMBERSHIP_ASSIGNED: &str = "MEMBERSHIP_ASSIGNED";
@@ -211,7 +211,7 @@ impl AuditRecorder {
         }
     }
 
-    /// Resolves the acting user's organization (madde 12-13) so the
+    /// Resolves the acting user's organization so the
     /// stored event can be scoped the same way the resource it concerns
     /// is. `None` for an event with no actor, or an actor with no
     /// membership — those events remain visible to every role that could
@@ -229,7 +229,7 @@ impl AuditRecorder {
     /// for events whose loss, while undesirable, must not itself take down
     /// the request that triggered them (e.g. a login attempt). See
     /// `save_mandatory` for the alternative used by security-critical
-    /// actions (madde 17 — MANDATORY vs BEST_EFFORT).
+    /// actions (MANDATORY vs BEST_EFFORT).
     pub async fn save(self, state: &AppState) {
         let organization_id = self.resolve_organization_id(state).await;
         let event = self.to_new_event(organization_id.as_deref());
@@ -240,8 +240,7 @@ impl AuditRecorder {
 
     /// For actions the instructions classify as MANDATORY (biometric
     /// search, candidate enrollment/revocation, verification decisions,
-    /// role/permission changes, account ban/unban, MFA reset, sensitive
-    /// export — see item 17 in `docs/HARDENING_CHECKLIST.md`): propagates
+    /// role/permission changes, account ban/unban, MFA reset): propagates
     /// a write failure instead of swallowing it, so the caller can refuse
     /// to report the triggering operation as successful. This does not
     /// roll back a database write the operation itself already committed
@@ -363,7 +362,7 @@ pub async fn list_audit_events_route(
         return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
     }
 
-    // Object-level authorization (madde 12-13): holding a global audit
+    // Object-level authorization: holding a global audit
     // role (AUDITOR/SECURITY_ADMIN) does not by itself grant visibility
     // into every organization's events — only SYSTEM_ADMIN is exempt.
     let org_scope = if claims.role == crate::roles::SYSTEM_ADMIN {

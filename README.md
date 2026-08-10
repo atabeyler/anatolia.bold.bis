@@ -13,58 +13,42 @@ authorized institutional use.
 
 ## Project Status
 
-**Phases 1–5 substantially complete; Phase 6 (hardening) in progress.**
-See `docs/ROADMAP.md` for the authoritative, item-by-item status — this
-section is a summary, not the source of truth.
+Authentication and access control are built on JWT auth
+(register/login/refresh/logout/logout-all) backed by real server-side
+sessions with refresh-token rotation and reuse detection, bcrypt password
+hashing, TOTP multi-factor authentication, self-service session/device
+management, RBAC (`SYSTEM_ADMIN`, `SECURITY_ADMIN`, `OPERATOR`,
+`REVIEWER`, `AUDITOR`), an organization/unit model with object-level
+authorization, and an admin-approval workflow for new registrations — see
+`API.md` and `docs/SECURITY_ARCHITECTURE.md`. Every security- or
+case-relevant action is recorded to an append-only, hash-chained audit
+trail with an on-demand integrity check.
 
-- **Authentication & access control**: JWT auth (register/login/refresh/
-  logout/logout-all) backed by real server-side sessions with
-  refresh-token rotation and reuse detection, bcrypt password hashing,
-  TOTP multi-factor authentication (voluntary for any role, mandatory for
-  configured roles), self-service session/device management (list and
-  revoke individual sessions), RBAC (`SYSTEM_ADMIN`, `SECURITY_ADMIN`,
-  `OPERATOR`, `REVIEWER`, `AUDITOR`), an organization/unit model with
-  object-level authorization, an admin-approval workflow for new
-  registrations, layered rate limiting, and a production-only
-  CSP/Permissions-Policy/HSTS header set — see `API.md` and
-  `docs/SECURITY_ARCHITECTURE.md`.
-- **Audit trail**: every security- or case-relevant action is recorded to
-  an append-only, hash-chained audit trail with an on-demand integrity
-  check, browsable at `GET /api/v1/audit` and in a dedicated frontend
-  screen.
-- **Biometric search**: real, non-mock face detection/embedding (YuNet +
-  SFace via ONNX Runtime) is implemented behind the `BiometricProvider`
-  trait, selected via `BIOMETRIC_PROVIDER=onnx` and the `onnx-provider`
-  Cargo feature — **not the default**, and **not yet exercised as a live
-  production deployment** (see `docs/ROADMAP.md` Phase 4 and
-  `docs/ENTERPRISE_DEPLOYMENT.md`). `MockBiometricProvider` remains the
-  default, deterministic, non-biometric stand-in behind the same trait.
-  Vector search runs a correct in-memory scan everywhere, plus a native
-  `pgvector`-indexed path on PostgreSQL when the extension is available.
-- **OSINT/evidence**: real (non-mock) web-search and news connectors,
-  independently enabled per API key, wrapped in a timeout/retry/circuit-breaker;
-  conservative entity resolution (possible-duplicate detection) and a
-  candidate-centric entity graph (aliases/usernames/organizations/websites),
-  both advisory-only. A per-candidate OSINT workspace in the frontend
-  drives evidence collection and entity-graph editing.
-  A real `AuthorizedSocialProvider` is not implemented — every
-  candidate social-platform API requires its own developer agreement not
-  available in this environment.
-- **Administration**: user management, organization/unit management,
-  system diagnostics (readiness, calibrated biometric thresholds, OSINT
-  connector status, on-demand audit-integrity check) in a tabbed admin
-  panel.
-- **Verified**: backend integration tests (auth, sessions, search,
-  review, audit, organizations, entity graph, entity resolution,
-  calibration, connectors, and a full end-to-end registration → search →
-  review → evidence → entity-graph → audit-integrity scenario) + clippy +
-  `cargo fmt --check`, frontend typecheck + tests + build + lint, all
-  passing in CI (`.github/workflows/ci.yml`).
-- **Not yet implemented**: occlusion detection (no reliable heuristic
-  without a trained model), a real `AuthorizedSocialProvider`, reverse
-  image search, enterprise SSO, thin Android/iOS clients, automated
-  backups. See `docs/ROADMAP.md` for the complete list with rationale for
-  each gap.
+Biometric search runs behind a `BiometricProvider` trait: a deterministic
+mock implementation by default, and a real, non-mock ONNX-based
+implementation (YuNet detection + SFace embedding) opt-in via
+`BIOMETRIC_PROVIDER=onnx` and the `onnx-provider` Cargo feature — not yet
+exercised as a live production deployment, see
+`docs/ENTERPRISE_DEPLOYMENT.md`. Vector search runs a correct in-memory
+scan everywhere, plus a native `pgvector`-indexed path on PostgreSQL when
+the extension is available.
+
+OSINT/evidence collection has real (non-mock) web-search and news
+connectors, independently enabled per API key; conservative entity
+resolution and a candidate-centric entity graph (aliases, usernames,
+organizations, websites) surface possible duplicates and related
+identifiers, both advisory-only, editable from a per-candidate OSINT
+workspace in the frontend. Administration covers user management,
+organization/unit management, and system diagnostics (readiness,
+calibrated biometric thresholds, OSINT connector status, an on-demand
+audit-integrity check) in a tabbed admin panel.
+
+Not yet implemented: occlusion detection (no reliable heuristic exists
+without a trained model), a real `AuthorizedSocialProvider` (every
+candidate social-platform API requires its own developer agreement),
+reverse image search, enterprise SSO, thin Android/iOS clients, and
+automated backups — see `docs/ENTERPRISE_DEPLOYMENT.md` for the fuller
+picture.
 
 This README is expanded as each part of the system is actually built — it
 never describes a feature, endpoint, or integration ahead of the code that
@@ -162,9 +146,6 @@ hardcoded.
   reads, what it controls, and whether it's required in production.
 - `docs/I18N.md` — the internationalization system and how to add a
   translation key.
-- `docs/ROADMAP.md` — the authoritative, phase-by-phase implementation
-  status; `docs/HARDENING_CHECKLIST.md` is the detailed session-by-session
-  hardening log behind it.
 
 ---
 

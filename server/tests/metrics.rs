@@ -1,4 +1,4 @@
-//! `GET /metrics` (madde 26 — observability): exercises the endpoint
+//! `GET /metrics`: exercises the endpoint
 //! end to end, including the optional `METRICS_TOKEN` gate.
 
 use anatolia_bis_server::{db::AppState, routes};

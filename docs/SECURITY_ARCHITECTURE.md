@@ -307,14 +307,17 @@ what these controls defend against.
     fake template. Revoking a template (`.../templates/{id}/revoke`)
     excludes it from future searches but keeps its row for audit history.
     Duplicate-candidate detection against existing templates at
-    enrollment time is implemented (item 23 in
-    `docs/HARDENING_CHECKLIST.md`) — a soft warning only, never a block.
+    enrollment time is implemented — a soft warning only, never a block.
     FAR/FRR/ROC calibration tooling exists (`server/src/calibration.rs`,
-    `server/src/bin/calibrate.rs`) but cannot itself be run against this
-    deployment's real-world accuracy — no authorized labeled dataset
-    exists in this environment to calibrate against.
-  - **Indexed search on PostgreSQL** (item 2 in
-    `docs/HARDENING_CHECKLIST.md`, `server/src/db/biometric.rs`): in
+    `server/src/bin/calibrate.rs`, supporting `--format text|json|csv`
+    and, with `--model-name`/`--model-version`/`--save-threshold`,
+    persisting the computed threshold to a `biometric_thresholds` table
+    visible to admins at `GET /api/v1/admin/biometric-thresholds`), but
+    it cannot itself be run against this deployment's real-world
+    accuracy — no authorized labeled dataset exists in this environment
+    to calibrate against; an operator with real labeled data runs the
+    CLI against it before trusting a threshold in production.
+  - **Indexed search on PostgreSQL** (`server/src/db/biometric.rs`): in
     addition to the JSON-column brute-force scan above, each template's
     embedding is also written to a native `vector(128)` column, indexed
     with `pgvector`'s HNSW index (cosine distance).
@@ -327,10 +330,7 @@ what these controls defend against.
     0.6 instance: the indexed and brute-force paths agree on ranking and
     score for a small dataset (`server/tests/pgvector_search.rs`).
 - **OSINT/evidence provider layer** (`server/src/osint/`,
-  `server/src/db/evidence.rs`, `server/src/evidence.rs`) — the P2
-  "Connector / OSINT Katmanı" appendix in
-  `docs/HARDENING_CHECKLIST.md`, which was entirely unstarted before this
-  work began:
+  `server/src/db/evidence.rs`, `server/src/evidence.rs`):
   - **Provider abstraction**: `WebSearchProvider`/`NewsProvider`/
     `AuthorizedSocialProvider` traits (same `#[async_trait]` shape as
     `BiometricProvider`), plus `SourceRegistry` reporting which named
@@ -348,8 +348,7 @@ what these controls defend against.
     evidence or fails the whole `POST .../evidence/collect` request. The
     response reports per-provider failures in `providerErrors` rather
     than silently dropping them.
-  - **Real web-search and news providers** (item 6 in
-    `docs/HARDENING_CHECKLIST.md`): `server/src/osint/websearch.rs`
+  - **Real web-search and news providers**: `server/src/osint/websearch.rs`
     (Brave Search API) and `server/src/osint/news.rs` (NewsAPI.org) —
     official, documented REST APIs, never scraping. Each is used only
     when its API key (`BRAVE_SEARCH_API_KEY`/`NEWS_API_KEY`) is
@@ -377,14 +376,14 @@ what these controls defend against.
     evidence or manage the entity graph from the UI. Connector status
     (which provider is active per slot, real or mock) is visible
     read-only to admins at `GET /api/v1/admin/connectors` — see "Entity
-    graph" below and `docs/ROADMAP.md` Phase 5.
+    graph" below.
   - **Not implemented** (each a separate, larger piece of work, not a
     faked stand-in): reverse image search, a real
     `AuthorizedSocialProvider`, and per-connector rate-limit
     *configuration* (status is read-only; there is no runtime-tunable
     rate limit to change today).
-- **Entity graph** (item 10 in `docs/HARDENING_CHECKLIST.md`,
-  `server/src/db/entity_graph.rs`, `server/src/entity_graph.rs`):
+- **Entity graph** (`server/src/db/entity_graph.rs`,
+  `server/src/entity_graph.rs`):
   candidate-centric relations to aliases, usernames, organizations, and
   websites — a star graph around the candidate, not a general
   node-to-node graph, so listing a candidate's relations is a single
@@ -457,8 +456,8 @@ what these controls defend against.
   (below) is a real, persisted relation structure, but it is not a
   resolved-identity/clustering system.
 - **Role change with immediate session revoke** (`POST
-  /api/v1/admin/users/{id}/role`, `server/src/admin.rs::change_role_route`,
-  item 11): every active session for the target account is revoked the
+  /api/v1/admin/users/{id}/role`, `server/src/admin.rs::change_role_route`):
+  every active session for the target account is revoked the
   moment its role changes, for a promotion as much as a demotion — a
   session token issued under the old role must never keep answering to
   either a stale set of permissions or an unexpectedly different one. The
@@ -536,9 +535,9 @@ what these controls defend against.
   (`nationalIdTouched`) so re-submitting the masked display value on an
   unrelated field change can never overwrite the real stored value. The
   old plaintext `national_id` column is left in the schema (unused,
-  un-backfilled) rather than force-migrated — see item 20 in
-  `docs/HARDENING_CHECKLIST.md` for what a follow-up backfill/drop would
-  need to decide. There is no key-rotation tool: rotating
+  un-backfilled) rather than force-migrated — a follow-up backfill/drop
+  is a deliberate future decision, not an oversight. There is no
+  key-rotation tool: rotating
   `NATIONAL_ID_ENCRYPTION_KEY` makes every existing `national_id_encrypted`
   value undecryptable.
 - **Cross-tab sign-out sync** (`client/src/services/authBroadcast.ts`,
@@ -560,8 +559,7 @@ what these controls defend against.
   `db::purge_expired_auth_records`): deletes `sessions`/`approval_tokens`
   rows past their `expires_at` on a fixed interval (default hourly, an
   initial pass 30s after startup). Neither table is ever read once a row
-  is expired, so this is pure storage hygiene, not a behavior change —
-  see item 58 in `docs/HARDENING_CHECKLIST.md`.
+  is expired, so this is pure storage hygiene, not a behavior change.
 - **Paginated admin user list** (`GET /api/v1/admin/users`): now
   server-side paginated the same way search history and the audit trail
   already were, closing the one previously-deliberate exception noted
@@ -631,9 +629,8 @@ what these controls defend against.
 
 ## Not yet implemented
 
-Enterprise SSO is planned (see `docs/ROADMAP.md`) but not present in the
-codebase yet. Do not assume it is active. Async search (item 57) is now
-implemented — see "Async search with a real status state machine" above.
+Enterprise SSO is planned but not present in the codebase yet — see
+`docs/ENTERPRISE_DEPLOYMENT.md`. Do not assume it is active.
 The audit hash chain is tamper-*evident*, not tamper-*proof*: there is no
 dedicated append-only database role/permission grant for `audit_events`
 yet, so an operator with direct database `UPDATE`/`DELETE` privileges can

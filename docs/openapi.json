@@ -414,7 +414,7 @@
     },
     "/api/v1/search/face": {
       "post": {
-        "summary": "Submit a probe image; accepted for async biometric processing (madde 18-19)",
+        "summary": "Submit a probe image; accepted for async biometric processing",
         "security": [
           {
             "bearerAuth": []
@@ -1112,7 +1112,7 @@
     },
     "/api/v1/search/{searchId}/status": {
       "get": {
-        "summary": "Poll a search's current status/candidates (async search flow, madde 18-19)",
+        "summary": "Poll a search's current status/candidates (async search flow)",
         "security": [
           {
             "bearerAuth": []

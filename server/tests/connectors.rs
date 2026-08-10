@@ -1,5 +1,5 @@
-//! `GET /api/v1/admin/connectors` (item 7 in the V1 closure checklist):
-//! admin-only, read-only visibility into which OSINT connector is active
+//! `GET /api/v1/admin/connectors`: admin-only, read-only visibility into
+//! which OSINT connector is active
 //! in each provider slot.
 
 use anatolia_bis_server::{db::AppState, routes};

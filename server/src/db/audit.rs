@@ -1,6 +1,6 @@
 //! Audit-trail persistence — the append-only `audit_events` table.
-//! Split out of db.rs (see item 31 in docs/HARDENING_CHECKLIST.md) as its
-//! own domain module: it has no dependency on the identity/session/search
+//! Split out of db.rs as its own domain module: it has no dependency on
+//! the identity/session/search
 //! tables beyond the shared `DbBackend` handle, so it is the cleanest
 //! boundary to separate first.
 //!
@@ -19,8 +19,8 @@
 //!
 //! This does not by itself stop someone with direct database access from
 //! rewriting history — an UPDATE/DELETE grant is what would do that, and
-//! this codebase doesn't yet provision a dedicated append-only DB role
-//! (see item 16 in `docs/HARDENING_CHECKLIST.md`). What the chain buys is
+//! this codebase doesn't yet provision a dedicated append-only DB role.
+//! What the chain buys is
 //! *detectability*: `verify_chain` recomputes every row's hash from its
 //! stored fields and its stored `previous_hash`, and a single altered or
 //! deleted row breaks the chain from that point forward — see
@@ -296,7 +296,7 @@ pub struct AuditEventFilter {
     pub case_reference: Option<String>,
     pub resource_type: Option<String>,
     pub result: Option<String>,
-    /// Object-level authorization (madde 12-13): `None` means unscoped
+    /// Object-level authorization: `None` means unscoped
     /// (only `SYSTEM_ADMIN` passes this — see
     /// `audit::list_audit_events_route`). `Some(ids)` restricts results
     /// to events whose `organization_id` is one of `ids`, or has none at

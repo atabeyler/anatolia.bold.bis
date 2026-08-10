@@ -1,16 +1,15 @@
 # Enterprise Deployment Readiness
 
-Item 24 in the V1 closure checklist: a single reference point for what an
-institution considering Anatolia B.I.S. for production use actually gets
-today, and what it deliberately does not yet get. This document does not
-introduce new capabilities — it consolidates and cross-references what
-`docs/ARCHITECTURE.md`, `docs/SECURITY_ARCHITECTURE.md`,
-`docs/DEPLOYMENT.md`, `docs/ENVIRONMENT.md`, and `docs/ROADMAP.md` already
-describe, organized around the questions an enterprise buyer or deployer
-actually asks. Where something is genuinely unimplemented, it is labeled
-that way rather than described in aspirational terms — see CLAUDE.md's
-"never claim a feature is implemented or tested unless it was actually run
-and verified."
+A single reference point for what an institution considering Anatolia
+B.I.S. for production use actually gets today, and what it deliberately
+does not yet get. This document does not introduce new capabilities — it
+consolidates and cross-references what `docs/ARCHITECTURE.md`,
+`docs/SECURITY_ARCHITECTURE.md`, `docs/DEPLOYMENT.md`, and
+`docs/ENVIRONMENT.md` already describe, organized around the questions an
+enterprise buyer or deployer actually asks. Where something is genuinely
+unimplemented, it is labeled that way rather than described in
+aspirational terms — see CLAUDE.md's "never claim a feature is
+implemented or tested unless it was actually run and verified."
 
 ## Identity and access
 
@@ -88,7 +87,7 @@ and verified."
   indexed path.
 - **Biometric inference**: the real ONNX provider (`BIOMETRIC_PROVIDER=onnx`)
   requires the `onnx-provider` Cargo feature and a Docker-based deploy on
-  a new-enough glibc — see `docs/ROADMAP.md` Phase 4. This path has been
+  a new-enough glibc. This path has been
   verified to compile and link correctly but **has not been exercised as
   a live production deployment** — an institution enabling it should
   treat the first rollout as a verification step, not an assumed-safe

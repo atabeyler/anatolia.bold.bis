@@ -1,4 +1,4 @@
-//! Candidate enrollment (madde 1-6): creating candidate records and
+//! Candidate enrollment: creating candidate records and
 //! attaching biometric reference templates to them via the active
 //! `BiometricProvider`. Kept separate from `search.rs`, which only ever
 //! reads candidates (via `db::CandidateRow`) and records review decisions
@@ -23,7 +23,7 @@ use crate::error::{request_id, ApiError};
 use crate::permission;
 
 /// Cosine-similarity floor above which a newly enrolled template is
-/// flagged as a possible duplicate of an existing candidate (madde 23).
+/// flagged as a possible duplicate of an existing candidate.
 /// Deliberately conservative and, like `entity_resolution.rs`'s name
 /// threshold, a starting point rather than a calibrated value — no
 /// authorized labeled dataset exists in this environment to calibrate
@@ -41,7 +41,7 @@ const DUPLICATE_TEMPLATE_SIMILARITY_THRESHOLD: f64 = 0.90;
 /// who passes the role check. Shared by every route that reads
 /// candidate-scoped data — `candidates.rs`, `evidence.rs`,
 /// `entity_graph.rs` — so this check can never silently drift between
-/// them. See item 21 in `docs/HARDENING_CHECKLIST.md`.
+/// them.
 pub async fn authorize_candidate_scope(
     state: &AppState,
     claims: &crate::auth::Claims,
@@ -256,7 +256,7 @@ pub async fn upload_reference_photo_route(
                 return err.into_response();
             }
 
-            // Duplicate candidate control (madde 23): a real cosine-similarity
+            // Duplicate candidate control: a real cosine-similarity
             // check against every other candidate's active, compatible
             // templates — never blocking, only a soft warning for the
             // operator to review. Best-effort: a failure here must not

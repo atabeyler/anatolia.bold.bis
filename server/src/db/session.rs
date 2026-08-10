@@ -1,5 +1,5 @@
-//! Session and approval-token domain (docs/HARDENING_CHECKLIST.md item
-//! 31): server-side refresh-token sessions (rotation, revocation) and the
+//! Session and approval-token domain: server-side refresh-token sessions
+//! (rotation, revocation) and the
 //! single-use approval tokens used for the registration approve/reject
 //! email flow and password reset. Split out of `db/mod.rs` as its own
 //! domain module, following the same boundary `db/audit.rs` established
@@ -276,7 +276,7 @@ pub async fn revoke_all_sessions_for_user(
 
 /// Lists a user's active (not revoked, not yet expired) sessions,
 /// most-recently-used first — the "where am I signed in" / device-list
-/// view (item 12 in the V1 closure checklist). Deliberately excludes
+/// view. Deliberately excludes
 /// `refresh_token_hash`: nothing outside `auth.rs`'s own refresh flow ever
 /// needs it, and there is no reason for even an admin-facing list to
 /// carry it.
@@ -362,8 +362,7 @@ pub async fn revoke_session_owned_by_user(
 /// that point, not a record anything else needs to reference (unlike
 /// `users`, `searches`, or `audit_events`, which stay around for
 /// attribution). Returns the number of rows removed, purely for logging.
-/// Called on a fixed interval from `main.rs`; see item 58 in
-/// `docs/HARDENING_CHECKLIST.md`.
+/// Called on a fixed interval from `main.rs`.
 pub async fn purge_expired_auth_records(backend: &DbBackend) -> Result<(u64, u64), sqlx::Error> {
     let (sessions, approval_tokens) = match backend {
         DbBackend::Postgres(pool) => {

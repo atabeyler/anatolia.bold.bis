@@ -1,4 +1,4 @@
-//! Candidate enrollment endpoints (madde 1-6): candidate creation and the
+//! Candidate enrollment endpoints: candidate creation and the
 //! reference-photo pipeline. These tests run under the default mock
 //! `BiometricProvider` (no network access or real model required in CI),
 //! so they exercise the wiring — permission gates, candidate lookup,

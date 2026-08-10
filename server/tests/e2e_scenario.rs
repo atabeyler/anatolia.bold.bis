@@ -1,5 +1,5 @@
-//! Full end-to-end scenario test (item 23 in the V1 closure checklist):
-//! walks one continuous story through most of the subsystems this
+//! Full end-to-end scenario test: walks one continuous story through most
+//! of the subsystems this
 //! project ties together — registration/approval, a real biometric
 //! search, human review, OSINT evidence collection, the entity graph,
 //! duplicate detection, session/device management, and audit-trail

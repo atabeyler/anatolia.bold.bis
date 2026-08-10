@@ -52,8 +52,8 @@ services:
       # this key makes every existing encrypted national ID undecryptable.
       - key: NATIONAL_ID_ENCRYPTION_KEY
         sync: false
-      # A real, server-side face provider exists (BIOMETRIC_PROVIDER=onnx,
-      # see docs/ROADMAP.md Phase 4) but this deployment does not run it —
+      # A real, server-side face provider exists (BIOMETRIC_PROVIDER=onnx)
+      # but this deployment does not run it —
       # this native Rust buildpack service builds without the
       # onnx-provider Cargo feature (see server/Cargo.toml), and switching
       # BIOMETRIC_PROVIDER here alone would just panic at startup rather
@@ -108,8 +108,7 @@ services:
       # Optional: registration/approval emails are silently skipped if unset.
       - key: RESEND_API_KEY
         sync: false
-      # Optional real OSINT providers (item 6 in
-      # docs/HARDENING_CHECKLIST.md) — see server/src/osint/websearch.rs
+      # Optional real OSINT providers — see server/src/osint/websearch.rs
       # and server/src/osint/news.rs. Each falls back to its mock
       # implementation, independently, when its key is unset; leaving
       # both unset (the default) reproduces today's mock-only behavior.

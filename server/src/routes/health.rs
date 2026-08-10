@@ -54,8 +54,7 @@ struct ReadyResponse {
     timestamp: String,
     /// Which `BiometricProvider` is active — `"mock"` (no real face
     /// comparison; see `docs/SECURITY_ARCHITECTURE.md`) or `"onnx"` (real,
-    /// server-side YuNet/SFace inference — see item 1 in
-    /// `docs/HARDENING_CHECKLIST.md`). Reported so a deployment's actual
+    /// server-side YuNet/SFace inference). Reported so a deployment's actual
     /// biometric capability is visible from the outside rather than only
     /// inferred from `BIOMETRIC_PROVIDER`, which this endpoint never
     /// echoes directly to avoid implying it as a trusted client input.
@@ -63,8 +62,7 @@ struct ReadyResponse {
     /// `"pgvector-hnsw"` when biometric search uses the indexed
     /// PostgreSQL path, `"brute-force"` when it falls back to the
     /// in-memory linear scan (always true on SQLite; on Postgres, only if
-    /// the `vector` extension could not be enabled) — see item 2 in
-    /// `docs/HARDENING_CHECKLIST.md`.
+    /// the `vector` extension could not be enabled).
     biometric_search: &'static str,
     /// Seconds since this process's first readiness check — an
     /// approximation of process uptime (see `PROCESS_START`), useful for

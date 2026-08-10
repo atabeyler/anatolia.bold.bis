@@ -1,4 +1,4 @@
-//! `POST /api/v1/admin/users/:id/role` (madde 11): changing a user's role
+//! `POST /api/v1/admin/users/:id/role`: changing a user's role
 //! must take effect immediately, not just for future logins — a session
 //! issued under the old role must stop working the moment the role
 //! changes, whether that's a promotion or a demotion.

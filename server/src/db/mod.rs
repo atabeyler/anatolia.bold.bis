@@ -10,9 +10,9 @@ use crate::config::Config;
 use crate::ratelimit::{InMemoryRateLimiter, RateLimiterBackend};
 
 // Domain modules. Each groups the tables/queries for one area of the
-// system (see docs/HARDENING_CHECKLIST.md item 31); everything else in
-// this file is shared infrastructure (connection setup, schema
-// migration, `AppState`) that every domain depends on rather than
+// system; everything else in this file is shared infrastructure
+// (connection setup, schema migration, `AppState`) that every domain
+// depends on rather than
 // belonging to one of them. Re-exported so existing call sites
 // (`crate::db::AuditEventRow`, etc.) don't need to change.
 mod audit;
@@ -74,18 +74,15 @@ pub struct AppState {
     pub biometric_provider: Arc<dyn crate::biometric::BiometricProvider>,
     /// `"mock"` or `"onnx"` — which provider `biometric_provider` actually
     /// is, kept alongside it so a health/diagnostics endpoint can report
-    /// it without downcasting the trait object. See item 1 in
-    /// `docs/HARDENING_CHECKLIST.md`.
+    /// it without downcasting the trait object.
     pub biometric_provider_name: &'static str,
     /// Whether biometric search uses the indexed pgvector path or the
     /// brute-force in-memory scan — resolved once at startup by
-    /// `migrate`. See `db::biometric::ensure_pgvector_index` and item 2 in
-    /// `docs/HARDENING_CHECKLIST.md`.
+    /// `migrate`. See `db::biometric::ensure_pgvector_index`.
     pub pgvector_search_ready: bool,
-    /// OSINT/evidence provider orchestrator — see `osint/mod.rs`. Only a
-    /// mock implementation exists today; the field exists so a future
-    /// real provider set is a drop-in swap, matching the
-    /// `biometric_provider` pattern.
+    /// OSINT/evidence provider orchestrator — see `osint/mod.rs`. Each
+    /// provider slot independently selects a real or mock implementation,
+    /// matching the `biometric_provider` pattern.
     pub osint_orchestrator: Arc<crate::osint::EvidenceOrchestrator>,
     /// Renders the current Prometheus snapshot for `GET /metrics` — see
     /// `metrics.rs`. The recorder itself is process-wide/global (the
@@ -1078,12 +1075,12 @@ pub async fn load_candidate_by_id(
     }
 }
 
-/// Creates a new candidate record (madde 1-6 enrollment pipeline). No
+/// Creates a new candidate record (enrollment pipeline). No
 /// biometric template is attached here — that happens separately via
 /// `db::biometric::insert_template` once a reference photo has been run
 /// through the biometric provider's `enroll` pipeline. `organization_id`
 /// stamps ownership at creation time, same pattern as
-/// `create_queued_search` — see item 10 in `docs/HARDENING_CHECKLIST.md`.
+/// `create_queued_search`.
 pub async fn create_candidate(
     backend: &DbBackend,
     reference_code: &str,
@@ -1191,7 +1188,7 @@ const SEARCH_PAGE_MAX_SIZE: i64 = 200;
 /// 1-indexed; `page_size` is clamped to `SEARCH_PAGE_MAX_SIZE` regardless
 /// of what's requested. Returns `(rows, total_matching_count)`.
 ///
-/// `org_scope` implements object-level authorization (madde 12-13) at the
+/// `org_scope` implements object-level authorization at the
 /// query level rather than post-filtering a page after the fact, which
 /// would silently short a page instead of returning a full one. `None`
 /// means unscoped (only `SYSTEM_ADMIN` passes this) — every search is
@@ -1282,7 +1279,7 @@ fn push_search_org_scope_sqlite<'a>(
 }
 
 /// Creates a search row in `queued` status with no candidates yet —
-/// the fast, synchronous half of the async search flow (madde 18-19):
+/// the fast, synchronous half of the async search flow:
 /// `POST /api/v1/search/face` inserts this row and returns `202 Accepted`
 /// with its id immediately, before the (potentially slow) biometric
 /// pipeline has even started. `started_at` is left unset until
@@ -1586,7 +1583,7 @@ pub enum ReviewDecisionOutcome {
 /// ever reflect the most recent decision, the full history lives in
 /// `verification_events`.
 ///
-/// When `require_second_review` is `true` (madde 15 — four-eyes), a
+/// When `require_second_review` is `true` (four-eyes review), a
 /// `confirmed`/`rejected` decision on a candidate that isn't already
 /// `needs_second_review` only ever moves it *to* `needs_second_review` —
 /// it never finalizes a candidate by itself. A second, different

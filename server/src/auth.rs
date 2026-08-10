@@ -402,7 +402,7 @@ fn current_session_family(headers: &HeaderMap, refresh_secret: &str) -> Option<S
 }
 
 /// `GET /api/v1/users/me/sessions` — the caller's own "where am I signed
-/// in" device list (item 12 in the V1 closure checklist): every active
+/// in" device list: every active
 /// session, most-recently-used first, with the browser/OS string and IP
 /// address recorded at creation time (never re-resolved — this is a log
 /// of what was seen then, not a live lookup) and a flag for whichever one

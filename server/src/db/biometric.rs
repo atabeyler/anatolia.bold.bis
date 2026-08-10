@@ -1,6 +1,6 @@
-//! Biometric template storage (madde 1-6): one row per enrolled reference
+//! Biometric template storage: one row per enrolled reference
 //! embedding, linked to a `candidates` row. Split out as its own domain
-//! module (see item 31 in `docs/HARDENING_CHECKLIST.md`).
+//! module.
 //!
 //! Embeddings are stored as a JSON array of floats (in the `embedding`
 //! column, on both backends) so a plain, correct O(n) linear
@@ -10,8 +10,7 @@
 //! native `vector(EMBEDDING_DIM)` column (`embedding_vector`) — see
 //! `ensure_pgvector_index` — behind an HNSW index using cosine distance,
 //! so `search_top_k` can serve a real Top-K search in `O(log n)` instead
-//! of scanning every row. This is `pgvector` (item 2 in
-//! `docs/HARDENING_CHECKLIST.md`).
+//! of scanning every row, via the `pgvector` extension.
 //!
 //! The `pgvector` extension is not guaranteed to be installable on every
 //! Postgres host (a managed provider may not allow-list it). Rather than
@@ -101,7 +100,7 @@ pub(super) async fn ensure_pgvector_index(pool: &PgPool) -> bool {
         tracing::warn!(
             error = %err,
             "pgvector extension unavailable; biometric search will use the brute-force \
-             in-memory scan (see docs/HARDENING_CHECKLIST.md item 2)"
+             in-memory scan"
         );
         return false;
     }
@@ -488,8 +487,8 @@ async fn search_top_k_indexed(
 }
 
 /// A calibrated FAR/FRR threshold for one model/version — see
-/// `server/src/bin/calibrate.rs --save-threshold` (item 3 in the
-/// hardening checklist). Advisory: nothing in this codebase currently
+/// `server/src/bin/calibrate.rs --save-threshold`. Advisory: nothing in
+/// this codebase currently
 /// *enforces* a stored threshold against search results (the biometric
 /// engine returns ranked candidates, never a match/no-match verdict, per
 /// CLAUDE.md's "candidates, not verdicts" principle) — this exists so a

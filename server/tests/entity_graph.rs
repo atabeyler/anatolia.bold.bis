@@ -1,5 +1,5 @@
-//! Entity graph endpoints (item 10 in `docs/HARDENING_CHECKLIST.md`):
-//! manual relations, automatic website relations from evidence
+//! Entity graph endpoints: manual relations, automatic website
+//! relations from evidence
 //! collection, and organization scoping — the same object-level
 //! authorization rule already proven for searches in
 //! `organization_scope.rs`, applied here to candidates/entity relations.
@@ -382,7 +382,7 @@ async fn collecting_evidence_with_a_url_automatically_records_a_website_relation
     }
 }
 
-/// Item 21 in `docs/HARDENING_CHECKLIST.md`: organization scoping was
+/// Organization scoping was
 /// only enforced on the entity-graph routes when they were added; every
 /// other candidate-scoped endpoint (templates, evidence, possible-
 /// duplicates, reference-photo upload) read/wrote candidate data with no

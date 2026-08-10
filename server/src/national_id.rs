@@ -1,5 +1,5 @@
-//! Encryption-at-rest for national ID numbers (madde 20 in the hardening
-//! instructions). Two derived values are stored instead of the plaintext:
+//! Encryption-at-rest for national ID numbers. Two derived values are
+//! stored instead of the plaintext:
 //!
 //! - `national_id_encrypted`: AES-256-GCM ciphertext (random 96-bit nonce
 //!   prefixed, then base64-encoded) — recoverable only with

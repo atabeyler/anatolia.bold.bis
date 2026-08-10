@@ -52,7 +52,7 @@ export async function getSearchStatus(searchId: string): Promise<CreateSearchRes
 }
 
 /**
- * Async search flow (madde 18-19): `POST /v1/search/face` is accepted
+ * Async search flow: `POST /v1/search/face` is accepted
  * (`202`) immediately with a `queued` search row — the biometric pipeline
  * runs server-side in a background task. This polls
  * `GET /v1/search/{id}/status` until it leaves `queued`/`processing`, so

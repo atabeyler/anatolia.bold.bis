@@ -1,5 +1,5 @@
-//! Entity graph endpoints (item 10 in `docs/HARDENING_CHECKLIST.md`):
-//! read and manually extend a candidate's entity relations (alias,
+//! Entity graph endpoints: read and manually extend a candidate's entity
+//! relations (alias,
 //! username, organization, website — see `db::entity_graph`). Kept
 //! separate from `candidates.rs`, same reasoning as `evidence.rs`: a
 //! distinct capability layered on top of the same candidate identity.

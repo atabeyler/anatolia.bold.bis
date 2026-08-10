@@ -65,7 +65,7 @@ pub fn can_manage_organizations(role: &str) -> bool {
     role == roles::SYSTEM_ADMIN
 }
 
-/// Object-level authorization (madde 12-13): whether an actor with `role`
+/// Object-level authorization: whether an actor with `role`
 /// may view a resource owned by `resource_org_id`, given the
 /// organizations the actor actually belongs to (`actor_org_ids` —
 /// resolved server-side from `user_memberships`, never taken from the

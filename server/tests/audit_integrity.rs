@@ -1,5 +1,5 @@
-//! Tamper-resistance (hash chaining) tests for the audit trail — item 16
-//! in `docs/HARDENING_CHECKLIST.md`. `db::audit::insert_audit_event`
+//! Tamper-resistance (hash chaining) tests for the audit trail.
+//! `db::audit::insert_audit_event`
 //! chains every row to the one before it; `GET /api/v1/audit/integrity`
 //! recomputes the chain and reports whether it's intact.
 

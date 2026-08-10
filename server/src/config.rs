@@ -41,10 +41,10 @@ pub struct Config {
     pub search_default_top_k: i64,
     pub search_max_top_k: i64,
     /// Which `BiometricProvider` implementation to run — see
-    /// `biometric.rs`. Only `"mock"` exists today; any other value is a
-    /// hard startup failure until a real provider ships.
+    /// `biometric.rs`. `"mock"` or `"onnx"`; any other value is a hard
+    /// startup failure.
     pub biometric_provider: String,
-    /// Four-eyes review policy (madde 15): when `true`, a candidate's
+    /// Four-eyes review policy: when `true`, a candidate's
     /// first confirm/reject decision only moves it to
     /// `needs_second_review`; a second, *different* reviewer's decision
     /// is what actually finalizes it. See `db::record_review_decision`.

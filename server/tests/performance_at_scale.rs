@@ -1,4 +1,4 @@
-//! Performance at scale (item 22 in the V1 closure checklist): the
+//! Performance at scale: the
 //! criterion benchmarks in `server/benches/biometric_pipeline.rs` already
 //! cover the in-memory `top_k_matches` scan up to 10,000 synthetic
 //! templates, but never exercise the DB-backed path

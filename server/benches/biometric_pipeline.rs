@@ -1,4 +1,4 @@
-//! Performance benchmarks (madde 44). Run with `cargo bench`.
+//! Performance benchmarks. Run with `cargo bench`.
 //!
 //! Scope, and what's deliberately *not* here: these benchmark the parts
 //! of the pipeline that run without any external dependency (a model file
@@ -109,7 +109,7 @@ fn bench_alignment(c: &mut Criterion) {
     });
 }
 
-/// Resolution benchmark (madde 26): alignment cost as source image
+/// Resolution benchmark: alignment cost as source image
 /// resolution varies from a small capture up to a high-resolution one,
 /// landmarks scaled proportionally so they stay inside the frame.
 fn bench_alignment_across_resolutions(c: &mut Criterion) {
@@ -151,7 +151,7 @@ fn checkerboard_112(bright: u8, dark: u8) -> Vec<u8> {
     buf
 }
 
-/// Lighting condition benchmark (madde 26): blur/lighting check cost is
+/// Lighting condition benchmark: blur/lighting check cost is
 /// expected to be resolution-bound, not brightness-bound, but this
 /// exercises every lighting branch (too dark / normal / too bright) the
 /// real search/enrollment path can hit, not just one happy-path input.
@@ -188,7 +188,7 @@ fn face_box_with_pose(right_eye_x: f32, left_eye_x: f32) -> FaceBox {
     }
 }
 
-/// Pose condition benchmark (madde 26): frontal vs. increasingly rotated
+/// Pose condition benchmark: frontal vs. increasingly rotated
 /// synthetic landmark geometry through the same coarse pose check a real
 /// search/enrollment probe goes through.
 fn bench_pose_check_by_angle(c: &mut Criterion) {

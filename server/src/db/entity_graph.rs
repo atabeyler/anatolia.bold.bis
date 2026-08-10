@@ -1,5 +1,5 @@
-//! Entity graph (item 10 in `docs/HARDENING_CHECKLIST.md`): candidate-
-//! centric relations to aliases, usernames, organizations, and websites.
+//! Entity graph: candidate-centric relations to aliases, usernames,
+//! organizations, and websites.
 //! Deliberately a star graph around the candidate (the "Person" node),
 //! not a general node-to-node graph — every relation always names the
 //! candidate it belongs to, so listing a candidate's graph is a single

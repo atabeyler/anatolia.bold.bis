@@ -1,6 +1,6 @@
 //! Multi-factor authentication (TOTP) persistence. Split out as its own
-//! domain module (see item 31 in docs/HARDENING_CHECKLIST.md) — MFA
-//! credentials and recovery codes have no dependency on any other table
+//! domain module — MFA credentials and recovery codes have no dependency
+//! on any other table
 //! beyond the shared `DbBackend` handle and a `user_id`.
 //!
 //! `mfa_credentials.secret` holds the raw TOTP secret (base32-encoded), not

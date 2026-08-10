@@ -1,4 +1,4 @@
-//! Prometheus-compatible metrics (madde 26 — observability). A single
+//! Prometheus-compatible metrics. A single
 //! process-wide `PrometheusHandle` (installed once at startup by
 //! `init()`) backs both the metric-recording call sites scattered across
 //! the codebase (via the `metrics` crate's global recorder — `counter!`/

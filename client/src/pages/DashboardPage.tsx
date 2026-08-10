@@ -103,7 +103,7 @@ export function DashboardPage() {
         image,
         getLastKnownLocation(),
       );
-      // The async pipeline (madde 18-19) can fail after acceptance (202),
+      // The async pipeline can fail after acceptance (202),
       // not just at request time — surface it the same way a request-level
       // error would be, since the client only ever sees a single
       // "did this search work" outcome regardless of which stage failed.

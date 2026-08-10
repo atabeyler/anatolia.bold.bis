@@ -1,4 +1,4 @@
-//! Organization/unit administration endpoints (madde 12-13). Deliberately
+//! Organization/unit administration endpoints. Deliberately
 //! separate from `admin.rs`: managing the organization structure itself
 //! is a narrower, cross-organization concern than ordinary user
 //! administration — see `permission::can_manage_organizations` (only
@@ -153,7 +153,7 @@ pub struct AssignMembershipPayload {
 /// (and, optionally, a specific unit within it). This is the only place
 /// an organization id is ever attached to a user — always chosen here by
 /// an explicitly-authorized administrator, never accepted from the
-/// member themselves (madde 13).
+/// member themselves.
 pub async fn assign_membership_route(
     State(state): State<AppState>,
     headers: HeaderMap,
