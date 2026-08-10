@@ -182,7 +182,6 @@ export function DashboardPage() {
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                capture="user"
                 onChange={(event) => setImage(event.target.files?.[0] ?? null)}
                 required
               />

@@ -8,6 +8,17 @@
 //! the decoded pixel data, not the original upload, which strips any
 //! EXIF/XMP metadata (GPS coordinates, device make/model, timestamps) a
 //! phone camera embeds before the image is used anywhere downstream.
+//!
+//! Before that re-encode, the EXIF `Orientation` tag (if present) is read
+//! and applied to the pixel data with `DynamicImage::apply_orientation`.
+//! Phone cameras — especially front-facing/selfie shots, the primary
+//! capture path for this product — routinely store the sensor's native
+//! (often landscape) pixel layout and rely on that tag to display right
+//! side up; every downstream consumer of the sanitized bytes (face
+//! detection foremost) operates on raw pixels, not on however a viewer
+//! chooses to render them. Skipping this step reliably makes real
+//! selfie-orientation uploads fail face detection even for perfectly
+//! good photos.
 
 /// 10 MB — comfortably above a real phone-camera JPEG, well below
 /// anything that should ever hit this endpoint.
@@ -32,7 +43,18 @@ pub fn validate_and_sanitize_probe_image(bytes: &[u8]) -> Result<Vec<u8>, &'stat
         return Err("UNSUPPORTED_IMAGE_TYPE");
     }
 
-    let decoded = image::load_from_memory(bytes).map_err(|_| "IMAGE_DECODE_FAILED")?;
+    use image::ImageDecoder;
+    let reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|_| "IMAGE_DECODE_FAILED")?;
+    let mut decoder = reader.into_decoder().map_err(|_| "IMAGE_DECODE_FAILED")?;
+    let orientation = decoder
+        .orientation()
+        .unwrap_or(image::metadata::Orientation::NoTransforms);
+    let mut decoded =
+        image::DynamicImage::from_decoder(decoder).map_err(|_| "IMAGE_DECODE_FAILED")?;
+    decoded.apply_orientation(orientation);
+
     let (width, height) = (decoded.width(), decoded.height());
     if width < MIN_DIMENSION
         || height < MIN_DIMENSION
@@ -48,7 +70,10 @@ pub fn validate_and_sanitize_probe_image(bytes: &[u8]) -> Result<Vec<u8>, &'stat
     // `image`'s encoders don't carry EXIF/XMP chunks over from the
     // decoded representation, so re-encoding (always to PNG, regardless
     // of the original container format) is sufficient sanitization on
-    // its own — no separate metadata-stripping step is needed.
+    // its own — no separate metadata-stripping step is needed. Pixel data
+    // is already orientation-corrected above, so this re-encode also
+    // permanently bakes in the correction (the sanitized PNG has no
+    // orientation tag of its own to apply).
     let mut sanitized = Vec::new();
     decoded
         .write_to(
@@ -175,5 +200,56 @@ mod tests {
         assert!(!sanitized
             .windows(marker.len())
             .any(|window| window == marker));
+    }
+
+    /// Builds a minimal Exif APP1 payload (TIFF header + one-entry IFD0)
+    /// asserting `Orientation` (tag 0x0112) = `orientation_value`, per the
+    /// Exif spec's numbering (6 = "rotate 90 CW to display correctly", the
+    /// value a phone commonly writes for a portrait/selfie shot).
+    fn exif_orientation_app1_segment(orientation_value: u16) -> Vec<u8> {
+        let mut tiff = Vec::new();
+        tiff.extend_from_slice(&[0x49, 0x49, 0x2A, 0x00]); // "II", magic 42
+        tiff.extend_from_slice(&8u32.to_le_bytes()); // offset to IFD0
+        tiff.extend_from_slice(&1u16.to_le_bytes()); // one IFD entry
+        tiff.extend_from_slice(&0x0112u16.to_le_bytes()); // tag: Orientation
+        tiff.extend_from_slice(&3u16.to_le_bytes()); // type: SHORT
+        tiff.extend_from_slice(&1u32.to_le_bytes()); // count: 1
+        tiff.extend_from_slice(&(orientation_value as u32).to_le_bytes()); // value
+        tiff.extend_from_slice(&0u32.to_le_bytes()); // next IFD offset: none
+
+        let mut payload = b"Exif\x00\x00".to_vec();
+        payload.extend_from_slice(&tiff);
+
+        let mut segment = vec![0xFF, 0xE1];
+        segment.extend_from_slice(&((payload.len() + 2) as u16).to_be_bytes());
+        segment.extend_from_slice(&payload);
+        segment
+    }
+
+    #[test]
+    fn exif_orientation_is_applied_before_sanitizing() {
+        // A non-square source so a 90-degree rotation is observable as a
+        // width/height swap in the sanitized output.
+        let mut jpeg = Vec::new();
+        let img = image::RgbImage::from_pixel(40, 60, image::Rgb([50, 60, 70]));
+        image::DynamicImage::ImageRgb8(img)
+            .write_to(
+                &mut std::io::Cursor::new(&mut jpeg),
+                image::ImageFormat::Jpeg,
+            )
+            .unwrap();
+
+        let segment = exif_orientation_app1_segment(6); // Orientation::Rotate90
+        let mut with_exif = jpeg[0..2].to_vec();
+        with_exif.extend_from_slice(&segment);
+        with_exif.extend_from_slice(&jpeg[2..]);
+
+        let sanitized = validate_and_sanitize_probe_image(&with_exif).expect("valid image");
+        let redecoded = image::load_from_memory(&sanitized).expect("sanitized output decodes");
+        assert_eq!(
+            (redecoded.width(), redecoded.height()),
+            (60, 40),
+            "a 90-degree Exif orientation must swap width/height in the sanitized output"
+        );
     }
 }
