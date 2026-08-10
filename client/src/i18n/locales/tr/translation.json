@@ -175,7 +175,11 @@
       "next": "Sonraki",
       "pageOf": "Sayfa {{page}} / {{totalPages}}"
     },
-    "mfaResetComplete": "Bu hesap için çok faktörlü kimlik doğrulama sıfırlandı."
+    "mfaResetComplete": "Bu hesap için çok faktörlü kimlik doğrulama sıfırlandı.",
+    "org": {
+      "membershipAssigned": "Üyelik atandı.",
+      "membershipRemoved": "Üyelik kaldırıldı."
+    }
   },
   "search": {
     "subtitle": "BİYOMETRİK ARAMA",

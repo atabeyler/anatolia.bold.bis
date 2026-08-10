@@ -34,6 +34,7 @@ fn search_json(search: &SearchRow) -> serde_json::Value {
         "failureCode": search.failure_code,
         "failureMessageKey": search.failure_message_key,
         "createdAt": search.created_at,
+        "organizationId": search.organization_id,
     })
 }
 
@@ -161,6 +162,12 @@ pub async fn create_search_route(
             .to_string(),
         _ => claims.user_code.clone(),
     };
+    // Server-derived only — never accepted from the client. See
+    // permission::can_view_scoped_resource / madde 13.
+    let organization_id = crate::db::primary_organization_id(&state.backend, &claims.id)
+        .await
+        .ok()
+        .flatten();
 
     let candidates = match list_candidates(&state.backend).await {
         Ok(rows) => rows,
@@ -182,6 +189,7 @@ pub async fn create_search_route(
         longitude,
         top_k,
         &scored,
+        organization_id.as_deref(),
     )
     .await
     {
@@ -233,6 +241,7 @@ pub async fn create_search_route(
                 top_k,
                 "SEARCH_PERSIST_FAILED",
                 "errors.internal",
+                organization_id.as_deref(),
             )
             .await
             .ok()
@@ -277,15 +286,26 @@ pub async fn list_searches_route(
     Query(query): Query<PageQuery>,
 ) -> Response {
     let rid = request_id(&headers);
-    if auth_user_from_headers(&headers, &state.secrets.jwt_secret).is_none() {
+    let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
-    }
-    if !require_role(&state, &headers, permission::can_view_search) {
+    };
+    if !permission::can_view_search(&claims.role) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
+    // Object-level authorization (madde 12-13): SYSTEM_ADMIN sees every
+    // organization's searches; everyone else only sees their own
+    // organization's (plus any search with no owning organization at
+    // all — see db::push_search_org_scope_pg/_sqlite).
+    let org_scope = if claims.role == crate::roles::SYSTEM_ADMIN {
+        None
+    } else {
+        crate::db::user_organization_ids(&state.backend, &claims.id)
+            .await
+            .ok()
+    };
     let page = query.page.unwrap_or(1).max(1);
     let page_size = query.page_size.unwrap_or(DEFAULT_PAGE_SIZE);
-    match list_searches_page(&state.backend, page, page_size).await {
+    match list_searches_page(&state.backend, page, page_size, org_scope.as_deref()).await {
         Ok((rows, total)) => Json(json!({
             "items": rows.iter().map(search_json).collect::<Vec<_>>(),
             "page": page,
@@ -297,20 +317,42 @@ pub async fn list_searches_route(
     }
 }
 
+/// Resolves the organizations `claims` belongs to (empty for
+/// `SYSTEM_ADMIN`, which never needs them — see
+/// `permission::can_view_scoped_resource`'s own bypass).
+async fn actor_org_ids(state: &AppState, claims: &crate::auth::Claims) -> Vec<String> {
+    if claims.role == crate::roles::SYSTEM_ADMIN {
+        return Vec::new();
+    }
+    crate::db::user_organization_ids(&state.backend, &claims.id)
+        .await
+        .unwrap_or_default()
+}
+
 pub async fn get_search_route(
     State(state): State<AppState>,
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> Response {
     let rid = request_id(&headers);
-    if auth_user_from_headers(&headers, &state.secrets.jwt_secret).is_none() {
+    let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
-    }
-    if !require_role(&state, &headers, permission::can_view_search) {
+    };
+    if !permission::can_view_search(&claims.role) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
     match load_search_by_id(&state.backend, &id).await {
-        Ok(Some(search)) => Json(search_json(&search)).into_response(),
+        Ok(Some(search)) => {
+            let org_ids = actor_org_ids(&state, &claims).await;
+            if !permission::can_view_scoped_resource(
+                &claims.role,
+                &org_ids,
+                search.organization_id.as_deref(),
+            ) {
+                return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+            }
+            Json(search_json(&search)).into_response()
+        }
         Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
         Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }
@@ -322,11 +364,25 @@ pub async fn get_search_candidates_route(
     headers: HeaderMap,
 ) -> Response {
     let rid = request_id(&headers);
-    if auth_user_from_headers(&headers, &state.secrets.jwt_secret).is_none() {
+    let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
-    }
-    if !require_role(&state, &headers, permission::can_view_search) {
+    };
+    if !permission::can_view_search(&claims.role) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
+    match load_search_by_id(&state.backend, &id).await {
+        Ok(Some(search)) => {
+            let org_ids = actor_org_ids(&state, &claims).await;
+            if !permission::can_view_scoped_resource(
+                &claims.role,
+                &org_ids,
+                search.organization_id.as_deref(),
+            ) {
+                return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+            }
+        }
+        Ok(None) => return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
+        Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }
     match list_search_candidates(&state.backend, &id).await {
         Ok(rows) => {
@@ -339,18 +395,33 @@ pub async fn get_search_candidates_route(
 /// `GET /api/v1/search/{search_id}/candidates/{candidate_id}/history` — the
 /// full, immutable review history for one candidate within one search
 /// (every `verification_events` row, oldest first) — not just the current
-/// status. Same view-role requirement as the rest of the search workflow.
+/// status. Same view-role requirement as the rest of the search workflow,
+/// plus the same object-level organization scoping.
 pub async fn get_candidate_history_route(
     State(state): State<AppState>,
     Path((search_id, candidate_id)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Response {
     let rid = request_id(&headers);
-    if auth_user_from_headers(&headers, &state.secrets.jwt_secret).is_none() {
+    let Some(claims) = auth_user_from_headers(&headers, &state.secrets.jwt_secret) else {
         return ApiError::new("UNAUTHORIZED", "errors.unauthorized", rid).into_response();
-    }
-    if !require_role(&state, &headers, permission::can_view_search) {
+    };
+    if !permission::can_view_search(&claims.role) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    }
+    match load_search_by_id(&state.backend, &search_id).await {
+        Ok(Some(search)) => {
+            let org_ids = actor_org_ids(&state, &claims).await;
+            if !permission::can_view_scoped_resource(
+                &claims.role,
+                &org_ids,
+                search.organization_id.as_deref(),
+            ) {
+                return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+            }
+        }
+        Ok(None) => return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
+        Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }
     let candidates = match list_search_candidates(&state.backend, &search_id).await {
         Ok(rows) => rows,

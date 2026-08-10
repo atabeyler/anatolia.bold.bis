@@ -327,6 +327,42 @@ never lock itself out of its own administration.
   once; a repeat request (double-click, retried email link) is rejected
   the same as an expired or invalid one.
 
+### Organizations and units
+
+All routes below require `SYSTEM_ADMIN` (`permission::can_manage_organizations`)
+— narrower than `can_administer_users`, since changing the organization
+structure is inherently a cross-organization concern. See "Organization/unit
+model" in `docs/SECURITY_ARCHITECTURE.md`.
+
+- `POST /api/v1/admin/organizations` — body `{ "name": "..." }`. Returns
+  `{ "id": "...", "name": "...", "createdAt": "..." }`.
+- `GET /api/v1/admin/organizations` — lists every organization.
+- `POST /api/v1/admin/organizations/{organization_id}/units` — body
+  `{ "name": "...", "parentUnitId": "..." }` (`parentUnitId` optional,
+  nests the unit under an existing one within the same organization).
+- `GET /api/v1/admin/organizations/{organization_id}/units` — lists the
+  units within one organization.
+- `POST /api/v1/admin/memberships` — body
+  `{ "userId": "...", "organizationId": "...", "organizationUnitId": "..." }`
+  (`organizationUnitId` optional). Assigns a user to an organization —
+  the only place an organization id is ever attached to a user; always
+  chosen by an administrator, never accepted from the member themselves.
+  Idempotent (assigning the same membership twice is a no-op).
+- `DELETE /api/v1/admin/memberships` — body
+  `{ "userId": "...", "organizationId": "..." }`. Removes a user's
+  membership in that organization.
+
+A search is stamped with its creator's organization automatically at
+creation time (resolved from their membership, never client-supplied).
+`GET /api/v1/search`, `GET /api/v1/search/{id}`,
+`GET /api/v1/search/{id}/candidates`,
+`GET /api/v1/search/{id}/candidates/{id}/history`, and `GET /api/v1/audit`
+are all scoped accordingly: **`SYSTEM_ADMIN`** sees every organization's
+records; every other role only sees its own organization's, plus any
+record with no owning organization at all. Out of scope for a
+single-object endpoint (`GET /api/v1/search/{id}` etc.) returns
+**`403 Forbidden`**; the list endpoints filter server-side instead.
+
 ### Search workflow
 
 All routes below require `Authorization: Bearer <accessToken>`.

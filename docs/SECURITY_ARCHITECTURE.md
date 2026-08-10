@@ -332,12 +332,44 @@ what these controls defend against.
   (`POST /api/v1/admin/users/{id}/mfa-reset`) — the recovery path when a
   MFA-required account loses its device, since it cannot self-recover
   without first logging in.
+- **Organization/unit model and object-level authorization**
+  (`db/org.rs`, `permission::can_view_scoped_resource`): `organizations`,
+  `organization_units` (self-referencing `parent_unit_id`, arbitrary
+  hierarchy depth), and `user_memberships` (a user may belong to more
+  than one organization). Managing the structure itself
+  (`POST/GET /api/v1/admin/organizations`,
+  `POST/GET /api/v1/admin/organizations/{id}/units`,
+  `POST/DELETE /api/v1/admin/memberships`) is restricted to
+  `SYSTEM_ADMIN` only — narrower than ordinary user administration,
+  since this is inherently a cross-organization concern.
+
+  A search is stamped with its creator's organization at creation time,
+  resolved server-side from their membership — never accepted from the
+  client. `can_view_scoped_resource(role, actor_org_ids, resource_org_id)`
+  then governs visibility everywhere a search (or its candidates, review
+  history) or an audit event is read: `SYSTEM_ADMIN` is the one explicit
+  global exception; every other role, *including* `AUDITOR` and
+  `SECURITY_ADMIN`, only sees records belonging to an organization it is
+  itself a member of. A resource with no owning organization (data from
+  before the org model existed, or a deployment that never configures
+  one) stays visible to anyone who already passed the ordinary role
+  check, so introducing organizations never retroactively hides
+  anything. List endpoints (`GET /api/v1/search`, `GET /api/v1/audit`)
+  apply this at the query level, not as a post-pagination filter, so a
+  requested page is never silently short. See
+  `server/tests/organization_scope.rs` for the negative-authorization
+  test coverage.
+
+  Not yet covered: `candidates` gained an `organization_id` column but
+  it is not enforced — there is no real candidate enrollment pipeline
+  yet (see Phase 4 in `docs/ROADMAP.md`) to stamp it from, so scoping an
+  always-null column would be a no-op. Single-candidate endpoints
+  (`GET /api/v1/candidates/{id}`) are likewise not yet org-scoped.
 
 ## Not yet implemented
 
-Organization/unit-scoped authorization and enterprise SSO are planned
-(see `docs/ROADMAP.md`) but not present in the codebase yet. Do not
-assume either is active. There is also no endpoint to change an
+Enterprise SSO is planned (see `docs/ROADMAP.md`) but not present in the
+codebase yet. Do not assume it is active. There is also no endpoint to change an
 already-active account's role, so a role-downgrade session-revoke
 protection (item 11) has nothing to attach to yet — adding one is real
 feature work (who may assign which role to whom, self-role-change

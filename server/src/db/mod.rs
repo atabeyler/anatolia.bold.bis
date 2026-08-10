@@ -19,6 +19,8 @@ mod audit;
 pub use audit::*;
 mod mfa;
 pub use mfa::*;
+mod org;
+pub use org::*;
 
 #[derive(Clone)]
 pub enum DbBackend {
@@ -542,6 +544,13 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
 
             audit::migrate_pg(pool).await?;
             mfa::migrate_pg(pool).await?;
+            org::migrate_pg(pool).await?;
+            sqlx::query("ALTER TABLE searches ADD COLUMN IF NOT EXISTS organization_id UUID")
+                .execute(pool)
+                .await?;
+            sqlx::query("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS organization_id UUID")
+                .execute(pool)
+                .await?;
 
             seed_mock_candidates_pg(pool).await?;
         }
@@ -803,6 +812,13 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
 
             audit::migrate_sqlite(pool).await?;
             mfa::migrate_sqlite(pool).await?;
+            org::migrate_sqlite(pool).await?;
+            let _ = sqlx::query("ALTER TABLE searches ADD COLUMN organization_id TEXT")
+                .execute(pool)
+                .await;
+            let _ = sqlx::query("ALTER TABLE candidates ADD COLUMN organization_id TEXT")
+                .execute(pool)
+                .await;
 
             seed_mock_candidates_sqlite(pool).await?;
         }
@@ -1598,13 +1614,18 @@ pub struct SearchRow {
     pub failure_code: Option<String>,
     pub failure_message_key: Option<String>,
     pub created_at: String,
+    /// The organization the requester belonged to at creation time, or
+    /// `None` if they had no membership (see `db::org::primary_organization_id`).
+    /// Never client-supplied — see `permission::can_view_scoped_resource`.
+    pub organization_id: Option<String>,
 }
 
 const SEARCH_COLUMNS_PG: &str = "id::text, case_reference, purpose, requested_by::text, requested_by_name, status, \
-     latitude, longitude, top_k, started_at::text, completed_at::text, failure_code, failure_message_key, created_at::text";
+     latitude, longitude, top_k, started_at::text, completed_at::text, failure_code, failure_message_key, created_at::text, \
+     organization_id::text";
 const SEARCH_COLUMNS_SQLITE: &str =
     "id, case_reference, purpose, requested_by, requested_by_name, status, latitude, \
-     longitude, top_k, started_at, completed_at, failure_code, failure_message_key, created_at";
+     longitude, top_k, started_at, completed_at, failure_code, failure_message_key, created_at, organization_id";
 
 pub async fn load_search_by_id(
     backend: &DbBackend,
@@ -1638,42 +1659,95 @@ const SEARCH_PAGE_MAX_SIZE: i64 = 200;
 /// Server-side paginated search history, newest first. `page` is
 /// 1-indexed; `page_size` is clamped to `SEARCH_PAGE_MAX_SIZE` regardless
 /// of what's requested. Returns `(rows, total_matching_count)`.
+///
+/// `org_scope` implements object-level authorization (madde 12-13) at the
+/// query level rather than post-filtering a page after the fact, which
+/// would silently short a page instead of returning a full one. `None`
+/// means unscoped (only `SYSTEM_ADMIN` passes this) — every search is
+/// visible. `Some(ids)` restricts results to searches owned by one of
+/// `ids`, or with no owning organization at all (legacy/unassigned data
+/// stays visible to everyone with the underlying role permission, rather
+/// than becoming invisible the moment the org model is introduced).
 pub async fn list_searches_page(
     backend: &DbBackend,
     page: i64,
     page_size: i64,
+    org_scope: Option<&[String]>,
 ) -> Result<(Vec<SearchRow>, i64), sqlx::Error> {
     let page = page.max(1);
     let page_size = page_size.clamp(1, SEARCH_PAGE_MAX_SIZE);
     let offset = (page - 1) * page_size;
     match backend {
         DbBackend::Postgres(pool) => {
-            let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM searches")
-                .fetch_one(pool)
+            let mut count_builder =
+                sqlx::QueryBuilder::<sqlx::Postgres>::new("SELECT COUNT(*) FROM searches");
+            push_search_org_scope_pg(&mut count_builder, org_scope);
+            let total: i64 = count_builder.build_query_scalar().fetch_one(pool).await?;
+
+            let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(format!(
+                "SELECT {SEARCH_COLUMNS_PG} FROM searches"
+            ));
+            push_search_org_scope_pg(&mut builder, org_scope);
+            builder.push(" ORDER BY created_at DESC LIMIT ");
+            builder.push_bind(page_size);
+            builder.push(" OFFSET ");
+            builder.push_bind(offset);
+            let rows = builder
+                .build_query_as::<SearchRow>()
+                .fetch_all(pool)
                 .await?;
-            let rows = sqlx::query_as::<_, SearchRow>(&format!(
-                "SELECT {SEARCH_COLUMNS_PG} FROM searches ORDER BY created_at DESC LIMIT $1 OFFSET $2"
-            ))
-            .bind(page_size)
-            .bind(offset)
-            .fetch_all(pool)
-            .await?;
             Ok((rows, total))
         }
         DbBackend::Sqlite(pool) => {
-            let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM searches")
-                .fetch_one(pool)
+            let mut count_builder =
+                sqlx::QueryBuilder::<sqlx::Sqlite>::new("SELECT COUNT(*) FROM searches");
+            push_search_org_scope_sqlite(&mut count_builder, org_scope);
+            let total: i64 = count_builder.build_query_scalar().fetch_one(pool).await?;
+
+            let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
+                "SELECT {SEARCH_COLUMNS_SQLITE} FROM searches"
+            ));
+            push_search_org_scope_sqlite(&mut builder, org_scope);
+            builder.push(" ORDER BY created_at DESC LIMIT ");
+            builder.push_bind(page_size);
+            builder.push(" OFFSET ");
+            builder.push_bind(offset);
+            let rows = builder
+                .build_query_as::<SearchRow>()
+                .fetch_all(pool)
                 .await?;
-            let rows = sqlx::query_as::<_, SearchRow>(&format!(
-                "SELECT {SEARCH_COLUMNS_SQLITE} FROM searches ORDER BY created_at DESC LIMIT ?1 OFFSET ?2"
-            ))
-            .bind(page_size)
-            .bind(offset)
-            .fetch_all(pool)
-            .await?;
             Ok((rows, total))
         }
     }
+}
+
+fn push_search_org_scope_pg<'a>(
+    builder: &mut sqlx::QueryBuilder<'a, sqlx::Postgres>,
+    org_scope: Option<&'a [String]>,
+) {
+    let Some(ids) = org_scope else { return };
+    let uuids: Vec<Uuid> = ids.iter().filter_map(|v| Uuid::parse_str(v).ok()).collect();
+    builder.push(" WHERE (organization_id IS NULL OR organization_id = ANY(");
+    builder.push_bind(uuids);
+    builder.push("))");
+}
+
+fn push_search_org_scope_sqlite<'a>(
+    builder: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    org_scope: Option<&'a [String]>,
+) {
+    let Some(ids) = org_scope else { return };
+    if ids.is_empty() {
+        builder.push(" WHERE organization_id IS NULL");
+        return;
+    }
+    builder.push(" WHERE (organization_id IS NULL OR organization_id IN (");
+    let mut separated = builder.separated(", ");
+    for id in ids {
+        separated.push_bind(id.clone());
+    }
+    separated.push_unseparated(")");
+    builder.push(")");
 }
 
 /// Persists a search attempt that failed before (or while) writing its
@@ -1694,16 +1768,18 @@ pub async fn record_failed_search(
     top_k: i64,
     failure_code: &str,
     failure_message_key: &str,
+    organization_id: Option<&str>,
 ) -> Result<Option<SearchRow>, sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
             let Ok(requester_uuid) = Uuid::parse_str(requested_by) else {
                 return Ok(None);
             };
+            let org_uuid = organization_id.and_then(|v| Uuid::parse_str(v).ok());
             sqlx::query_as::<_, SearchRow>(&format!(
                 "INSERT INTO searches (case_reference, purpose, requested_by, requested_by_name, latitude, longitude,
-                 top_k, status, started_at, completed_at, failure_code, failure_message_key)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'failed', NOW(), NOW(), $8, $9) RETURNING {SEARCH_COLUMNS_PG}"
+                 top_k, status, started_at, completed_at, failure_code, failure_message_key, organization_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'failed', NOW(), NOW(), $8, $9, $10) RETURNING {SEARCH_COLUMNS_PG}"
             ))
             .bind(case_reference)
             .bind(purpose)
@@ -1714,6 +1790,7 @@ pub async fn record_failed_search(
             .bind(top_k)
             .bind(failure_code)
             .bind(failure_message_key)
+            .bind(org_uuid)
             .fetch_one(pool)
             .await
             .map(Some)
@@ -1722,9 +1799,9 @@ pub async fn record_failed_search(
             let id = Uuid::new_v4().to_string();
             sqlx::query(
                 "INSERT INTO searches (id, case_reference, purpose, requested_by, requested_by_name, latitude, longitude,
-                 top_k, status, started_at, completed_at, failure_code, failure_message_key)
+                 top_k, status, started_at, completed_at, failure_code, failure_message_key, organization_id)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'failed', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-                 strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?9, ?10)",
+                 strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?9, ?10, ?11)",
             )
             .bind(&id)
             .bind(case_reference)
@@ -1736,6 +1813,7 @@ pub async fn record_failed_search(
             .bind(top_k)
             .bind(failure_code)
             .bind(failure_message_key)
+            .bind(organization_id)
             .execute(pool)
             .await?;
             load_search_by_id(backend, &id).await
@@ -1761,16 +1839,18 @@ pub async fn create_search_with_candidates(
     longitude: Option<f64>,
     top_k: i64,
     scored: &[(String, f64)],
+    organization_id: Option<&str>,
 ) -> Result<SearchRow, sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
             let requester_uuid = Uuid::parse_str(requested_by)
                 .map_err(|e| sqlx::Error::Protocol(format!("invalid requested_by uuid: {e}")))?;
+            let org_uuid = organization_id.and_then(|v| Uuid::parse_str(v).ok());
             let mut tx = pool.begin().await?;
             let search: SearchRow = sqlx::query_as(&format!(
                 "INSERT INTO searches (case_reference, purpose, requested_by, requested_by_name, latitude, longitude,
-                 top_k, status, started_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing', NOW()) RETURNING {SEARCH_COLUMNS_PG}"
+                 top_k, status, started_at, organization_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'processing', NOW(), $8) RETURNING {SEARCH_COLUMNS_PG}"
             ))
             .bind(case_reference)
             .bind(purpose)
@@ -1779,6 +1859,7 @@ pub async fn create_search_with_candidates(
             .bind(latitude)
             .bind(longitude)
             .bind(top_k)
+            .bind(org_uuid)
             .fetch_one(&mut *tx)
             .await?;
             let search_uuid =
@@ -1807,8 +1888,8 @@ pub async fn create_search_with_candidates(
             let search_id = Uuid::new_v4().to_string();
             sqlx::query(
                 "INSERT INTO searches (id, case_reference, purpose, requested_by, requested_by_name, latitude, longitude,
-                 top_k, status, started_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'processing', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+                 top_k, status, started_at, organization_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'processing', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?9)",
             )
             .bind(&search_id)
             .bind(case_reference)
@@ -1818,6 +1899,7 @@ pub async fn create_search_with_candidates(
             .bind(latitude)
             .bind(longitude)
             .bind(top_k)
+            .bind(organization_id)
             .execute(&mut *tx)
             .await?;
             for (candidate_id, score) in scored {

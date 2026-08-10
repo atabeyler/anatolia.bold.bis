@@ -175,7 +175,11 @@
       "next": "التالي",
       "pageOf": "صفحة {{page}} من {{totalPages}}"
     },
-    "mfaResetComplete": "تمت إعادة تعيين المصادقة متعددة العوامل لهذا الحساب."
+    "mfaResetComplete": "تمت إعادة تعيين المصادقة متعددة العوامل لهذا الحساب.",
+    "org": {
+      "membershipAssigned": "تم تعيين العضوية.",
+      "membershipRemoved": "تمت إزالة العضوية."
+    }
   },
   "search": {
     "subtitle": "بحث بيومتري",

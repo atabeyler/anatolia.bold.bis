@@ -175,7 +175,11 @@
       "next": "Weiter",
       "pageOf": "Seite {{page}} von {{totalPages}}"
     },
-    "mfaResetComplete": "Die Multi-Faktor-Authentifizierung wurde für dieses Konto zurückgesetzt."
+    "mfaResetComplete": "Die Multi-Faktor-Authentifizierung wurde für dieses Konto zurückgesetzt.",
+    "org": {
+      "membershipAssigned": "Mitgliedschaft zugewiesen.",
+      "membershipRemoved": "Mitgliedschaft entfernt."
+    }
   },
   "search": {
     "subtitle": "BIOMETRISCHE SUCHE",

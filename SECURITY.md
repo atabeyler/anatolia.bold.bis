@@ -184,12 +184,19 @@ Implemented controls:
   write. See `docs/SECURITY_ARCHITECTURE.md` for what this does and does
   not guarantee (it is tamper-evident, not tamper-proof — there is no
   dedicated append-only database role yet).
+- **Organization/unit model and object-level authorization**:
+  `organizations`/`organization_units`/`user_memberships`, with searches
+  and audit events scoped to the actor's organization on every read
+  path. `SYSTEM_ADMIN` is the sole role exempt from scoping — holding
+  another privileged role (`AUDITOR`, `SECURITY_ADMIN`) does not by
+  itself grant visibility into another organization's records. See
+  `docs/SECURITY_ARCHITECTURE.md`; not yet covering candidates, which
+  have no real enrollment pipeline to scope from yet.
 
 ## Planned (see `docs/ROADMAP.md` and `docs/SECURITY_ARCHITECTURE.md`)
 
-Organization-scoped authorization and enterprise SSO are designed but not
-yet implemented. Do not assume either is active until this document is
-updated to say otherwise.
+Enterprise SSO is designed but not yet implemented. Do not assume it is
+active until this document is updated to say otherwise.
 
 ## Rules enforced in this repository
 

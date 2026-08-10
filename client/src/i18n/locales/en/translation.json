@@ -175,7 +175,11 @@
       "next": "Next",
       "pageOf": "Page {{page}} of {{totalPages}}"
     },
-    "mfaResetComplete": "Multi-factor authentication has been reset for this account."
+    "mfaResetComplete": "Multi-factor authentication has been reset for this account.",
+    "org": {
+      "membershipAssigned": "Membership assigned.",
+      "membershipRemoved": "Membership removed."
+    }
   },
   "search": {
     "subtitle": "BIOMETRIC SEARCH",

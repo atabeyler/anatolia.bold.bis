@@ -296,6 +296,12 @@ pub struct AuditEventFilter {
     pub case_reference: Option<String>,
     pub resource_type: Option<String>,
     pub result: Option<String>,
+    /// Object-level authorization (madde 12-13): `None` means unscoped
+    /// (only `SYSTEM_ADMIN` passes this — see
+    /// `audit::list_audit_events_route`). `Some(ids)` restricts results
+    /// to events whose `organization_id` is one of `ids`, or has none at
+    /// all (legacy/unassigned data stays visible).
+    pub org_scope: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -423,6 +429,12 @@ fn push_audit_filter_pg<'a>(
     if let Some(result) = filter.result.as_deref() {
         builder.push(" AND result = ").push_bind(result);
     }
+    if let Some(ids) = filter.org_scope.as_deref() {
+        let uuids: Vec<Uuid> = ids.iter().filter_map(|v| Uuid::parse_str(v).ok()).collect();
+        builder.push(" AND (organization_id IS NULL OR organization_id = ANY(");
+        builder.push_bind(uuids);
+        builder.push("))");
+    }
 }
 
 fn push_audit_filter_sqlite<'a>(
@@ -457,6 +469,19 @@ fn push_audit_filter_sqlite<'a>(
     }
     if let Some(result) = filter.result.as_deref() {
         builder.push(" AND result = ").push_bind(result);
+    }
+    if let Some(ids) = filter.org_scope.as_deref() {
+        if ids.is_empty() {
+            builder.push(" AND organization_id IS NULL");
+        } else {
+            builder.push(" AND (organization_id IS NULL OR organization_id IN (");
+            let mut separated = builder.separated(", ");
+            for id in ids {
+                separated.push_bind(id.clone());
+            }
+            separated.push_unseparated(")");
+            builder.push(")");
+        }
     }
 }
 

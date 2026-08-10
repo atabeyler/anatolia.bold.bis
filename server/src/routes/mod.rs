@@ -4,7 +4,7 @@ use axum::routing::{delete, get, post};
 use axum::Router;
 
 use crate::db::AppState;
-use crate::{admin, audit, auth, mfa, search};
+use crate::{admin, audit, auth, mfa, org, search};
 
 pub fn router(state: AppState) -> Router {
     let auth_routes = Router::new()
@@ -46,7 +46,19 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/review/:token", get(admin::review))
         .route("/quick-approve/:token", post(admin::quick_approve))
-        .route("/quick-reject/:token", post(admin::quick_reject));
+        .route("/quick-reject/:token", post(admin::quick_reject))
+        .route(
+            "/organizations",
+            get(org::list_organizations_route).post(org::create_organization_route),
+        )
+        .route(
+            "/organizations/:organization_id/units",
+            get(org::list_units_route).post(org::create_unit_route),
+        )
+        .route(
+            "/memberships",
+            post(org::assign_membership_route).delete(org::remove_membership_route),
+        );
 
     let search_routes = Router::new()
         .route("/face", post(search::create_search_route))

@@ -175,7 +175,11 @@
       "next": "Suivant",
       "pageOf": "Page {{page}} sur {{totalPages}}"
     },
-    "mfaResetComplete": "L'authentification multifacteur a été réinitialisée pour ce compte."
+    "mfaResetComplete": "L'authentification multifacteur a été réinitialisée pour ce compte.",
+    "org": {
+      "membershipAssigned": "Adhésion attribuée.",
+      "membershipRemoved": "Adhésion supprimée."
+    }
   },
   "search": {
     "subtitle": "RECHERCHE BIOMÉTRIQUE",

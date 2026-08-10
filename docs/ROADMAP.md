@@ -1,6 +1,8 @@
 # Roadmap
 
-Implemented incrementally. Nothing below Phase 3.7 is implemented yet.
+Implemented incrementally. Each phase below is marked `[x]`/`[ ]` per
+item — a phase heading does not imply everything under it is done; check
+the individual items.
 
 ## Phase 1 — Repository foundation (this phase)
 
@@ -49,8 +51,7 @@ Implemented incrementally. Nothing below Phase 3.7 is implemented yet.
       voluntary for other roles; fail-closed login-time challenge, hashed
       recovery codes, admin reset endpoint — see
       `docs/SECURITY_ARCHITECTURE.md`
-- [ ] Organization/unit-scoped authorization (tracked separately — see the
-      milestones below)
+- [x] Organization/unit-scoped authorization — see Phase 3.7 below
 
 ## Phase 3.6 — Audit trail
 
@@ -68,8 +69,8 @@ Implemented incrementally. Nothing below Phase 3.7 is implemented yet.
       restricted to `AUDITOR`/`SECURITY_ADMIN`/`SYSTEM_ADMIN`
 - [x] Frontend Audit Logs screen (filters, pagination, expandable detail),
       all 6 locales
-- [ ] Organization/unit-scoped audit visibility (depends on the
-      organization model in a later milestone)
+- [x] Organization/unit-scoped audit visibility (`db/org.rs`,
+      `permission::can_view_scoped_resource`) — see Phase 3.7
 
 ## Phase 3.7 — Search/data correctness
 
@@ -91,14 +92,16 @@ Implemented incrementally. Nothing below Phase 3.7 is implemented yet.
 - [x] Real probe-image validation (magic-byte sniff + decode, JPEG/PNG/
       WEBP, size/dimension limits, decompression-bomb guard) replacing a
       bare non-empty-bytes check
-- [ ] Organization/unit-scoped authorization (deliberately deferred — a
-      separate architectural change: new tables plus RBAC filtering
-      throughout search/candidate/audit visibility; not attempted
-      alongside the above to avoid a rushed, half-scoped implementation
-      of least-privilege data access)
-- [ ] Pagination for the admin user list (small, bounded, manually
-      managed dataset — lower priority than search history or the audit
-      trail)
+- [x] Organization/unit-scoped authorization — `organizations`/
+      `organization_units`/`user_memberships` tables
+      (`server/src/db/org.rs`); searches and audit events are stamped
+      with the actor's organization at creation time and scoped
+      accordingly on every read path, with `SYSTEM_ADMIN` as the sole
+      global exception; see `docs/SECURITY_ARCHITECTURE.md`. Not yet
+      covering `candidates` — no real enrollment pipeline exists yet to
+      stamp them from (Phase 4)
+- [x] Pagination for the admin user list — `GET /api/v1/admin/users` is
+      server-side paginated
 
 ## Phase 4 — Production biometric provider
 

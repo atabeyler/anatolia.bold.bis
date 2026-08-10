@@ -36,8 +36,8 @@ eşleşme bu dosyanın sonunda listelidir.
 - [x] Append-only `audit_events` tablosu, merkezi `AuditService`/
   `AuditRecorder`, `GET /api/v1/audit` (filtreli+paginated), frontend Audit
   Logs ekranı, 6 dilde çeviri. (Milestone B)
-- [ ] Organization/unit bazlı audit görünülük kapsamı (organization modeli
-  henüz yok).
+- [x] Organization/unit bazlı audit görünürlük kapsamı — eklendi, madde 13'e
+  bakınız.
 - [x] Audit tamper resistance (hash chaining) — `db/audit.rs`: her
   `audit_events` satırı `sequence` (monoton sayaç), `previous_hash` (bir
   önceki satırın `event_hash`'i, ilk satır için sabit genesis değeri) ve
@@ -126,9 +126,41 @@ eşleşme bu dosyanın sonunda listelidir.
 
 ## P1 — Authorization ve Organizasyon
 
-12. [ ] Organization / Unit modeli ekle — **bilinçli olarak ertelendi**, ayrı
-    büyük mimari iş (docs/ROADMAP.md'de not edildi).
-13. [x] Merkezi permission policy — `server/src/permission.rs` eklendi:
+12. [x] Organization / Unit modeli ekle — eklendi (`server/src/db/org.rs`):
+    `organizations`, `organization_units` (`parent_unit_id` ile keyfi
+    derinlikte hiyerarşi), `user_memberships` (bir kullanıcı birden fazla
+    org'a üye olabilir; `primary_organization_id` yeni kaynakları
+    damgalamak için ilk üyeliği kullanır). Yönetim endpoint'leri
+    (`POST/GET /api/v1/admin/organizations`,
+    `POST/GET /api/v1/admin/organizations/{id}/units`,
+    `POST/DELETE /api/v1/admin/memberships`) yalnızca `SYSTEM_ADMIN`'e
+    açık (`permission::can_manage_organizations`) — `SECURITY_ADMIN` bile
+    org yapısını değiştiremiyor, çünkü bu kurumlar-arası bir yetki.
+    `searches` ve `audit_events` tablolarına `organization_id` sütunu
+    eklendi (searches için gerçek: arama oluşturulurken oluşturanın
+    üyeliğinden sunucu tarafında damgalanıyor, hiçbir zaman client'tan
+    kabul edilmiyor). `candidates` tablosuna sütun eklendi ama
+    **enforce edilmedi** — gerçek bir candidate enrollment pipeline henüz
+    yok (madde 1-6), damgalanacak gerçek bir yaratılış akışı olmadan
+    zorlamak anlamsız olurdu; bu bilinçli bir sınırlama.
+13. [x] Object-level authorization — `permission::can_view_scoped_resource(role,
+    actor_org_ids, resource_org_id)` eklendi: `SYSTEM_ADMIN` her zaman
+    geçer (talimattaki tek açık istisna); `AUDITOR`/`SECURITY_ADMIN` gibi
+    "global" roller bile kendi org'ları dışındaki kayıtları göremiyor.
+    `resource_org_id: None` (org modelinden önceki/atanmamış veri) rol
+    kontrolünü geçen herkese görünür kalıyor — org modelinin eklenmesi
+    geriye dönük hiçbir şeyi gizlemiyor. Uygulandığı yerler: arama listesi
+    (`GET /api/v1/search`, sorgu seviyesinde filtreleniyor — sayfalama
+    sonrası post-filter değil), tek arama görüntüleme, arama adayları,
+    aday review history, audit log listesi (`GET /api/v1/audit`).
+    **Kapsanmayan:** tekil candidate endpoint'leri (`GET
+    /api/v1/candidates/{id}` vb.) — candidate'lar henüz org'a
+    damgalanmıyor (madde 12'deki not). Negative authorization testleri:
+    `server/tests/organization_scope.rs` (7 test — farklı org'un aramasını
+    göremiyor, kendi org'unu görebiliyor, SYSTEM_ADMIN bypass, liste
+    filtreleme, candidate history scoping, sadece SYSTEM_ADMIN org
+    yönetebiliyor, orgless veri geriye dönük görünür kalıyor). Ayrıca
+    merkezi permission policy zaten mevcuttu: `server/src/permission.rs`:
     `can_create_search`/`can_view_search`/`can_review_candidate`/
     `can_view_audit_log`/`can_administer_users`. `auth::require_role`
     artık bir rol dizisi değil, bu fonksiyonlardan birini alıyor;

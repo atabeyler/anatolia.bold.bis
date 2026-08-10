@@ -70,6 +70,12 @@ pub mod action {
 
     // Audit trail access itself
     pub const AUDIT_LOG_VIEWED: &str = "AUDIT_LOG_VIEWED";
+
+    // Organization / unit administration (madde 12-13)
+    pub const ORGANIZATION_CREATED: &str = "ORGANIZATION_CREATED";
+    pub const ORGANIZATION_UNIT_CREATED: &str = "ORGANIZATION_UNIT_CREATED";
+    pub const MEMBERSHIP_ASSIGNED: &str = "MEMBERSHIP_ASSIGNED";
+    pub const MEMBERSHIP_REMOVED: &str = "MEMBERSHIP_REMOVED";
 }
 
 pub mod result {
@@ -179,7 +185,7 @@ impl AuditRecorder {
         self
     }
 
-    fn to_new_event(&self) -> NewAuditEvent<'_> {
+    fn to_new_event<'a>(&'a self, organization_id: Option<&'a str>) -> NewAuditEvent<'a> {
         NewAuditEvent {
             actor_user_id: self.actor_user_id.as_deref(),
             actor_user_code: self.actor_user_code.as_deref(),
@@ -194,9 +200,23 @@ impl AuditRecorder {
             ip_address: self.ip_address.as_deref(),
             user_agent: self.user_agent.as_deref(),
             metadata: self.metadata.as_ref().map(|v| v.to_string()),
-            organization_id: None,
+            organization_id,
             organization_unit_id: None,
         }
+    }
+
+    /// Resolves the acting user's organization (madde 12-13) so the
+    /// stored event can be scoped the same way the resource it concerns
+    /// is. `None` for an event with no actor, or an actor with no
+    /// membership — those events remain visible to every role that could
+    /// see them before the org model existed (see
+    /// `permission::can_view_scoped_resource`).
+    async fn resolve_organization_id(&self, state: &AppState) -> Option<String> {
+        let actor_user_id = self.actor_user_id.as_deref()?;
+        crate::db::primary_organization_id(&state.backend, actor_user_id)
+            .await
+            .ok()
+            .flatten()
     }
 
     /// Best-effort: logs a warning and returns normally on failure — used
@@ -205,7 +225,8 @@ impl AuditRecorder {
     /// `save_mandatory` for the alternative used by security-critical
     /// actions (madde 17 — MANDATORY vs BEST_EFFORT).
     pub async fn save(self, state: &AppState) {
-        let event = self.to_new_event();
+        let organization_id = self.resolve_organization_id(state).await;
+        let event = self.to_new_event(organization_id.as_deref());
         if let Err(err) = insert_audit_event(&state.backend, event).await {
             tracing::warn!(action = self.action, error = %err, "failed to write audit event");
         }
@@ -225,7 +246,8 @@ impl AuditRecorder {
     /// silently failed to write.
     pub async fn save_mandatory(self, state: &AppState) -> Result<(), ApiError> {
         let action = self.action;
-        let event = self.to_new_event();
+        let organization_id = self.resolve_organization_id(state).await;
+        let event = self.to_new_event(organization_id.as_deref());
         insert_audit_event(&state.backend, event)
             .await
             .map_err(|err| {
@@ -319,7 +341,11 @@ pub async fn list_audit_events_route(
     Query(query): Query<AuditQuery>,
 ) -> Response {
     let rid = request_id(&headers);
-    if !require_role(&state, &headers, permission::can_view_audit_log) {
+    let Some(claims) = crate::auth::auth_user_from_headers(&headers, &state.secrets.jwt_secret)
+    else {
+        return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
+    };
+    if !permission::can_view_audit_log(&claims.role) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
 
@@ -331,6 +357,17 @@ pub async fn list_audit_events_route(
         return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
     }
 
+    // Object-level authorization (madde 12-13): holding a global audit
+    // role (AUDITOR/SECURITY_ADMIN) does not by itself grant visibility
+    // into every organization's events — only SYSTEM_ADMIN is exempt.
+    let org_scope = if claims.role == crate::roles::SYSTEM_ADMIN {
+        None
+    } else {
+        crate::db::user_organization_ids(&state.backend, &claims.id)
+            .await
+            .ok()
+    };
+
     let filter = AuditEventFilter {
         date_from,
         date_to,
@@ -339,6 +376,7 @@ pub async fn list_audit_events_route(
         case_reference: query.case_reference,
         resource_type: query.resource_type,
         result: query.result,
+        org_scope,
     };
     let page = query.page.unwrap_or(1).max(1);
     let page_size = query
