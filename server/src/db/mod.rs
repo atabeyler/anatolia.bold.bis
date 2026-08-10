@@ -478,7 +478,7 @@ async fn migrate(backend: &DbBackend) -> Result<bool, sqlx::Error> {
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     search_id UUID NOT NULL,
                     candidate_id UUID NOT NULL,
-                    score REAL NOT NULL,
+                    score DOUBLE PRECISION NOT NULL,
                     status VARCHAR(20) NOT NULL DEFAULT 'pending',
                     reviewed_by UUID,
                     reviewed_by_name VARCHAR(200),
@@ -489,6 +489,16 @@ async fn migrate(backend: &DbBackend) -> Result<bool, sqlx::Error> {
             )
             .execute(pool)
             .await?;
+            // An install predating this fix has `score REAL` (32-bit) —
+            // same class of bug as `sessions.rotation_counter` and
+            // `searches.top_k` (see their fixes), except here it's a
+            // float width mismatch: `SearchCandidateRow::score` is `f64`,
+            // which sqlx's Postgres decoder rejects when reading a
+            // `REAL`/float4 column. Safe to widen unconditionally — a
+            // float4-to-float8 conversion never loses precision or fails.
+            sqlx::query("ALTER TABLE search_candidates ALTER COLUMN score TYPE DOUBLE PRECISION")
+                .execute(pool)
+                .await?;
             // Same "table may already exist from an earlier deploy" hazard
             // as `users.national_id` above — patch in columns added after
             // `searches` first shipped rather than assuming a fresh table.
