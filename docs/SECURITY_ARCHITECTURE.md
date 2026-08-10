@@ -282,6 +282,41 @@ what these controls defend against.
     templates at enrollment time, and FAR/FRR/ROC calibration tooling
     (no authorized labeled dataset exists in this environment to
     calibrate against).
+- **OSINT/evidence provider layer** (`server/src/osint/`,
+  `server/src/db/evidence.rs`, `server/src/evidence.rs`) — a first,
+  deliberately scoped slice of the P2 "Connector / OSINT Katmanı" appendix
+  in `docs/HARDENING_CHECKLIST.md`, which was entirely unstarted before
+  this:
+  - **Provider abstraction**: `WebSearchProvider`/`NewsProvider`/
+    `AuthorizedSocialProvider` traits (same `#[async_trait]` shape as
+    `BiometricProvider`), plus `SourceRegistry` reporting which named
+    sources are currently enabled. `AuthorizedSocialProvider` is
+    deliberately named to signal that a real implementation must only
+    ever query a source the deployment has an explicit, declared
+    authorization to query — never scrape a platform without one; the
+    mock implementation makes no real request at all, so this constraint
+    has nothing to violate yet, but it's binding on whatever real
+    provider is added later.
+  - **Provider failure isolation**: `EvidenceOrchestrator::collect` runs
+    every configured provider and records each one's outcome
+    independently — one provider erroring (timeout, misconfiguration,
+    upstream failure) never prevents the others from contributing
+    evidence or fails the whole `POST .../evidence/collect` request. The
+    response reports per-provider failures in `providerErrors` rather
+    than silently dropping them.
+  - **Mock only**: `server/src/osint/mock.rs` implements all three
+    traits with deterministic, content-seeded results and zero network
+    calls — this environment has no authorized OSINT API access, so
+    there is no real provider to add yet.
+  - **Storage**: `candidate_evidence` rows are never a verdict about the
+    candidate, only a provider's own confidence score for a human
+    reviewer to weigh — same "candidates, not verdicts" principle as
+    biometric scores.
+  - **Not implemented** (each a separate, larger piece of work, not a
+    faked stand-in): entity resolution over collected evidence, an entity
+    graph, reverse image search, an OSINT-specific frontend UI, and a
+    real (non-mock) connector with declared per-connector authorization
+    type, capabilities, and rate limits.
 - **Last-admin protection** (`server/src/admin.rs`
   `would_remove_last_admin`): `ban_user` and `delete_user_route` both check
   `db::count_active_system_admins` before acting and refuse

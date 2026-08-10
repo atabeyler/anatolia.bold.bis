@@ -132,6 +132,16 @@ Implemented controls:
   scan, and the detection/alignment math could only be tested against
   synthetic images in this environment (never real photographs — the
   repository must never contain real biometric data).
+- **Evidence (OSINT) collection**: `POST /api/v1/candidates/{id}/evidence/collect`
+  runs a set of provider abstractions
+  (`WebSearchProvider`/`NewsProvider`/`AuthorizedSocialProvider`, only mock
+  implementations exist — no real external OSINT access in this
+  environment) and stores whatever each returns as `candidate_evidence`
+  rows. One provider failing never fails the whole request or blocks the
+  others' results (`osint::EvidenceOrchestrator`). Same role restriction
+  as candidate enrollment for collecting; anyone who can view search
+  results can read what was collected. See `docs/SECURITY_ARCHITECTURE.md`
+  for what this first slice does and does not cover.
 - **Candidate enrollment**: `POST /api/v1/candidates` and
   `POST /api/v1/candidates/{id}/reference-photos` (restricted to
   `OPERATOR`/`SECURITY_ADMIN`/`SYSTEM_ADMIN`) create candidate records and

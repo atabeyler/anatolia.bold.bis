@@ -481,10 +481,25 @@ eşleşme bu dosyanın sonunda listelidir.
 
 ## P2 — Connector / OSINT Katmanı (P2 eki, 40 madde)
 
-- [ ] **Tamamının hiçbiri yapılmadı.** Web search / news / social provider
-  abstraction'ları, entity resolution, evidence model, reverse image search,
-  entity graph, source registry, OSINT UI, mock OSINT provider — hiçbiri
-  başlanmadı. Bu, ayrı bir milestone (F) olarak planlanıyor.
+- [x] **İlk, bilinçli olarak sınırlı dilim yapıldı** — `server/src/osint/`:
+  `WebSearchProvider`/`NewsProvider`/`AuthorizedSocialProvider` trait'leri
+  (hepsi `#[async_trait]`, `biometric::BiometricProvider` ile aynı desen),
+  `SourceRegistry` (hangi kaynakların aktif olduğunu raporluyor),
+  `EvidenceOrchestrator` (her provider'ı ayrı ayrı çalıştırıp hatalarını
+  izole ediyor — bir provider'ın başarısız olması diğerlerinin sonucunu
+  ya da tüm isteği etkilemiyor). Üç mock implementasyon
+  (`server/src/osint/mock.rs`) — gerçek bir OSINT API erişimi/anahtarı bu
+  ortamda yok, bu yüzden gerçek bir sağlayıcı implementasyonu yapılmadı.
+  `candidate_evidence` tablosu (`server/src/db/evidence.rs`) ve
+  `POST /api/v1/candidates/{id}/evidence/collect` /
+  `GET /api/v1/candidates/{id}/evidence` endpoint'leri
+  (`server/src/evidence.rs`), `permission::can_manage_candidates` /
+  `can_view_search` ile aynı yetkilendirme desenini kullanıyor.
+  **Yapılmadı, kapsam dışı bırakıldı:** entity resolution (madde 13'te ayrı
+  iş kalemi), entity graph, reverse image search, OSINT'e özel frontend
+  UI — her biri kendi başına büyük bir iş; sahte bir implementasyonla
+  doldurmak CLAUDE.md'nin "never fake unimplemented capabilities"
+  kuralına aykırı olurdu.
 
 ## P2 — Test
 

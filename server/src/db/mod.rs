@@ -23,6 +23,8 @@ mod org;
 pub use org::*;
 mod biometric;
 pub use biometric::*;
+mod evidence;
+pub use evidence::*;
 
 #[derive(Clone)]
 pub enum DbBackend {
@@ -64,6 +66,11 @@ pub struct AppState {
     /// `BIOMETRIC_PROVIDER`, resolved once at startup. See
     /// `biometric/mod.rs`.
     pub biometric_provider: Arc<dyn crate::biometric::BiometricProvider>,
+    /// OSINT/evidence provider orchestrator — see `osint/mod.rs`. Only a
+    /// mock implementation exists today; the field exists so a future
+    /// real provider set is a drop-in swap, matching the
+    /// `biometric_provider` pattern.
+    pub osint_orchestrator: Arc<crate::osint::EvidenceOrchestrator>,
 }
 
 impl AppState {
@@ -118,6 +125,7 @@ impl AppState {
             mfa_required_roles: Arc::new(config.mfa_required_roles.clone()),
             require_second_review: config.require_second_review,
             biometric_provider,
+            osint_orchestrator: Arc::new(crate::osint::EvidenceOrchestrator::mock()),
         })
     }
 
@@ -156,6 +164,7 @@ impl AppState {
             mfa_required_roles: Arc::new(Vec::new()),
             require_second_review: false,
             biometric_provider: Arc::new(crate::biometric::MockBiometricProvider),
+            osint_orchestrator: Arc::new(crate::osint::EvidenceOrchestrator::mock()),
         }
     }
 }
@@ -569,6 +578,7 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             mfa::migrate_pg(pool).await?;
             org::migrate_pg(pool).await?;
             biometric::migrate_pg(pool).await?;
+            evidence::migrate_pg(pool).await?;
             sqlx::query("ALTER TABLE searches ADD COLUMN IF NOT EXISTS organization_id UUID")
                 .execute(pool)
                 .await?;
@@ -838,6 +848,7 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             mfa::migrate_sqlite(pool).await?;
             org::migrate_sqlite(pool).await?;
             biometric::migrate_sqlite(pool).await?;
+            evidence::migrate_sqlite(pool).await?;
             let _ = sqlx::query("ALTER TABLE searches ADD COLUMN organization_id TEXT")
                 .execute(pool)
                 .await;

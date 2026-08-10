@@ -147,7 +147,17 @@ the individual items.
 
 ## Phase 5 — Authorized connectors and administration
 
-- [ ] Authorized data source connectors (declared authorization type, capabilities, rate limits)
+- [x] OSINT/evidence provider abstraction — a first, deliberately scoped
+      slice: `WebSearchProvider`/`NewsProvider`/`AuthorizedSocialProvider`
+      traits, `SourceRegistry`, and an `EvidenceOrchestrator` that isolates
+      one provider's failure from the others (`server/src/osint/`); mock
+      implementations only (no authorized real OSINT API access exists in
+      this environment); `candidate_evidence` storage and
+      `POST/GET /api/v1/candidates/{id}/evidence[/collect]`. See `API.md`.
+      **Not implemented**: a real connector, declared per-connector
+      authorization type/capabilities/rate limits, entity resolution over
+      the collected evidence, entity graph, reverse image search, and an
+      OSINT-specific frontend UI — each is its own, larger piece of work
 - [x] Secondary verification workflow — `REQUIRE_SECOND_REVIEW` four-eyes
       policy (`db::record_review_decision`); see
       `docs/SECURITY_ARCHITECTURE.md`

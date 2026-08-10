@@ -582,6 +582,56 @@ Marks a template `revoked_at` (kept, not deleted, for audit/history) so it
 is excluded from every future search — see `db::list_active_templates`.
 **`404 Not Found`** if the template doesn't exist or is already revoked.
 
+### Evidence (OSINT)
+
+All routes below require `Authorization: Bearer <accessToken>`. This is a
+deliberately scoped first slice of the P2 OSINT appendix in
+`docs/HARDENING_CHECKLIST.md` — provider abstractions, a mock
+implementation, and per-provider failure isolation. Entity resolution
+over the collected evidence, an entity graph, reverse image search, and
+an OSINT-specific frontend UI are separate, larger pieces of work and are
+not implemented here.
+
+#### `POST /api/v1/candidates/{candidate_id}/evidence/collect`
+
+Requires `OPERATOR`, `SECURITY_ADMIN`, or `SYSTEM_ADMIN`
+(`permission::can_manage_candidates`). Body: `{ "query": "..." }` —
+typically the candidate's full name or another identifying string.
+
+Runs every configured `WebSearchProvider`/`NewsProvider`/
+`AuthorizedSocialProvider` (currently mock implementations only — see
+`server/src/osint/mock.rs`; no real external OSINT API access exists in
+this environment) and stores whatever each one returns. **One provider
+failing does not fail the request** — its failure is reported per-provider
+in `providerErrors` instead, and every other provider's results are still
+stored (`osint::EvidenceOrchestrator::collect`).
+
+**`200 OK`**:
+```json
+{
+  "items": [
+    {
+      "id": "...", "candidateId": "...", "sourceType": "web_search",
+      "providerName": "mock-web-search", "title": "...", "url": "...",
+      "snippet": "...", "confidenceScore": 0.62, "collectedBy": "...",
+      "createdAt": "..."
+    }
+  ],
+  "providerErrors": [ { "provider": "...", "error": "..." } ]
+}
+```
+`confidenceScore` is the provider's own relevance confidence — never a
+match/no-match verdict; a human reviewer decides what evidence means, same
+"candidates, not verdicts" principle as biometric scores.
+
+#### `GET /api/v1/candidates/{candidate_id}/evidence`
+
+Every evidence item ever collected for this candidate, newest first.
+Available to anyone who can view search results
+(`permission::can_view_search`), not just `can_manage_candidates`.
+
+**`200 OK`**: `{ "items": [ <evidence item, same shape as above> ] }`.
+
 ### Audit trail
 
 #### `GET /api/v1/audit`

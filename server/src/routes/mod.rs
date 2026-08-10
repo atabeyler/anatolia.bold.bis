@@ -4,7 +4,7 @@ use axum::routing::{delete, get, post};
 use axum::Router;
 
 use crate::db::AppState;
-use crate::{admin, audit, auth, candidates, mfa, org, search};
+use crate::{admin, audit, auth, candidates, evidence, mfa, org, search};
 
 pub fn router(state: AppState) -> Router {
     let auth_routes = Router::new()
@@ -99,6 +99,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/:candidate_id/templates/:template_id/revoke",
             post(candidates::revoke_template_route),
+        )
+        .route(
+            "/:candidate_id/evidence/collect",
+            post(evidence::collect_evidence_route),
+        )
+        .route(
+            "/:candidate_id/evidence",
+            get(evidence::list_evidence_route),
         );
 
     Router::new()
