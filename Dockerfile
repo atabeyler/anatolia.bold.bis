@@ -25,7 +25,12 @@ RUN npm run build
 # `server/src/biometric/models.rs`).
 FROM rust:1-slim-trixie AS server-builder
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev g++ \
+# `git` is here so `build.rs`'s own commit-SHA fallback (`git rev-parse
+# HEAD`) works inside this build stage — see the `COPY .git` below and
+# `server/build.rs`'s doc comment. Without either, GET /api/health
+# reports "unknown" instead of the actual commit, defeating its purpose
+# of confirming a deployment picked up a given push.
+RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev g++ git \
     && rm -rf /var/lib/apt/lists/*
 COPY server/Cargo.toml server/Cargo.lock* ./
 COPY server/build.rs ./build.rs
@@ -35,8 +40,9 @@ COPY server/src ./src
 # this, the build fails at the manifest-parsing stage looking for
 # benches/biometric_pipeline.rs.
 COPY server/benches ./benches
-ARG GIT_COMMIT_SHA=unknown
-ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
+# `build.rs` runs `git rev-parse HEAD` with this stage's working
+# directory as the repo root it expects to find `.git` in — see above.
+COPY .git ./.git
 # Off by default, matching server/Cargo.toml's default-off `onnx-provider`
 # feature — building this image with no extra build args reproduces
 # today's known-good mock-only artifact. Pass

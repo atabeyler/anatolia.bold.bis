@@ -8,6 +8,7 @@ import * as searchClient from '../services/searchClient';
 import type { SearchCandidate, SearchSummary } from '../services/searchClient';
 import * as evidenceClient from '../services/evidenceClient';
 import { apiErrorMessageKey } from '../services/apiClient';
+import { getHealthReady } from '../services/systemClient';
 
 const REVIEW_ROLES = ['REVIEWER', 'SECURITY_ADMIN', 'SYSTEM_ADMIN'];
 const SEARCH_ROLES = ['OPERATOR', 'REVIEWER', 'SECURITY_ADMIN', 'SYSTEM_ADMIN'];
@@ -38,6 +39,19 @@ export function DashboardPage() {
 
   const [pastSearches, setPastSearches] = useState<SearchSummary[] | null>(null);
   const [pastSearchesError, setPastSearchesError] = useState(false);
+
+  // Whether this deployment's biometric_provider is actually "mock" —
+  // read from the live backend rather than assumed, so the notice below
+  // reflects reality instead of unconditionally claiming demo mode. Only
+  // a confirmed "mock" response renders the notice; `null` (not yet
+  // loaded, or the request failed) renders nothing.
+  const [isMockProvider, setIsMockProvider] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    getHealthReady()
+      .then((health) => setIsMockProvider(health.biometricProvider === 'mock'))
+      .catch(() => setIsMockProvider(null));
+  }, []);
 
   const loadPastSearches = () => {
     setPastSearchesError(false);
@@ -186,7 +200,7 @@ export function DashboardPage() {
                 required
               />
             </label>
-            <p className="admin-hint">{t('search.mockNotice')}</p>
+            {isMockProvider && <p className="admin-hint">{t('search.mockNotice')}</p>}
             {formErrorKey && <p className="auth-message auth-message--error">{t(formErrorKey)}</p>}
             <button type="submit" className="admin-submit" disabled={submitting}>
               {submitting ? t('search.searching') : t('search.submit')}
