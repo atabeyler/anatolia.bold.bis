@@ -92,7 +92,16 @@
     "mfaEnrollmentNotStarted": "Start MFA enrollment before confirming a code.",
     "mfaNotEnabled": "Multi-factor authentication is not enabled on this account.",
     "auditWriteFailed": "The audit trail could not be written for this action; nothing was changed.",
-    "sameReviewerForbidden": "This candidate already has a first review from you; a different reviewer must provide the final decision."
+    "sameReviewerForbidden": "This candidate already has a first review from you; a different reviewer must provide the final decision.",
+    "noFaceDetected": "No face could be detected in the image.",
+    "multipleFacesDetected": "Multiple faces were detected in the image; only one is allowed.",
+    "faceTooSmall": "The detected face is too small relative to the image.",
+    "imageTooBlurry": "The image is too blurry to process.",
+    "excessivePose": "The face angle is too extreme to process.",
+    "poorLighting": "The image lighting is too poor to process.",
+    "lowFaceQuality": "The detected face does not meet the minimum quality threshold.",
+    "biometricProviderUnavailable": "The biometric provider is currently unavailable.",
+    "candidateReferenceCodeTaken": "A candidate with this reference code already exists."
   },
   "settings": {
     "openLabel": "Settings",

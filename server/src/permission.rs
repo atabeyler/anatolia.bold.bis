@@ -44,6 +44,17 @@ pub fn can_administer_users(role: &str) -> bool {
     matches!(role, roles::SYSTEM_ADMIN | roles::SECURITY_ADMIN)
 }
 
+/// May enroll/manage candidate records and their biometric reference
+/// templates: create a candidate, upload a reference photo, or revoke a
+/// template. Same operational roles as `can_create_search` — enrollment is
+/// a day-to-day operational task, not a system-administration one.
+pub fn can_manage_candidates(role: &str) -> bool {
+    matches!(
+        role,
+        roles::OPERATOR | roles::SECURITY_ADMIN | roles::SYSTEM_ADMIN
+    )
+}
+
 /// May manage the organization/unit structure itself (create
 /// organizations/units, assign/remove memberships) — deliberately
 /// narrower than `can_administer_users`: this is a cross-organization

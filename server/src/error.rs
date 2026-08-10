@@ -71,6 +71,17 @@ impl ApiError {
             "INVALID_MFA_CODE" => StatusCode::UNAUTHORIZED,
             "MFA_ENROLLMENT_NOT_STARTED" | "MFA_NOT_ENABLED" => StatusCode::CONFLICT,
             "SAME_REVIEWER_FORBIDDEN" => StatusCode::CONFLICT,
+            // Real biometric-pipeline rejections (biometric/mod.rs's
+            // `BiometricError`) — the probe image itself is unusable, not
+            // a server failure, so 422 rather than 400/500.
+            "NO_FACE_DETECTED"
+            | "MULTIPLE_FACES_DETECTED"
+            | "FACE_TOO_SMALL"
+            | "IMAGE_TOO_BLURRY"
+            | "EXCESSIVE_POSE"
+            | "POOR_LIGHTING"
+            | "LOW_FACE_QUALITY" => StatusCode::UNPROCESSABLE_ENTITY,
+            "BIOMETRIC_PROVIDER_UNAVAILABLE" => StatusCode::SERVICE_UNAVAILABLE,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

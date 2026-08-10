@@ -105,9 +105,45 @@ the individual items.
 
 ## Phase 4 — Production biometric provider
 
-- [ ] Real `BiometricProvider` implementation (ONNX Runtime via `ort`, server-side)
-- [ ] Vector database provider abstraction (pgvector/Qdrant/other)
-- [ ] Image quality assessment (blur, brightness, face angle, multiple faces) — distinct from Phase 3.7's format/size/dimension validation, which only checks the file is a genuine, well-formed image, not that it contains a usable face
+- [x] Real `BiometricProvider` implementation (ONNX Runtime via `ort`,
+      server-side): YuNet face detection + SFace face embedding
+      (`server/src/biometric/`), selected via `BIOMETRIC_PROVIDER=onnx`.
+      Both models are pinned by SHA-256 and fetched from the OpenCV Zoo at
+      startup; a hash mismatch or download failure is a hard startup
+      failure, never a silent fallback to the mock provider. See
+      `docs/SECURITY_ARCHITECTURE.md` for exactly what this pipeline does
+      and does not guarantee — in particular, its detection/alignment math
+      could only be verified against synthetic (non-face) test images in
+      this environment, never real photographs, since the repository must
+      never contain real biometric data
+- [x] Candidate enrollment pipeline — `POST /api/v1/candidates`,
+      `POST /api/v1/candidates/{id}/reference-photos`,
+      `GET /api/v1/candidates/{id}/templates`,
+      `POST /api/v1/candidates/{id}/templates/{template_id}/revoke`; see
+      `API.md`
+- [x] Vector database provider abstraction — `db::biometric` stores
+      embeddings as JSON and performs a real O(n) cosine-similarity Top-K
+      scan (`db::top_k_matches`), filtered to non-revoked,
+      model/version-compatible templates only. This is a deliberate
+      interim choice, not the final architecture: it avoids depending on
+      the `pgvector` extension (not guaranteed available in every
+      deployment) but is not an indexed ANN search. `pgvector` (or another
+      dedicated vector store, behind the same provider-abstraction
+      principle) is the documented upgrade path once ANN indexing is
+      actually needed
+- [x] Image quality assessment (blur, brightness, face angle, multiple
+      faces) — real classical-CV heuristics (Laplacian-variance blur,
+      brightness-histogram lighting, landmark-symmetry pose,
+      face-size ratio) in `server/src/biometric/quality.rs`, distinct from
+      Phase 3.7's format/size/dimension validation, which only checks the
+      file is a genuine, well-formed image, not that it contains a usable
+      face. Occlusion detection is explicitly **not implemented** — no
+      reliable heuristic exists without a trained model, and a fake check
+      would violate CLAUDE.md's "never fake unimplemented capabilities"
+      rule
+- [ ] FAR/FRR/ROC calibration tooling against a real labeled dataset — not
+      implemented; no authorized labeled biometric dataset exists in this
+      environment to calibrate against
 
 ## Phase 5 — Authorized connectors and administration
 

@@ -202,14 +202,86 @@ what these controls defend against.
   (`GET /api/v1/search?page=&pageSize=`, max page size 200), matching the
   pattern already used by `GET /api/v1/audit`.
 - **Production guard against a silent mock biometric provider**
-  (`Config::resolve_biometric_provider`, `server/src/config.rs`): only the
-  non-biometric `MockBiometricProvider` exists today (see "Not yet
-  implemented" below). `BIOMETRIC_PROVIDER` set to anything other than
-  `"mock"` is a hard startup failure in every environment. In production,
-  running the mock provider at all additionally requires an explicit
+  (`Config::resolve_biometric_provider`, `server/src/config.rs`): the
+  non-biometric `MockBiometricProvider` is still the default.
+  `BIOMETRIC_PROVIDER` set to anything other than `"mock"`/`"onnx"` is a
+  hard startup failure in every environment. In production, running the
+  mock provider at all additionally requires an explicit
   `ALLOW_MOCK_BIOMETRICS=true` — without it, the app refuses to start,
   rather than silently serving deterministic-hash "matches" as if they
   were real biometric comparisons.
+- **Real biometric provider (`BIOMETRIC_PROVIDER=onnx`,
+  `server/src/biometric/`)**: YuNet face detection and SFace face
+  embedding, run through ONNX Runtime (`ort`), behind the same
+  `BiometricProvider` trait the mock implements — callers (`search.rs`,
+  `candidates.rs`) never branch on which one is active.
+  - **Model provenance and fail-closed loading** (`biometric/models.rs`):
+    both models come from the OpenCV Zoo
+    (`github.com/opencv/opencv_zoo`) — YuNet (`face_detection_yunet_2023mar.onnx`,
+    Apache-2.0) and SFace (`face_recognition_sface_2021dec.onnx`, MIT).
+    Each is pinned by SHA-256; a download that doesn't match the pinned
+    hash is deleted rather than trusted, and `OnnxBiometricProvider::initialize`
+    is called once at startup — if it fails for any reason (no network,
+    hash mismatch, model fails to load into ONNX Runtime), the app panics
+    at startup rather than silently falling back to the mock provider.
+  - **Detection decode** (`biometric/detection.rs`): YuNet's ONNX graph
+    only exports raw per-stride classification/objectness/box/landmark
+    tensors — the anchor decoding and NMS that OpenCV's `FaceDetectorYN`
+    normally performs internally in C++ (`modules/objdetect/src/face_detect.cpp`)
+    aren't part of the graph and had to be reimplemented in Rust. The
+    exact decode formulas, stride/grid configuration, score thresholds,
+    and the model's fixed 640x640 input shape were confirmed directly
+    against that OpenCV source and the model's own declared ONNX
+    input/output tensor names (via `onnx.load`), not guessed.
+  - **Alignment** (`biometric/alignment.rs`): a least-squares similarity
+    transform (closed-form 2D Kabsch/Umeyama) warps the detected 5-point
+    landmarks onto the fixed 112x112 reference template
+    `FaceRecognizerSF::alignCrop` uses, confirmed against OpenCV's
+    `face_recognize.cpp`.
+  - **Embedding** (`biometric/embedding.rs`): SFace produces a 128-dim
+    vector, L2-normalized before storage so a stored template's cosine
+    similarity to a fresh probe reduces to a dot product; preprocessing
+    (channel order, scale, no mean subtraction) matches
+    `FaceRecognizerSF::feature`'s `blobFromImage` call exactly.
+  - **Quality gating** (`biometric/quality.rs`): real, working
+    classical-CV heuristics — Laplacian-variance blur, brightness-
+    histogram lighting, landmark-symmetry pose, face-size ratio — not a
+    trained model, and documented as such. **Occlusion detection is not
+    implemented**: no reliable heuristic exists for it without a trained
+    model, and CLAUDE.md forbids faking an unimplemented capability with
+    a check that would just be wrong some unknown fraction of the time.
+  - **Honest testing limitation**: the detection/alignment math above is
+    covered by unit tests using synthetic images and hand-computed
+    landmark coordinates (see the `#[cfg(test)]` modules in each file) —
+    it could not be end-to-end verified against a real photographed face
+    in this environment, because the repository must never contain real
+    biometric data or real subject photographs (CLAUDE.md, `SECURITY.md`).
+    A deployment adopting `BIOMETRIC_PROVIDER=onnx` should validate it
+    against real, authorized reference imagery before relying on it.
+  - **Template storage and search** (`db/biometric.rs`): embeddings are
+    stored as a JSON float array rather than a native vector column — a
+    deliberate interim choice so the schema works identically on
+    PostgreSQL and SQLite without requiring the `pgvector` extension,
+    whose availability isn't guaranteed in every deployment. Search is a
+    real, correct O(n) cosine-similarity scan over active,
+    model/version-compatible templates (`db::top_k_matches`) — not an
+    indexed approximate-nearest-neighbor search. `pgvector` (or another
+    dedicated vector store) is the documented upgrade path once ANN
+    indexing is actually needed; comparing embeddings from different
+    model/version pairs is prevented by construction (every query filters
+    on both).
+  - **Enrollment** (`server/src/candidates.rs`): `POST /api/v1/candidates`
+    creates a bare candidate; `POST /api/v1/candidates/{id}/reference-photos`
+    runs a reference photo through the same detect → quality-gate →
+    align → embed pipeline as a search probe and stores the resulting
+    template. Under the mock provider this always returns `503`
+    (`BIOMETRIC_PROVIDER_UNAVAILABLE`) rather than silently enrolling a
+    fake template. Revoking a template (`.../templates/{id}/revoke`)
+    excludes it from future searches but keeps its row for audit history.
+    **Not implemented**: duplicate-candidate detection against existing
+    templates at enrollment time, and FAR/FRR/ROC calibration tooling
+    (no authorized labeled dataset exists in this environment to
+    calibrate against).
 - **Last-admin protection** (`server/src/admin.rs`
   `would_remove_last_admin`): `ban_user` and `delete_user_route` both check
   `db::count_active_system_admins` before acting and refuse
@@ -360,10 +432,12 @@ what these controls defend against.
   `server/tests/organization_scope.rs` for the negative-authorization
   test coverage.
 
-  Not yet covered: `candidates` gained an `organization_id` column but
-  it is not enforced — there is no real candidate enrollment pipeline
-  yet (see Phase 4 in `docs/ROADMAP.md`) to stamp it from, so scoping an
-  always-null column would be a no-op. Single-candidate endpoints
+  Not yet covered: `candidates` gained an `organization_id` column but it
+  is not enforced. A real candidate enrollment pipeline exists now
+  (`POST /api/v1/candidates`, see Phase 4 in `docs/ROADMAP.md`), but
+  `create_candidate` doesn't yet accept or stamp an organization — wiring
+  enrollment into the org model is a real, open gap, not a structural
+  blocker anymore. Single-candidate endpoints
   (`GET /api/v1/candidates/{id}`) are likewise not yet org-scoped.
 
 ## Not yet implemented
@@ -382,7 +456,9 @@ dedicated append-only database role/permission grant for `audit_events`
 yet, so an operator with direct database `UPDATE`/`DELETE` privileges can
 still alter history — the chain only guarantees `GET /api/v1/audit/integrity`
 will detect it. Mandatory-audit coverage (`save_mandatory`) is applied to
-every MANDATORY action that exists in the codebase today; it is not yet
-wired into candidate enrollment, template revocation, role/permission
-changes, or sensitive exports, since none of those endpoints exist yet
-either.
+every MANDATORY action that exists in the codebase today, including
+candidate creation, reference-photo enrollment, and template revocation
+(`server/src/candidates.rs`) — minting or revoking a biometric template
+is never reported to the client as a clean success if its audit record
+failed to write. It is not yet wired into role/permission changes or
+sensitive exports, since neither of those endpoints exist yet.

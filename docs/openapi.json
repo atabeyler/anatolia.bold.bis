@@ -3,7 +3,7 @@
   "info": {
     "title": "Anatolia B.I.S. API",
     "version": "1.0.0",
-    "description": "Machine-readable companion to API.md. See API.md for full prose documentation (request/response shapes, rate limits, error codes) \u2014 this file exists primarily so server/tests/openapi_drift.rs can catch a route that was added to, or removed from, server/src/routes/mod.rs without a matching documentation update. Kept intentionally lightweight rather than exhaustively typed."
+    "description": "Machine-readable companion to API.md. See API.md for full prose documentation (request/response shapes, rate limits, error codes) — this file exists primarily so server/tests/openapi_drift.rs can catch a route that was added to, or removed from, server/src/routes/mod.rs without a matching documentation update. Kept intentionally lightweight rather than exhaustively typed."
   },
   "paths": {
     "/api/health": {
@@ -682,7 +682,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK \u2014 { eventsChecked, intact, breaks }"
+            "description": "OK — { eventsChecked, intact, breaks }"
           },
           "403": {
             "description": "Forbidden"
@@ -788,6 +788,96 @@
           },
           "403": {
             "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/candidates": {
+      "post": {
+        "summary": "Create a candidate record (OPERATOR/SECURITY_ADMIN/SYSTEM_ADMIN)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "409": {
+            "description": "Reference code already taken"
+          }
+        }
+      }
+    },
+    "/api/v1/candidates/{candidateId}/reference-photos": {
+      "post": {
+        "summary": "Enroll a reference photo, running it through the active BiometricProvider (OPERATOR/SECURITY_ADMIN/SYSTEM_ADMIN)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Candidate not found"
+          },
+          "422": {
+            "description": "Probe image rejected by the biometric pipeline (e.g. NO_FACE_DETECTED)"
+          },
+          "503": {
+            "description": "Biometric provider unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/candidates/{candidateId}/templates": {
+      "get": {
+        "summary": "List every biometric template ever enrolled for a candidate",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/candidates/{candidateId}/templates/{templateId}/revoke": {
+      "post": {
+        "summary": "Revoke a biometric template so it is excluded from future searches (OPERATOR/SECURITY_ADMIN/SYSTEM_ADMIN)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Template not found"
           }
         }
       }

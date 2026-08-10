@@ -7,9 +7,8 @@ use serde_json::json;
 
 use crate::audit::{action, result as audit_result, AuditRecorder};
 use crate::auth::{auth_user_from_headers, require_role};
-use crate::biometric::{BiometricProvider, MockBiometricProvider};
 use crate::db::{
-    create_search_with_candidates, list_candidates, list_search_candidates, list_searches_page,
+    create_search_with_candidates, list_search_candidates, list_searches_page,
     list_verification_events, load_candidate_by_id, load_search_by_id, load_user_by_id,
     record_failed_search, record_review_decision, AppState, CandidateRow, ReviewDecisionOutcome,
     SearchCandidateRow, SearchRow, VerificationEventRow,
@@ -169,11 +168,17 @@ pub async fn create_search_route(
         .ok()
         .flatten();
 
-    let candidates = match list_candidates(&state.backend).await {
-        Ok(rows) => rows,
-        Err(_) => return ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    let ranked = match state
+        .biometric_provider
+        .search(&state, &image_bytes, top_k as usize)
+        .await
+    {
+        Ok(ranked) => ranked,
+        Err(err) => {
+            tracing::warn!(error = %err, "biometric provider rejected probe image");
+            return ApiError::new(err.code(), err.message_key(), rid).into_response();
+        }
     };
-    let ranked = MockBiometricProvider.search(&image_bytes, candidates, top_k as usize);
     let scored: Vec<(String, f64)> = ranked
         .iter()
         .map(|s| (s.candidate.id.clone(), s.score))
@@ -263,7 +268,7 @@ pub async fn create_search_route(
     }
 }
 
-fn code_message_key(code: &'static str) -> &'static str {
+pub(crate) fn code_message_key(code: &'static str) -> &'static str {
     match code {
         "IMAGE_TOO_LARGE" => "errors.imageTooLarge",
         "UNSUPPORTED_IMAGE_TYPE" => "errors.unsupportedImageType",

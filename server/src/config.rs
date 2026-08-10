@@ -156,30 +156,30 @@ impl Config {
 }
 
 /// `BIOMETRIC_PROVIDER` (default `"mock"`) selects the `BiometricProvider`
-/// implementation. Only `"mock"` exists in this codebase today — a real,
-/// server-side face-embedding provider (ONNX Runtime via `ort`) is planned
-/// but not implemented (see docs/ROADMAP.md Phase 4). Silently running the
+/// implementation. Two exist: `"mock"` (deterministic, non-biometric —
+/// see `biometric/mod.rs`) and `"onnx"` (real YuNet/SFace inference via
+/// ONNX Runtime — see `biometric/onnx_provider.rs`). Silently running the
 /// mock, non-biometric provider in production would let a deployment look
 /// fully functional while every "match" is actually a deterministic hash
 /// of the uploaded bytes — CLAUDE.md explicitly forbids this. Production
 /// therefore requires `ALLOW_MOCK_BIOMETRICS=true` as an explicit,
 /// conscious override before it will start with the mock provider; any
-/// other `BIOMETRIC_PROVIDER` value is a hard failure until that
-/// implementation actually exists, in any environment.
+/// value other than `"mock"`/`"onnx"` is a hard failure in any
+/// environment.
 fn resolve_biometric_provider(production: bool) -> String {
     let provider = env::var("BIOMETRIC_PROVIDER")
         .ok()
         .filter(|v| !v.trim().is_empty())
         .unwrap_or_else(|| "mock".to_string());
 
-    if provider != "mock" {
+    if provider != "mock" && provider != "onnx" {
         panic!(
-            "BIOMETRIC_PROVIDER={provider} is not implemented — only \"mock\" exists today; \
-             refusing to start with an unknown biometric provider"
+            "BIOMETRIC_PROVIDER={provider} is not implemented — only \"mock\" and \"onnx\" exist \
+             today; refusing to start with an unknown biometric provider"
         );
     }
 
-    if production {
+    if production && provider == "mock" {
         let allow_mock = env::var("ALLOW_MOCK_BIOMETRICS")
             .map(|v| v == "true")
             .unwrap_or(false);
@@ -330,8 +330,17 @@ mod tests {
     #[should_panic(expected = "is not implemented")]
     fn unknown_provider_panics_even_outside_production() {
         let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
-        env::set_var("BIOMETRIC_PROVIDER", "onnx");
+        env::set_var("BIOMETRIC_PROVIDER", "not-a-real-provider");
         resolve_biometric_provider(false);
+    }
+
+    #[test]
+    fn onnx_provider_is_accepted_without_the_mock_override() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        env::set_var("BIOMETRIC_PROVIDER", "onnx");
+        env::remove_var("ALLOW_MOCK_BIOMETRICS");
+        assert_eq!(resolve_biometric_provider(true), "onnx");
+        env::remove_var("BIOMETRIC_PROVIDER");
     }
 
     #[test]

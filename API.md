@@ -397,14 +397,37 @@ a fresh re-encode of the decoded pixel data, not the original upload
 bytes, which strips any EXIF/XMP metadata (GPS coordinates, device
 make/model, capture timestamp) the original file carried.
 
-Runs the `BiometricProvider` (currently `MockBiometricProvider` — see
-CLAUDE.md) over every known candidate. The search row and every one of its
-candidate results are written in a single database transaction (see
+Runs the active `BiometricProvider` (`BIOMETRIC_PROVIDER` — `mock` by
+default, or `onnx` for the real YuNet/SFace pipeline; see
+`docs/SECURITY_ARCHITECTURE.md`) against every enrolled candidate's stored
+templates. The search row and every one of its candidate results are
+written in a single database transaction (see
 `db::create_search_with_candidates`) — a persistence failure never leaves
 a partial candidate list visible; the attempt is instead recorded as a
 `failed` search (see the status table below) and the request returns
 **`500 Internal Server Error`**. The probe image itself is never
 persisted; only its derived scores are.
+
+Under `BIOMETRIC_PROVIDER=onnx`, the probe image is run through a real
+pipeline (face detection → quality gating → alignment → embedding) before
+any candidate comparison happens. A probe the pipeline can't use returns
+**`422 Unprocessable Entity`** with one of these codes instead of a
+ranked-candidate result:
+
+| `code` | Meaning |
+|---|---|
+| `NO_FACE_DETECTED` | No face found in the probe image. |
+| `MULTIPLE_FACES_DETECTED` | More than one face found; exactly one is required. |
+| `FACE_TOO_SMALL` | The detected face is too small relative to the image. |
+| `IMAGE_TOO_BLURRY` | Laplacian-variance blur check failed. |
+| `EXCESSIVE_POSE` | Landmark-symmetry pose check failed (face too rotated). |
+| `POOR_LIGHTING` | Mean-brightness check failed (too dark or too bright). |
+| `LOW_FACE_QUALITY` | Detector confidence below the search-time threshold. |
+
+If the provider itself can't run (e.g. `onnx` configured but model
+initialization failed at startup — which is itself a fail-closed startup
+panic, not a runtime state — or a transient inference error), the
+response is **`503 Service Unavailable`**, `BIOMETRIC_PROVIDER_UNAVAILABLE`.
 
 **`200 OK`**:
 ```json
@@ -506,6 +529,58 @@ appears wherever "needs review" candidates are surfaced, so a later
 decision (by the same or a different reviewer) can still confirm or
 reject it. Not subject to four-eyes — an `inconclusive` decision never
 finalizes anything regardless of `REQUIRE_SECOND_REVIEW`.
+
+### Candidate enrollment
+
+All routes below require `Authorization: Bearer <accessToken>` and
+`OPERATOR`, `SECURITY_ADMIN`, or `SYSTEM_ADMIN`
+(`permission::can_manage_candidates`).
+
+#### `POST /api/v1/candidates`
+
+Body: `{ "referenceCode": "...", "fullName": "...", "notes": "..." }`
+(`notes` optional). Creates a bare candidate record with no biometric
+template attached — enrollment of a reference photo is a separate step
+(below), since the two can fail independently. A duplicate
+`referenceCode` returns **`409 Conflict`**.
+
+**`200 OK`**: `{ "id": "...", "referenceCode": "...", "fullName": "...", "notes": "..." }`.
+
+#### `POST /api/v1/candidates/{candidate_id}/reference-photos`
+
+Multipart form field `image`, validated the same way a search probe is
+(magic-byte sniff, real decode, size/dimension limits — see
+`POST /api/v1/search/face` above). Runs the active `BiometricProvider`'s
+enrollment pipeline and stores the resulting template.
+
+Under `BIOMETRIC_PROVIDER=mock` (the default), this **always** returns
+**`503 Service Unavailable`** (`BIOMETRIC_PROVIDER_UNAVAILABLE`) — the
+mock provider performs no real face embedding, so there is nothing
+genuine to enroll; this is a deliberate honesty guarantee, not a bug.
+Under `BIOMETRIC_PROVIDER=onnx`, the same rejection codes as the search
+endpoint apply (`NO_FACE_DETECTED`, `MULTIPLE_FACES_DETECTED`, etc.).
+
+**`200 OK`**:
+```json
+{
+  "id": "...", "candidateId": "...", "modelName": "sface", "modelVersion": "2021dec",
+  "embeddingDimension": 128, "qualityScore": 0.94, "sourceReference": null,
+  "createdAt": "...", "revokedAt": null
+}
+```
+
+#### `GET /api/v1/candidates/{candidate_id}/templates`
+
+Every template ever enrolled for this candidate, including revoked ones,
+newest first. Same shape as the object above, wrapped in `{ "items": [...] }`.
+Available to anyone who can view search results
+(`permission::can_view_search`), not just `can_manage_candidates`.
+
+#### `POST /api/v1/candidates/{candidate_id}/templates/{template_id}/revoke`
+
+Marks a template `revoked_at` (kept, not deleted, for audit/history) so it
+is excluded from every future search — see `db::list_active_templates`.
+**`404 Not Found`** if the template doesn't exist or is already revoked.
 
 ### Audit trail
 

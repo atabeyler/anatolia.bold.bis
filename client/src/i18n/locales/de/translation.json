@@ -92,7 +92,16 @@
     "mfaEnrollmentNotStarted": "Starten Sie die MFA-Registrierung, bevor Sie einen Code bestätigen.",
     "mfaNotEnabled": "Die Multi-Faktor-Authentifizierung ist für dieses Konto nicht aktiviert.",
     "auditWriteFailed": "Der Prüfpfad-Eintrag für diese Aktion konnte nicht geschrieben werden; es wurde nichts geändert.",
-    "sameReviewerForbidden": "Dieser Kandidat wurde bereits von Ihnen erstbegutachtet; eine andere prüfende Person muss die endgültige Entscheidung treffen."
+    "sameReviewerForbidden": "Dieser Kandidat wurde bereits von Ihnen erstbegutachtet; eine andere prüfende Person muss die endgültige Entscheidung treffen.",
+    "noFaceDetected": "Im Bild konnte kein Gesicht erkannt werden.",
+    "multipleFacesDetected": "Im Bild wurden mehrere Gesichter erkannt; nur eines ist zulässig.",
+    "faceTooSmall": "Das erkannte Gesicht ist im Verhältnis zum Bild zu klein.",
+    "imageTooBlurry": "Das Bild ist zu unscharf zur Verarbeitung.",
+    "excessivePose": "Der Gesichtswinkel ist zu extrem zur Verarbeitung.",
+    "poorLighting": "Die Bildbeleuchtung ist zu schlecht zur Verarbeitung.",
+    "lowFaceQuality": "Das erkannte Gesicht erfüllt nicht den Mindestqualitätsschwellenwert.",
+    "biometricProviderUnavailable": "Der biometrische Anbieter ist derzeit nicht verfügbar.",
+    "candidateReferenceCodeTaken": "Ein Kandidat mit diesem Referenzcode existiert bereits."
   },
   "settings": {
     "openLabel": "Einstellungen",

@@ -210,4 +210,21 @@ async fn role_matrix_matches_permission_policy() {
         },
     )
     .await;
+
+    // POST /api/v1/candidates — permission::can_manage_candidates.
+    assert_role_gate(
+        &app,
+        &tokens,
+        &[roles::OPERATOR, roles::SECURITY_ADMIN, roles::SYSTEM_ADMIN],
+        "POST /api/v1/candidates",
+        |token| {
+            bearer_json(
+                "POST",
+                "/api/v1/candidates",
+                token,
+                json!({ "referenceCode": "RC-ROLE-MATRIX", "fullName": "Role Matrix" }),
+            )
+        },
+    )
+    .await;
 }

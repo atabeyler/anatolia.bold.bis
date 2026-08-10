@@ -92,7 +92,16 @@
     "mfaEnrollmentNotStarted": "Bir kodu onaylamadan önce MFA kaydına başlayın.",
     "mfaNotEnabled": "Bu hesapta çok faktörlü kimlik doğrulama etkin değil.",
     "auditWriteFailed": "Bu işlem için denetim kaydı yazılamadı; hiçbir şey değiştirilmedi.",
-    "sameReviewerForbidden": "Bu aday zaten sizin tarafınızdan ilk kez incelendi; nihai kararı farklı bir inceleyici vermelidir."
+    "sameReviewerForbidden": "Bu aday zaten sizin tarafınızdan ilk kez incelendi; nihai kararı farklı bir inceleyici vermelidir.",
+    "noFaceDetected": "Görüntüde yüz tespit edilemedi.",
+    "multipleFacesDetected": "Görüntüde birden fazla yüz tespit edildi; yalnızca bir yüze izin verilir.",
+    "faceTooSmall": "Tespit edilen yüz, görüntüye göre çok küçük.",
+    "imageTooBlurry": "Görüntü işlenemeyecek kadar bulanık.",
+    "excessivePose": "Yüz açısı işlenemeyecek kadar aşırı.",
+    "poorLighting": "Görüntü ışığı işlenemeyecek kadar yetersiz.",
+    "lowFaceQuality": "Tespit edilen yüz asgari kalite eşiğini karşılamıyor.",
+    "biometricProviderUnavailable": "Biyometrik sağlayıcı şu anda kullanılamıyor.",
+    "candidateReferenceCodeTaken": "Bu referans koduna sahip bir aday zaten mevcut."
   },
   "settings": {
     "openLabel": "Ayarlar",

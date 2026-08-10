@@ -21,6 +21,8 @@ mod mfa;
 pub use mfa::*;
 mod org;
 pub use org::*;
+mod biometric;
+pub use biometric::*;
 
 #[derive(Clone)]
 pub enum DbBackend {
@@ -58,6 +60,10 @@ pub struct AppState {
     pub mfa_required_roles: Arc<Vec<String>>,
     /// Four-eyes review policy — see `config::Config::require_second_review`.
     pub require_second_review: bool,
+    /// The active `BiometricProvider` implementation — selected by
+    /// `BIOMETRIC_PROVIDER`, resolved once at startup. See
+    /// `biometric/mod.rs`.
+    pub biometric_provider: Arc<dyn crate::biometric::BiometricProvider>,
 }
 
 impl AppState {
@@ -80,6 +86,21 @@ impl AppState {
             _ => sqlite_backend().await?,
         };
         migrate(&backend).await?;
+        let biometric_provider: Arc<dyn crate::biometric::BiometricProvider> =
+            match config.biometric_provider.as_str() {
+                "onnx" => Arc::new(
+                    crate::biometric::OnnxBiometricProvider::initialize()
+                        .await
+                        .unwrap_or_else(|err| {
+                            panic!(
+                                "BIOMETRIC_PROVIDER=onnx but the ONNX provider failed to \
+                                 initialize ({err}); refusing to start rather than silently \
+                                 falling back to the mock provider"
+                            )
+                        }),
+                ),
+                _ => Arc::new(crate::biometric::MockBiometricProvider),
+            };
         Ok(Self {
             backend,
             rate_limiter: Arc::new(InMemoryRateLimiter::new()),
@@ -96,6 +117,7 @@ impl AppState {
             }),
             mfa_required_roles: Arc::new(config.mfa_required_roles.clone()),
             require_second_review: config.require_second_review,
+            biometric_provider,
         })
     }
 
@@ -133,6 +155,7 @@ impl AppState {
             // flow directly.
             mfa_required_roles: Arc::new(Vec::new()),
             require_second_review: false,
+            biometric_provider: Arc::new(crate::biometric::MockBiometricProvider),
         }
     }
 }
@@ -545,6 +568,7 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             audit::migrate_pg(pool).await?;
             mfa::migrate_pg(pool).await?;
             org::migrate_pg(pool).await?;
+            biometric::migrate_pg(pool).await?;
             sqlx::query("ALTER TABLE searches ADD COLUMN IF NOT EXISTS organization_id UUID")
                 .execute(pool)
                 .await?;
@@ -813,6 +837,7 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             audit::migrate_sqlite(pool).await?;
             mfa::migrate_sqlite(pool).await?;
             org::migrate_sqlite(pool).await?;
+            biometric::migrate_sqlite(pool).await?;
             let _ = sqlx::query("ALTER TABLE searches ADD COLUMN organization_id TEXT")
                 .execute(pool)
                 .await;
@@ -1593,6 +1618,50 @@ pub async fn load_candidate_by_id(
             )
             .bind(id)
             .fetch_optional(pool)
+            .await
+        }
+    }
+}
+
+/// Creates a new candidate record (madde 1-6 enrollment pipeline). No
+/// biometric template is attached here — that happens separately via
+/// `db::biometric::insert_template` once a reference photo has been run
+/// through the biometric provider's `enroll` pipeline.
+pub async fn create_candidate(
+    backend: &DbBackend,
+    reference_code: &str,
+    full_name: &str,
+    notes: Option<&str>,
+) -> Result<CandidateRow, sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            sqlx::query_as::<_, CandidateRow>(
+                "INSERT INTO candidates (reference_code, full_name, notes) VALUES ($1, $2, $3) \
+                 RETURNING id::text, reference_code, full_name, notes",
+            )
+            .bind(reference_code)
+            .bind(full_name)
+            .bind(notes)
+            .fetch_one(pool)
+            .await
+        }
+        DbBackend::Sqlite(pool) => {
+            let id = Uuid::new_v4().to_string();
+            sqlx::query(
+                "INSERT INTO candidates (id, reference_code, full_name, notes) \
+                 VALUES (?1, ?2, ?3, ?4)",
+            )
+            .bind(&id)
+            .bind(reference_code)
+            .bind(full_name)
+            .bind(notes)
+            .execute(pool)
+            .await?;
+            sqlx::query_as::<_, CandidateRow>(
+                "SELECT id, reference_code, full_name, notes FROM candidates WHERE id = ?1",
+            )
+            .bind(&id)
+            .fetch_one(pool)
             .await
         }
     }

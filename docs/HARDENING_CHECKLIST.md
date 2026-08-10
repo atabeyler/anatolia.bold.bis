@@ -140,9 +140,11 @@ eşleşme bu dosyanın sonunda listelidir.
     eklendi (searches için gerçek: arama oluşturulurken oluşturanın
     üyeliğinden sunucu tarafında damgalanıyor, hiçbir zaman client'tan
     kabul edilmiyor). `candidates` tablosuna sütun eklendi ama
-    **enforce edilmedi** — gerçek bir candidate enrollment pipeline henüz
-    yok (madde 1-6), damgalanacak gerçek bir yaratılış akışı olmadan
-    zorlamak anlamsız olurdu; bu bilinçli bir sınırlama.
+    **enforce edilmedi** — candidate enrollment pipeline'ı artık var
+    (madde 1-6, `POST /api/v1/candidates`) ama `create_candidate` şu an
+    `organization_id` kabul etmiyor/damgalamıyor; bu bilinçli değil,
+    dokümante edilmiş bir açık — enrollment endpoint'inin org-scoping'e
+    bağlanması ayrı bir iş kalemi olarak kaldı.
 13. [x] Object-level authorization — `permission::can_view_scoped_resource(role,
     actor_org_ids, resource_org_id)` eklendi: `SYSTEM_ADMIN` her zaman
     geçer (talimattaki tek açık istisna); `AUDITOR`/`SECURITY_ADMIN` gibi
@@ -199,18 +201,51 @@ eşleşme bu dosyanın sonunda listelidir.
     startup fail ediyor; `mock` dışında bir `BIOMETRIC_PROVIDER` değeri her
     ortamda hard failure (henüz başka bir implementasyon yok). (Milestone D,
     kısmi)
-20. [ ] Production face provider (ONNX Runtime / `ort`) — **yapılmadı**.
-    Gerçek bir model kaynağı/lisansı gerektiriyor; repo sahibinin kararı
-    bekleniyor (hangi model, nereden temin edilecek).
-21. [ ] Embedding storage (`biometric_templates` tablosu, pgvector vb.) —
-    **yapılmadı**.
-22. [ ] Enrollment pipeline (çoklu reference image, kalite kontrolü) —
-    **yapılmadı**.
-23. [ ] Duplicate candidate control — **yapılmadı**.
+20. [x] Production face provider (ONNX Runtime / `ort`) —
+    `BIOMETRIC_PROVIDER=onnx`, `server/src/biometric/{detection,
+    alignment, quality, embedding, models, onnx_provider}.rs`. Gerçek
+    açık kaynaklı modeller kullanıldı: YuNet (`face_detection_yunet_2023mar.onnx`,
+    Apache-2.0) yüz tespiti için, SFace (`face_recognition_sface_2021dec.onnx`,
+    MIT) embedding için — ikisi de OpenCV Zoo'dan, SHA-256 ile pinlenmiş
+    ve indirilirken doğrulanıyor (hash uyuşmazlığı veya indirme hatası
+    startup'ı fail-closed olarak durduruyor, mock provider'a sessizce
+    düşmüyor). YuNet'in ONNX grafiği ham tensor çıktısı veriyor — anchor
+    decode/NMS mantığı OpenCV'nin C++ kaynağından (`face_detect.cpp`)
+    birebir alınıp Rust'ta yeniden yazıldı; aynı şekilde SFace'in
+    alignment referans koordinatları ve preprocessing'i OpenCV'nin
+    `face_recognize.cpp` kaynağından doğrulandı. **Dürüst sınır**: bu
+    decode/alignment matematiği bu ortamda yalnızca sentetik (gerçek yüz
+    içermeyen) test görüntüleriyle doğrulanabildi — repo kuralı gereği
+    gerçek biyometrik veri/fotoğraf hiçbir zaman ortama girmediği için,
+    gerçek bir yüzle uçtan uca doğrulama yapılamadı. (Milestone D)
+21. [x] Embedding storage (`biometric_templates` tablosu) —
+    `server/src/db/biometric.rs`. Embedding'ler JSON float array olarak
+    saklanıyor (pgvector extension'ının her deployment'ta bulunacağı
+    garanti edilemediği için — bilinçli, dokümante edilmiş bir ara
+    çözüm); gerçek O(n) cosine-similarity Top-K taraması yapılıyor,
+    yalnızca aynı `model_name`/`model_version` çiftine sahip, revoke
+    edilmemiş template'ler arasında. İndeksli ANN arama değil — bu
+    dokümante edilmiş bir performans sınırı, gizlenmiş bir eksik değil.
+22. [x] Enrollment pipeline — `POST /api/v1/candidates`,
+    `POST /api/v1/candidates/{id}/reference-photos`,
+    `GET /api/v1/candidates/{id}/templates`,
+    `POST /api/v1/candidates/{id}/templates/{template_id}/revoke`
+    (`server/src/candidates.rs`). Tek reference image başına tek
+    pipeline çalıştırması; kalite kontrolü gerçek (heuristik) blur/
+    lighting/pose/face-size kontrolleriyle yapılıyor. **Çoklu reference
+    image / duplicate candidate kontrolü henüz yapılmadı** — madde 23'e
+    bakın.
+23. [ ] Duplicate candidate control — **yapılmadı**. Yeni bir reference
+    photo enroll edilirken mevcut template'lere karşı bir benzerlik
+    kontrolü (`possibleDuplicateOf` gibi bir soft warning) planlandı
+    ama uygulanmadı.
 24. [x] Score semantics (probability dili yasak, "Similarity Score" olarak
     gösteriliyor) — zaten mevcuttu, korundu.
 25. [ ] Threshold calibration / evaluation tool (FAR/FRR/ROC/Top-K) —
-    **yapılmadı**.
+    **yapılmadı**. Bu ortamda yetkilendirilmiş, etiketlenmiş bir
+    biyometrik veri seti olmadığı için gerçek bir doğruluk ölçümü
+    üretilemez; araç yapılırsa bile yalnızca kendi matematiğinin
+    doğruluğu test edilebilir, gerçek dünya performansı değil.
 26. [ ] Biyometrik test koşulları (lighting/pose/resolution benchmark) —
     **yapılmadı**.
 

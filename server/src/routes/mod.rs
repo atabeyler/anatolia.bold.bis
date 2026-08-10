@@ -4,7 +4,7 @@ use axum::routing::{delete, get, post};
 use axum::Router;
 
 use crate::db::AppState;
-use crate::{admin, audit, auth, mfa, org, search};
+use crate::{admin, audit, auth, candidates, mfa, org, search};
 
 pub fn router(state: AppState) -> Router {
     let auth_routes = Router::new()
@@ -74,6 +74,7 @@ pub fn router(state: AppState) -> Router {
         );
 
     let candidate_routes = Router::new()
+        .route("/", post(candidates::create_candidate_route))
         .route("/:candidate_id", get(search::get_candidate_route))
         .route(
             "/:candidate_id/verify",
@@ -86,6 +87,18 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/:candidate_id/inconclusive",
             post(search::mark_candidate_inconclusive_route),
+        )
+        .route(
+            "/:candidate_id/reference-photos",
+            post(candidates::upload_reference_photo_route),
+        )
+        .route(
+            "/:candidate_id/templates",
+            get(candidates::list_templates_route),
+        )
+        .route(
+            "/:candidate_id/templates/:template_id/revoke",
+            post(candidates::revoke_template_route),
         );
 
     Router::new()

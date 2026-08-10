@@ -110,12 +110,34 @@ Implemented controls:
 - **Coordinate validation**: latitude/longitude are range-checked and
   required to be a matched pair; malformed geolocation data is rejected
   rather than silently stored.
-- **Production guard against a silent mock biometric provider**: only the
-  non-biometric `MockBiometricProvider` exists today. Production refuses
-  to start with it unless `ALLOW_MOCK_BIOMETRICS=true` is explicitly set —
-  a conscious acknowledgment, not a silent default. Any `BIOMETRIC_PROVIDER`
-  value other than `mock` is a hard startup failure everywhere, since no
-  other implementation exists yet. See `docs/SECURITY_ARCHITECTURE.md`.
+- **Production guard against a silent mock biometric provider**: the
+  non-biometric `MockBiometricProvider` is still the default. Production
+  refuses to start with it unless `ALLOW_MOCK_BIOMETRICS=true` is
+  explicitly set — a conscious acknowledgment, not a silent default. Any
+  `BIOMETRIC_PROVIDER` value other than `mock`/`onnx` is a hard startup
+  failure everywhere. See `docs/SECURITY_ARCHITECTURE.md`.
+- **Real biometric provider (`BIOMETRIC_PROVIDER=onnx`)**: YuNet face
+  detection and SFace face embedding, run through ONNX Runtime (`ort`),
+  behind the same `BiometricProvider` trait the mock implements. Both
+  models are pinned by SHA-256 and fail closed — a hash mismatch or
+  download failure at startup is a hard panic, never a silent fallback to
+  the mock provider. A search probe or enrollment reference photo that
+  fails detection, has more than one face, or fails a real (classical-CV,
+  not ML) quality heuristic returns a specific `422` code
+  (`NO_FACE_DETECTED`, `MULTIPLE_FACES_DETECTED`, `FACE_TOO_SMALL`,
+  `IMAGE_TOO_BLURRY`, `EXCESSIVE_POSE`, `POOR_LIGHTING`,
+  `LOW_FACE_QUALITY`) rather than a fabricated result. See
+  `docs/SECURITY_ARCHITECTURE.md` for the honest limitations: occlusion
+  detection is not implemented, similarity search is an unindexed O(n)
+  scan, and the detection/alignment math could only be tested against
+  synthetic images in this environment (never real photographs — the
+  repository must never contain real biometric data).
+- **Candidate enrollment**: `POST /api/v1/candidates` and
+  `POST /api/v1/candidates/{id}/reference-photos` (restricted to
+  `OPERATOR`/`SECURITY_ADMIN`/`SYSTEM_ADMIN`) create candidate records and
+  attach biometric templates via the active provider; a revoked template
+  (`POST .../templates/{template_id}/revoke`) is excluded from every
+  future search but its row is kept for audit history.
 - **Last-admin protection**: `POST /api/v1/admin/users/{id}/ban` and
   `DELETE /api/v1/admin/users/{id}` both refuse to act on the only active
   `SYSTEM_ADMIN` account (`409 Conflict`, `LAST_ADMIN_PROTECTED`) — the

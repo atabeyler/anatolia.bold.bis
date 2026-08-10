@@ -77,12 +77,18 @@ built.
    and a `failed` record are only ever created *after* this passes —
    malformed uploads never reach the biometric provider or the database
    at all.
-3. The (currently mock) `BiometricProvider` ranks a fixed candidate pool
-   against the probe image and returns a bounded list (`topK`, clamped to
-   `SEARCH_MAX_TOP_K`) of `(candidate_id, score)` pairs. **The mock
-   provider's score is a deterministic hash of the uploaded bytes — it is
-   not a real face comparison.** See `SECURITY.md` for the production
-   guard that refuses to run this mode silently.
+3. The active `BiometricProvider` (`BIOMETRIC_PROVIDER=mock` or `onnx`)
+   ranks enrolled candidates against the probe image and returns a
+   bounded list (`topK`, clamped to `SEARCH_MAX_TOP_K`) of
+   `(candidate_id, score)` pairs. **Under `mock` (still the default), the
+   score is a deterministic hash of the uploaded bytes — it is not a real
+   face comparison**; see `SECURITY.md` for the production guard that
+   refuses to run this mode silently. Under `onnx`, the probe is run
+   through a real detect → quality-gate → align → embed pipeline
+   (`server/src/biometric/`) and compared by cosine similarity against
+   stored templates (`db/biometric.rs`) — see
+   `docs/SECURITY_ARCHITECTURE.md` for exactly what that pipeline
+   guarantees and its documented limitations.
 4. The search row, its `search_candidates` rows, and their `pending`
    review status are written inside a single database transaction
    (`db::create_search_with_candidates`) — a failure mid-way rolls back

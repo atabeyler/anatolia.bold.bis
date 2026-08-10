@@ -30,11 +30,15 @@ lightweight STRIDE-style pass over the system's main assets.
   failure to send is logged and never blocks or fails the triggering
   request (registration, password reset, etc. still succeed even if the
   notification email doesn't go out).
-- **Backend ↔ mock biometric provider**: currently in-process, no network
-  boundary. A future real provider (`docs/ROADMAP.md` Phase 4) is
-  expected to stay server-side — never on-device — precisely so this
-  boundary remains centrally governed and auditable rather than being
-  pushed onto a client the operator doesn't fully control.
+- **Backend ↔ biometric provider**: in-process, no network boundary for
+  either implementation. The mock provider does no real inference. The
+  real provider (`BIOMETRIC_PROVIDER=onnx`, `docs/ROADMAP.md` Phase 4)
+  runs ONNX Runtime in-process too — inference stays server-side, never
+  on-device, precisely so this boundary remains centrally governed and
+  auditable rather than being pushed onto a client the operator doesn't
+  fully control. The one network dependency is at startup only: fetching
+  and SHA-256-verifying the pinned model files (see
+  `docs/SECURITY_ARCHITECTURE.md`), not per-request.
 
 ## Threats and mitigations
 
@@ -105,11 +109,15 @@ yet, recorded in `docs/HARDENING_CHECKLIST.md`:
   role currently sees all data platform-wide; there is no per-organization
   data boundary. This is a large, deliberate architectural decision
   awaiting the repository owner's input, not a hardening oversight.
-- **Real biometric matching** (items 20–26): the only `BiometricProvider`
-  implementation is a mock that hashes the uploaded bytes — it performs
-  no actual face comparison. Production requires an explicit
-  `ALLOW_MOCK_BIOMETRICS=true` acknowledgment specifically so this
-  limitation cannot be silently deployed and mistaken for the real thing.
+- **Real biometric matching** (items 20–26): a real `BiometricProvider`
+  (`BIOMETRIC_PROVIDER=onnx`, YuNet + SFace) now exists alongside the mock
+  one — see `docs/SECURITY_ARCHITECTURE.md` for what it does and does
+  not guarantee. The mock provider is still the default; production
+  requires an explicit `ALLOW_MOCK_BIOMETRICS=true` acknowledgment
+  specifically so running it cannot be silently deployed and mistaken for
+  the real thing. What's still genuinely missing: duplicate-candidate
+  detection at enrollment time, and FAR/FRR/ROC calibration against a
+  real labeled dataset (none exists in this environment).
 - **MFA** (item 10): password-only authentication today.
 - **National ID protection at rest** (item 32): stored in plaintext, not
   encrypted or masked in admin responses.
