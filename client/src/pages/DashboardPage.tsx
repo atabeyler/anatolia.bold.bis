@@ -28,6 +28,7 @@ export function DashboardPage() {
   const [activeCandidatesLoading, setActiveCandidatesLoading] = useState(false);
   const [activeCandidatesError, setActiveCandidatesError] = useState(false);
   const [reviewBusyId, setReviewBusyId] = useState<string | null>(null);
+  const [reviewErrorKey, setReviewErrorKey] = useState<string | null>(null);
 
   const [pastSearches, setPastSearches] = useState<SearchSummary[] | null>(null);
   const [pastSearchesError, setPastSearchesError] = useState(false);
@@ -85,6 +86,7 @@ export function DashboardPage() {
   const runReview = async (candidateId: string, action: 'confirm' | 'reject' | 'inconclusive') => {
     if (!activeSearch) return;
     setReviewBusyId(candidateId);
+    setReviewErrorKey(null);
     try {
       const updated =
         action === 'confirm'
@@ -93,6 +95,11 @@ export function DashboardPage() {
             ? await searchClient.rejectCandidate(candidateId, activeSearch.id)
             : await searchClient.markCandidateInconclusive(candidateId, activeSearch.id);
       setActiveCandidates((rows) => rows.map((row) => (row.candidateId === candidateId ? updated : row)));
+    } catch (error) {
+      // Most notably surfaces the four-eyes "same reviewer" refusal (see
+      // server/src/db/mod.rs::record_review_decision) — otherwise this
+      // click would silently do nothing.
+      setReviewErrorKey(apiErrorMessageKey(error));
     } finally {
       setReviewBusyId(null);
     }
@@ -167,6 +174,9 @@ export function DashboardPage() {
             {activeCandidatesError && (
               <p className="status-card__line status-card__line--offline">{t('search.candidatesLoadError')}</p>
             )}
+            {reviewErrorKey && (
+              <p className="status-card__line status-card__line--offline">{t(reviewErrorKey)}</p>
+            )}
             {!activeCandidatesLoading && !activeCandidatesError && activeCandidates.length === 0 && (
               <p className="status-card__line">{t('search.noCandidates')}</p>
             )}
@@ -193,6 +203,11 @@ export function DashboardPage() {
                         {candidate.status === 'inconclusive' && (
                           <span className="admin-badge admin-badge--pending">{t('search.status.inconclusive')}</span>
                         )}
+                        {candidate.status === 'needs_second_review' && (
+                          <span className="admin-badge admin-badge--pending">
+                            {t('search.status.needsSecondReview')}
+                          </span>
+                        )}
                       </div>
                       {candidate.reviewedByName && (
                         <p className="admin-user-card__note">
@@ -200,7 +215,10 @@ export function DashboardPage() {
                         </p>
                       )}
                     </div>
-                    {canReview && (candidate.status === 'pending' || candidate.status === 'inconclusive') && (
+                    {canReview &&
+                      (candidate.status === 'pending' ||
+                        candidate.status === 'inconclusive' ||
+                        candidate.status === 'needs_second_review') && (
                       <div className="admin-user-card__actions">
                         <button
                           type="button"

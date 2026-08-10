@@ -446,9 +446,20 @@ the same candidate (see the history endpoint above). Returns the updated
 candidate row (current status only — fetch the history endpoint for the
 full trail).
 
+If `REQUIRE_SECOND_REVIEW=true` (four-eyes, madde 15): a `confirmed`/
+`rejected` decision on a candidate that isn't already
+`needs_second_review` only ever moves it *to* `needs_second_review` — it
+does not finalize it. A second, *different* reviewer's subsequent
+`verify`/`reject` call on that same candidate is what finalizes it, to
+whatever that second reviewer decided. The same reviewer supplying both
+the first and the "final" decision gets **`409 Conflict`**
+(`SAME_REVIEWER_FORBIDDEN`, `errors.sameReviewerForbidden`) instead — see
+`docs/SECURITY_ARCHITECTURE.md`.
+
 #### `POST /api/v1/candidates/{candidate_id}/reject`
 
-Same shape and role requirement as `verify`, sets status to `rejected`.
+Same shape and role requirement as `verify`, sets status to `rejected`
+(subject to the same four-eyes behavior above when enabled).
 
 #### `POST /api/v1/candidates/{candidate_id}/inconclusive`
 
@@ -457,7 +468,8 @@ Neither a positive nor a negative identification — unlike `confirmed`/
 `rejected`, an `inconclusive` candidate is not closed out: it still
 appears wherever "needs review" candidates are surfaced, so a later
 decision (by the same or a different reviewer) can still confirm or
-reject it.
+reject it. Not subject to four-eyes — an `inconclusive` decision never
+finalizes anything regardless of `REQUIRE_SECOND_REVIEW`.
 
 ### Audit trail
 

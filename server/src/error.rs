@@ -70,6 +70,7 @@ impl ApiError {
             "RATE_LIMITED" => StatusCode::TOO_MANY_REQUESTS,
             "INVALID_MFA_CODE" => StatusCode::UNAUTHORIZED,
             "MFA_ENROLLMENT_NOT_STARTED" | "MFA_NOT_ENABLED" => StatusCode::CONFLICT,
+            "SAME_REVIEWER_FORBIDDEN" => StatusCode::CONFLICT,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

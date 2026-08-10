@@ -29,7 +29,7 @@ export interface SearchCandidate {
   referenceCode: string;
   fullName: string;
   score: number;
-  status: 'pending' | 'confirmed' | 'rejected' | 'inconclusive';
+  status: 'pending' | 'confirmed' | 'rejected' | 'inconclusive' | 'needs_second_review';
   reviewedByName: string | null;
   reviewedAt: string | null;
 }

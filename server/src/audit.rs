@@ -60,6 +60,9 @@ pub mod action {
     pub const CANDIDATE_CONFIRMED: &str = "CANDIDATE_CONFIRMED";
     pub const CANDIDATE_REJECTED: &str = "CANDIDATE_REJECTED";
     pub const CANDIDATE_MARKED_INCONCLUSIVE: &str = "CANDIDATE_MARKED_INCONCLUSIVE";
+    // Four-eyes review (madde 15) — only emitted when REQUIRE_SECOND_REVIEW=true.
+    pub const CANDIDATE_FIRST_REVIEW_RECORDED: &str = "CANDIDATE_FIRST_REVIEW_RECORDED";
+    pub const CANDIDATE_SECOND_REVIEW_DENIED: &str = "CANDIDATE_SECOND_REVIEW_DENIED";
 
     // Admin bootstrap
     pub const ADMIN_SEED_USED: &str = "ADMIN_SEED_USED";

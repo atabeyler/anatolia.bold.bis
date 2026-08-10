@@ -109,7 +109,9 @@ Implemented incrementally. Nothing below Phase 3.7 is implemented yet.
 ## Phase 5 — Authorized connectors and administration
 
 - [ ] Authorized data source connectors (declared authorization type, capabilities, rate limits)
-- [ ] Secondary verification workflow
+- [x] Secondary verification workflow — `REQUIRE_SECOND_REVIEW` four-eyes
+      policy (`db::record_review_decision`); see
+      `docs/SECURITY_ARCHITECTURE.md`
 - [ ] Administration screens
 - [ ] Thin Android/iOS clients (capture/upload + result display; no on-device inference)
 

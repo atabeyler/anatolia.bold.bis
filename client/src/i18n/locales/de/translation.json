@@ -91,7 +91,8 @@
     "invalidMfaCode": "Dieser Code ist ungültig oder abgelaufen. Bitte versuchen Sie es erneut.",
     "mfaEnrollmentNotStarted": "Starten Sie die MFA-Registrierung, bevor Sie einen Code bestätigen.",
     "mfaNotEnabled": "Die Multi-Faktor-Authentifizierung ist für dieses Konto nicht aktiviert.",
-    "auditWriteFailed": "Der Prüfpfad-Eintrag für diese Aktion konnte nicht geschrieben werden; es wurde nichts geändert."
+    "auditWriteFailed": "Der Prüfpfad-Eintrag für diese Aktion konnte nicht geschrieben werden; es wurde nichts geändert.",
+    "sameReviewerForbidden": "Dieser Kandidat wurde bereits von Ihnen erstbegutachtet; eine andere prüfende Person muss die endgültige Entscheidung treffen."
   },
   "settings": {
     "openLabel": "Einstellungen",
@@ -193,7 +194,8 @@
       "pending": "Ausstehend",
       "confirmed": "Identität bestätigt",
       "rejected": "Abgelehnt",
-      "inconclusive": "Nicht eindeutig"
+      "inconclusive": "Nicht eindeutig",
+      "needsSecondReview": "Zweite Prüfung erforderlich"
     },
     "confirmIdentity": "Identität bestätigen",
     "rejectCandidate": "Ablehnen",

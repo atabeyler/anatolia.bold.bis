@@ -44,6 +44,11 @@ pub struct Config {
     /// `biometric.rs`. Only `"mock"` exists today; any other value is a
     /// hard startup failure until a real provider ships.
     pub biometric_provider: String,
+    /// Four-eyes review policy (madde 15): when `true`, a candidate's
+    /// first confirm/reject decision only moves it to
+    /// `needs_second_review`; a second, *different* reviewer's decision
+    /// is what actually finalizes it. See `db::record_review_decision`.
+    pub require_second_review: bool,
     /// Roles that must enroll in TOTP MFA before they can complete login —
     /// see `mfa.rs`. `MFA_REQUIRED_ROLES` (comma-separated); defaults to
     /// `SYSTEM_ADMIN,SECURITY_ADMIN,REVIEWER`. An empty value
@@ -129,6 +134,9 @@ impl Config {
             .min(search_max_top_k);
 
         let biometric_provider = resolve_biometric_provider(production);
+        let require_second_review = env::var("REQUIRE_SECOND_REVIEW")
+            .map(|v| v == "true")
+            .unwrap_or(false);
 
         Self {
             port,
@@ -142,6 +150,7 @@ impl Config {
             search_max_top_k,
             biometric_provider,
             mfa_required_roles,
+            require_second_review,
         }
     }
 }

@@ -91,7 +91,8 @@
     "invalidMfaCode": "Bu kod geçersiz veya süresi dolmuş. Lütfen tekrar deneyin.",
     "mfaEnrollmentNotStarted": "Bir kodu onaylamadan önce MFA kaydına başlayın.",
     "mfaNotEnabled": "Bu hesapta çok faktörlü kimlik doğrulama etkin değil.",
-    "auditWriteFailed": "Bu işlem için denetim kaydı yazılamadı; hiçbir şey değiştirilmedi."
+    "auditWriteFailed": "Bu işlem için denetim kaydı yazılamadı; hiçbir şey değiştirilmedi.",
+    "sameReviewerForbidden": "Bu aday zaten sizin tarafınızdan ilk kez incelendi; nihai kararı farklı bir inceleyici vermelidir."
   },
   "settings": {
     "openLabel": "Ayarlar",
@@ -193,7 +194,8 @@
       "pending": "Beklemede",
       "confirmed": "Kimlik Onaylandı",
       "rejected": "Reddedildi",
-      "inconclusive": "Sonuçsuz"
+      "inconclusive": "Sonuçsuz",
+      "needsSecondReview": "İkinci inceleme bekliyor"
     },
     "confirmIdentity": "Kimliği onayla",
     "rejectCandidate": "Reddet",

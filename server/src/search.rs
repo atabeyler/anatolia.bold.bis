@@ -11,8 +11,8 @@ use crate::biometric::{BiometricProvider, MockBiometricProvider};
 use crate::db::{
     create_search_with_candidates, list_candidates, list_search_candidates, list_searches_page,
     list_verification_events, load_candidate_by_id, load_search_by_id, load_user_by_id,
-    record_failed_search, record_review_decision, AppState, CandidateRow, SearchCandidateRow,
-    SearchRow, VerificationEventRow,
+    record_failed_search, record_review_decision, AppState, CandidateRow, ReviewDecisionOutcome,
+    SearchCandidateRow, SearchRow, VerificationEventRow,
 };
 use crate::error::{request_id, ApiError};
 use crate::permission;
@@ -438,11 +438,18 @@ async fn review(
         payload.reason.as_deref(),
         payload.notes.as_deref(),
         &rid,
+        state.require_second_review,
     )
     .await
     {
-        Ok(Some(row)) => {
+        Ok(ReviewDecisionOutcome::Applied(row)) => {
             let event_action = match status {
+                "confirmed" if row.status == "needs_second_review" => {
+                    action::CANDIDATE_FIRST_REVIEW_RECORDED
+                }
+                "rejected" if row.status == "needs_second_review" => {
+                    action::CANDIDATE_FIRST_REVIEW_RECORDED
+                }
                 "confirmed" => action::CANDIDATE_CONFIRMED,
                 "inconclusive" => action::CANDIDATE_MARKED_INCONCLUSIVE,
                 _ => action::CANDIDATE_REJECTED,
@@ -464,7 +471,27 @@ async fn review(
             }
             Json(search_candidate_json(&row)).into_response()
         }
-        Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
+        Ok(ReviewDecisionOutcome::NotFound) => {
+            ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response()
+        }
+        Ok(ReviewDecisionOutcome::SameReviewerForbidden) => {
+            AuditRecorder::new(
+                action::CANDIDATE_SECOND_REVIEW_DENIED,
+                audit_result::DENIED,
+                rid.clone(),
+            )
+            .actor(&claims)
+            .headers(&headers)
+            .metadata(json!({ "searchId": payload.search_id, "candidateId": candidate_id }))
+            .save(&state)
+            .await;
+            ApiError::new(
+                "SAME_REVIEWER_FORBIDDEN",
+                "errors.sameReviewerForbidden",
+                rid,
+            )
+            .into_response()
+        }
         Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
     }
 }

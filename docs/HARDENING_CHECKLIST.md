@@ -261,17 +261,27 @@ eşleşme bu dosyanın sonunda listelidir.
 36. [x] Review decisions — `inconclusive` karar tipi eklendi
     (`POST /api/v1/candidates/{id}/inconclusive`): `confirmed`/`rejected`'ın
     aksine adayı kapatmıyor, sonraki bir inceleme için açık bırakıyor.
-    `needs_second_review` ayrı bir decision tipi olarak **eklenmedi** —
-    bu, madde 37'nin (four-eyes policy) parçası; o özellik netleşmeden
-    ayrı bir decision tipi eklemek anlamsız olurdu.
-37. [ ] Second review / four-eyes policy (`REQUIRE_SECOND_REVIEW`) —
-    **yapılmadı**. Bu, basit bir hardening düzeltmesinden çok gerçek bir
-    özellik: "bir adayın kimliği için en az iki farklı REVIEWER'ın onayı
-    gerekir" davranışı search_candidates durum makinesine yeni bir ara
-    durum (`needs_second_review`) eklemeyi, ilk reviewer'ın kendi kararını
-    ikinci onay olarak sayamamasını (aynı kullanıcı iki kez onaylayamaz)
-    ve frontend'de bunu görünür kılmayı gerektiriyor — repo sahibinin bu
-    akışı nasıl istediğine dair bir tasarım kararı bekliyor.
+    `needs_second_review` ayrı bir durum olarak eklendi — madde 37.
+37. [x] Second review / four-eyes policy (`REQUIRE_SECOND_REVIEW`) —
+    eklendi. `db::record_review_decision` artık `require_second_review`
+    parametresi alıyor: `true` iken bir adayın ilk `confirmed`/`rejected`
+    kararı adayı doğrudan sonuçlandırmıyor, `needs_second_review`
+    durumuna taşıyor; aynı adayda `needs_second_review` durumundayken
+    **farklı** bir reviewer'ın kararı adayı sonuçlandırıyor (Reviewer B'nin
+    kararı nihai — talimattaki "Reviewer A → First Review, Reviewer B →
+    Final Review" modeliyle birebir). Aynı reviewer ikinci/nihai kararı
+    veremiyor — `409 Conflict` (`SAME_REVIEWER_FORBIDDEN`) dönüyor ve
+    `CANDIDATE_SECOND_REVIEW_DENIED` audit event'i düşülüyor.
+    `inconclusive` kararı bu akışın tamamen dışında — hiçbir zaman
+    sonuçlandırmıyor. Review history hâlâ immutable (her iki karar da
+    `verification_events`'te ayrı satır). `REQUIRE_SECOND_REVIEW=false`
+    (varsayılan) ile davranış tamamen eskisi gibi kalıyor — geriye dönük
+    uyumluluk `server/tests/four_eyes_review.rs`'teki
+    `require_second_review_disabled_finalizes_on_the_first_decision`
+    testiyle doğrulandı. Frontend: `needs_second_review` için ayrı bir
+    rozet (`search.status.needsSecondReview`, 6 dilde), aksiyon
+    butonları bu durumda da gösteriliyor, `SAME_REVIEWER_FORBIDDEN` hatası
+    kullanıcıya çevrilmiş mesajla gösteriliyor.
 
 ## P1 — API Kalitesi
 

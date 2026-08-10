@@ -91,7 +91,8 @@
     "invalidMfaCode": "Ce code est invalide ou a expiré. Veuillez réessayer.",
     "mfaEnrollmentNotStarted": "Démarrez l'inscription MFA avant de confirmer un code.",
     "mfaNotEnabled": "L'authentification multifacteur n'est pas activée sur ce compte.",
-    "auditWriteFailed": "L'entrée du journal d'audit n'a pas pu être écrite pour cette action ; rien n'a été modifié."
+    "auditWriteFailed": "L'entrée du journal d'audit n'a pas pu être écrite pour cette action ; rien n'a été modifié.",
+    "sameReviewerForbidden": "Ce candidat a déjà fait l'objet d'un premier examen de votre part ; un autre examinateur doit rendre la décision finale."
   },
   "settings": {
     "openLabel": "Paramètres",
@@ -193,7 +194,8 @@
       "pending": "En attente",
       "confirmed": "Identité confirmée",
       "rejected": "Rejeté",
-      "inconclusive": "Non concluant"
+      "inconclusive": "Non concluant",
+      "needsSecondReview": "Deuxième examen requis"
     },
     "confirmIdentity": "Confirmer l'identité",
     "rejectCandidate": "Rejeter",

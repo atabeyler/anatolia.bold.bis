@@ -158,6 +158,17 @@ what these controls defend against.
   confirm/reject, for when a reviewer can reach neither a positive nor a
   negative identification. Unlike confirm/reject, it does not close the
   candidate out — it remains open for a later, more confident decision.
+- **Four-eyes review** (`REQUIRE_SECOND_REVIEW`, `db::record_review_decision`):
+  when enabled, a candidate's first confirm/reject decision moves it to
+  `needs_second_review` rather than finalizing it; a second, *different*
+  reviewer's subsequent decision is what actually finalizes it (to
+  whichever way that second reviewer decided — final say, not majority
+  vote). The reviewer who made the first decision cannot also supply the
+  final one: attempting to gets `409 Conflict`
+  (`SAME_REVIEWER_FORBIDDEN`), recorded as `CANDIDATE_SECOND_REVIEW_DENIED`
+  in the audit trail. Disabled by default — a single reviewer's decision
+  finalizes a candidate, matching prior behavior — so this is purely
+  opt-in per deployment.
 - **Soft-deleted user accounts** (`users.deleted_at`,
   `db::soft_delete_user`): `DELETE /api/v1/admin/users/{id}` marks the
   row deleted and revokes all of its sessions instead of physically
@@ -330,8 +341,7 @@ assume either is active. There is also no endpoint to change an
 already-active account's role, so a role-downgrade session-revoke
 protection (item 11) has nothing to attach to yet — adding one is real
 feature work (who may assign which role to whom, self-role-change
-handling) rather than a hardening fix, and needs the same kind of design
-sign-off as the four-eyes review policy (item 37). Async search (202 +
+handling) rather than a hardening fix. Async search (202 +
 polling/SSE, item 57) is deliberately not implemented either: doing so
 changes `POST /api/v1/search/face`'s response contract, which needs the
 frontend and the polling/SSE choice decided together, not retrofitted.

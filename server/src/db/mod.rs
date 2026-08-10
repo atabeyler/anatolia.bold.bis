@@ -54,6 +54,8 @@ pub struct AppState {
     /// Roles that must have MFA enabled before they can complete login —
     /// see `mfa.rs`. Configured via `MFA_REQUIRED_ROLES`.
     pub mfa_required_roles: Arc<Vec<String>>,
+    /// Four-eyes review policy — see `config::Config::require_second_review`.
+    pub require_second_review: bool,
 }
 
 impl AppState {
@@ -91,6 +93,7 @@ impl AppState {
                 max_top_k: config.search_max_top_k,
             }),
             mfa_required_roles: Arc::new(config.mfa_required_roles.clone()),
+            require_second_review: config.require_second_review,
         })
     }
 
@@ -127,6 +130,7 @@ impl AppState {
             // state with required roles set to exercise the mandatory
             // flow directly.
             mfa_required_roles: Arc::new(Vec::new()),
+            require_second_review: false,
         }
     }
 }
@@ -1938,6 +1942,18 @@ pub async fn list_search_candidates(
     }
 }
 
+/// Outcome of `record_review_decision`. Distinguishes "nothing to review"
+/// from the four-eyes-specific refusal so callers can return the right
+/// HTTP status for each.
+pub enum ReviewDecisionOutcome {
+    Applied(Box<SearchCandidateRow>),
+    NotFound,
+    /// Four-eyes is enabled and this candidate is `needs_second_review`,
+    /// but the reviewer submitting now is the same one who made the first
+    /// decision — a second, *different* reviewer must finalize it.
+    SameReviewerForbidden,
+}
+
 /// Sets a candidate's review status (`confirmed`/`rejected`) within one
 /// search. This is the one explicit human verification action that sets
 /// "Confirmed Identity" — never derived automatically from a score.
@@ -1948,6 +1964,19 @@ pub async fn list_search_candidates(
 /// than replacing this one; `search_candidates.status`/`reviewed_*` only
 /// ever reflect the most recent decision, the full history lives in
 /// `verification_events`.
+///
+/// When `require_second_review` is `true` (madde 15 — four-eyes), a
+/// `confirmed`/`rejected` decision on a candidate that isn't already
+/// `needs_second_review` only ever moves it *to* `needs_second_review` —
+/// it never finalizes a candidate by itself. A second, different
+/// reviewer's subsequent `confirmed`/`rejected` decision on that same
+/// `needs_second_review` candidate is what finalizes it, to whatever that
+/// second reviewer decided (Reviewer B has final say, per the
+/// instructions' own "Reviewer A → First Review, Reviewer B → Final
+/// Review" model). The same reviewer cannot supply both the first and
+/// the final decision — see `ReviewDecisionOutcome::SameReviewerForbidden`.
+/// `inconclusive` decisions bypass this entirely; they never finalize
+/// anything regardless of `require_second_review`.
 #[allow(clippy::too_many_arguments)]
 pub async fn record_review_decision(
     backend: &DbBackend,
@@ -1959,7 +1988,9 @@ pub async fn record_review_decision(
     reason: Option<&str>,
     notes: Option<&str>,
     request_id: &str,
-) -> Result<Option<SearchCandidateRow>, sqlx::Error> {
+    require_second_review: bool,
+) -> Result<ReviewDecisionOutcome, sqlx::Error> {
+    let is_finalizing_decision = decision == "confirmed" || decision == "rejected";
     match backend {
         DbBackend::Postgres(pool) => {
             let (Ok(search_uuid), Ok(candidate_uuid), Ok(reviewer_uuid)) = (
@@ -1967,19 +1998,32 @@ pub async fn record_review_decision(
                 Uuid::parse_str(candidate_id),
                 Uuid::parse_str(reviewed_by),
             ) else {
-                return Ok(None);
+                return Ok(ReviewDecisionOutcome::NotFound);
             };
             let mut tx = pool.begin().await?;
-            let search_candidate_id: Option<Uuid> = sqlx::query_scalar(
-                "SELECT id FROM search_candidates WHERE search_id = $1 AND candidate_id = $2",
+            let current: Option<(Uuid, String, Option<Uuid>)> = sqlx::query_as(
+                "SELECT id, status, reviewed_by FROM search_candidates \
+                 WHERE search_id = $1 AND candidate_id = $2 FOR UPDATE",
             )
             .bind(search_uuid)
             .bind(candidate_uuid)
             .fetch_optional(&mut *tx)
             .await?;
-            let Some(search_candidate_id) = search_candidate_id else {
-                return Ok(None);
+            let Some((search_candidate_id, current_status, current_reviewed_by)) = current else {
+                return Ok(ReviewDecisionOutcome::NotFound);
             };
+
+            let target_status = if !require_second_review || !is_finalizing_decision {
+                decision.to_string()
+            } else if current_status == "needs_second_review" {
+                if current_reviewed_by == Some(reviewer_uuid) {
+                    return Ok(ReviewDecisionOutcome::SameReviewerForbidden);
+                }
+                decision.to_string()
+            } else {
+                "needs_second_review".to_string()
+            };
+
             sqlx::query(
                 "INSERT INTO verification_events
                  (search_candidate_id, reviewer_user_id, reviewer_name, decision, reason, notes, request_id)
@@ -1998,7 +2042,7 @@ pub async fn record_review_decision(
                 "UPDATE search_candidates SET status = $1, reviewed_by = $2, reviewed_by_name = $3, reviewed_at = NOW()
                  WHERE id = $4",
             )
-            .bind(decision)
+            .bind(&target_status)
             .bind(reviewer_uuid)
             .bind(reviewed_by_name)
             .bind(search_candidate_id)
@@ -2008,16 +2052,29 @@ pub async fn record_review_decision(
         }
         DbBackend::Sqlite(pool) => {
             let mut tx = pool.begin().await?;
-            let search_candidate_id: Option<String> = sqlx::query_scalar(
-                "SELECT id FROM search_candidates WHERE search_id = ?1 AND candidate_id = ?2",
+            let current: Option<(String, String, Option<String>)> = sqlx::query_as(
+                "SELECT id, status, reviewed_by FROM search_candidates \
+                 WHERE search_id = ?1 AND candidate_id = ?2",
             )
             .bind(search_id)
             .bind(candidate_id)
             .fetch_optional(&mut *tx)
             .await?;
-            let Some(search_candidate_id) = search_candidate_id else {
-                return Ok(None);
+            let Some((search_candidate_id, current_status, current_reviewed_by)) = current else {
+                return Ok(ReviewDecisionOutcome::NotFound);
             };
+
+            let target_status = if !require_second_review || !is_finalizing_decision {
+                decision.to_string()
+            } else if current_status == "needs_second_review" {
+                if current_reviewed_by.as_deref() == Some(reviewed_by) {
+                    return Ok(ReviewDecisionOutcome::SameReviewerForbidden);
+                }
+                decision.to_string()
+            } else {
+                "needs_second_review".to_string()
+            };
+
             let event_id = Uuid::new_v4().to_string();
             sqlx::query(
                 "INSERT INTO verification_events
@@ -2039,7 +2096,7 @@ pub async fn record_review_decision(
                  reviewed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                  WHERE id = ?4",
             )
-            .bind(decision)
+            .bind(&target_status)
             .bind(reviewed_by)
             .bind(reviewed_by_name)
             .bind(&search_candidate_id)
@@ -2048,12 +2105,16 @@ pub async fn record_review_decision(
             tx.commit().await?;
         }
     }
-    list_search_candidates(backend, search_id)
-        .await
-        .map(|rows| {
-            rows.into_iter()
-                .find(|row| row.candidate_id == candidate_id)
-        })
+    let rows = list_search_candidates(backend, search_id).await?;
+    Ok(
+        match rows
+            .into_iter()
+            .find(|row| row.candidate_id == candidate_id)
+        {
+            Some(row) => ReviewDecisionOutcome::Applied(Box::new(row)),
+            None => ReviewDecisionOutcome::NotFound,
+        },
+    )
 }
 
 #[derive(Debug, Clone, FromRow)]
