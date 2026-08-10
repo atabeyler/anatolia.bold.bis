@@ -25,6 +25,8 @@ mod biometric;
 pub use biometric::*;
 mod evidence;
 pub use evidence::*;
+mod entity_graph;
+pub use entity_graph::*;
 mod identity;
 pub use identity::*;
 mod session;
@@ -70,6 +72,16 @@ pub struct AppState {
     /// `BIOMETRIC_PROVIDER`, resolved once at startup. See
     /// `biometric/mod.rs`.
     pub biometric_provider: Arc<dyn crate::biometric::BiometricProvider>,
+    /// `"mock"` or `"onnx"` — which provider `biometric_provider` actually
+    /// is, kept alongside it so a health/diagnostics endpoint can report
+    /// it without downcasting the trait object. See item 1 in
+    /// `docs/HARDENING_CHECKLIST.md`.
+    pub biometric_provider_name: &'static str,
+    /// Whether biometric search uses the indexed pgvector path or the
+    /// brute-force in-memory scan — resolved once at startup by
+    /// `migrate`. See `db::biometric::ensure_pgvector_index` and item 2 in
+    /// `docs/HARDENING_CHECKLIST.md`.
+    pub pgvector_search_ready: bool,
     /// OSINT/evidence provider orchestrator — see `osint/mod.rs`. Only a
     /// mock implementation exists today; the field exists so a future
     /// real provider set is a drop-in swap, matching the
@@ -101,7 +113,12 @@ impl AppState {
             }
             _ => sqlite_backend().await?,
         };
-        migrate(&backend).await?;
+        let pgvector_search_ready = migrate(&backend).await?;
+        let biometric_provider_name: &'static str = if config.biometric_provider == "onnx" {
+            "onnx"
+        } else {
+            "mock"
+        };
         let biometric_provider: Arc<dyn crate::biometric::BiometricProvider> =
             match config.biometric_provider.as_str() {
                 #[cfg(feature = "onnx-provider")]
@@ -143,7 +160,9 @@ impl AppState {
             mfa_required_roles: Arc::new(config.mfa_required_roles.clone()),
             require_second_review: config.require_second_review,
             biometric_provider,
-            osint_orchestrator: Arc::new(crate::osint::EvidenceOrchestrator::mock()),
+            biometric_provider_name,
+            pgvector_search_ready,
+            osint_orchestrator: Arc::new(crate::osint::EvidenceOrchestrator::from_env()),
             metrics_handle: crate::metrics::init(),
         })
     }
@@ -183,9 +202,51 @@ impl AppState {
             mfa_required_roles: Arc::new(Vec::new()),
             require_second_review: false,
             biometric_provider: Arc::new(crate::biometric::MockBiometricProvider),
+            biometric_provider_name: "mock",
+            pgvector_search_ready: false,
             osint_orchestrator: Arc::new(crate::osint::EvidenceOrchestrator::mock()),
             metrics_handle: crate::metrics::init(),
         }
+    }
+
+    /// A Postgres-backed test state, for the one class of test that a
+    /// SQLite in-memory database cannot exercise at all: the indexed
+    /// pgvector search path (`db::biometric::search_top_k`'s Postgres
+    /// branch). Requires a real, reachable Postgres with the `vector`
+    /// extension installable — pass its connection string via
+    /// `PGVECTOR_TEST_DATABASE_URL`. Returns `None` (never panics) when
+    /// that variable isn't set, so this stays opt-in and never runs
+    /// unintentionally in an environment without one — see
+    /// `tests/pgvector_search.rs`.
+    pub async fn for_postgres_tests() -> Option<Self> {
+        let url = std::env::var("PGVECTOR_TEST_DATABASE_URL").ok()?;
+        let pool = connect_postgres(&url)
+            .await
+            .expect("failed to connect to PGVECTOR_TEST_DATABASE_URL");
+        let backend = DbBackend::Postgres(pool);
+        let pgvector_search_ready = migrate(&backend).await.expect("failed to run migrations");
+        Some(Self {
+            backend,
+            rate_limiter: Arc::new(InMemoryRateLimiter::new()),
+            secrets: Arc::new(Secrets {
+                jwt_secret: "test-access-secret-not-for-prod-use-only".to_string(),
+                jwt_refresh_secret: "test-refresh-secret-not-for-prod-use-only".to_string(),
+                approval_token_secret: "test-approval-secret-not-for-prod-use-only".to_string(),
+                mfa_token_secret: "test-mfa-secret-not-for-prod-use-only".to_string(),
+                national_id_encryption_key: [0x42u8; 32],
+            }),
+            search_limits: Arc::new(SearchLimits {
+                default_top_k: 10,
+                max_top_k: 50,
+            }),
+            mfa_required_roles: Arc::new(Vec::new()),
+            require_second_review: false,
+            biometric_provider: Arc::new(crate::biometric::MockBiometricProvider),
+            biometric_provider_name: "mock",
+            pgvector_search_ready,
+            osint_orchestrator: Arc::new(crate::osint::EvidenceOrchestrator::mock()),
+            metrics_handle: crate::metrics::init(),
+        })
     }
 }
 
@@ -261,8 +322,10 @@ pub fn backend_name(backend: &DbBackend) -> &'static str {
     }
 }
 
-async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
-    match backend {
+/// Returns whether indexed pgvector biometric search is ready (always
+/// `false` for SQLite) — see `biometric::ensure_pgvector_index`.
+async fn migrate(backend: &DbBackend) -> Result<bool, sqlx::Error> {
+    let pgvector_ready = match backend {
         DbBackend::Postgres(pool) => {
             sqlx::query(&format!("CREATE SCHEMA IF NOT EXISTS {PG_SCHEMA}"))
                 .execute(pool)
@@ -599,6 +662,7 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             org::migrate_pg(pool).await?;
             biometric::migrate_pg(pool).await?;
             evidence::migrate_pg(pool).await?;
+            entity_graph::migrate_pg(pool).await?;
             sqlx::query("ALTER TABLE searches ADD COLUMN IF NOT EXISTS organization_id UUID")
                 .execute(pool)
                 .await?;
@@ -607,6 +671,8 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                 .await?;
 
             seed_mock_candidates_pg(pool).await?;
+
+            biometric::ensure_pgvector_index(pool).await
         }
         DbBackend::Sqlite(pool) => {
             sqlx::query(
@@ -869,6 +935,7 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
             org::migrate_sqlite(pool).await?;
             biometric::migrate_sqlite(pool).await?;
             evidence::migrate_sqlite(pool).await?;
+            entity_graph::migrate_sqlite(pool).await?;
             let _ = sqlx::query("ALTER TABLE searches ADD COLUMN organization_id TEXT")
                 .execute(pool)
                 .await;
@@ -877,9 +944,11 @@ async fn migrate(backend: &DbBackend) -> Result<(), sqlx::Error> {
                 .await;
 
             seed_mock_candidates_sqlite(pool).await?;
+
+            false
         }
-    }
-    Ok(())
+    };
+    Ok(pgvector_ready)
 }
 
 /// Fictional demo records only — no real person, no real biometric data.
@@ -953,21 +1022,31 @@ pub struct CandidateRow {
     pub reference_code: String,
     pub full_name: String,
     pub notes: Option<String>,
+    /// Owning organization, if any — `None` for legacy/orgless candidates
+    /// (visible to anyone who passes the role check, same rule as
+    /// `SearchRow::organization_id`; see `permission::can_view_scoped_resource`).
+    pub organization_id: Option<String>,
 }
+
+const CANDIDATE_COLUMNS_PG: &str =
+    "id::text, reference_code, full_name, notes, organization_id::text";
+const CANDIDATE_COLUMNS_SQLITE: &str = "id, reference_code, full_name, notes, organization_id";
 
 pub async fn list_candidates(backend: &DbBackend) -> Result<Vec<CandidateRow>, sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
-            sqlx::query_as::<_, CandidateRow>(
-                "SELECT id::text, reference_code, full_name, notes FROM candidates ORDER BY reference_code",
-            )
+            sqlx::query_as::<_, CandidateRow>(&format!(
+                "SELECT {CANDIDATE_COLUMNS_PG} FROM candidates ORDER BY reference_code"
+            ))
             .fetch_all(pool)
             .await
         }
         DbBackend::Sqlite(pool) => {
-            sqlx::query_as::<_, CandidateRow>("SELECT id, reference_code, full_name, notes FROM candidates ORDER BY reference_code")
-                .fetch_all(pool)
-                .await
+            sqlx::query_as::<_, CandidateRow>(&format!(
+                "SELECT {CANDIDATE_COLUMNS_SQLITE} FROM candidates ORDER BY reference_code"
+            ))
+            .fetch_all(pool)
+            .await
         }
     }
 }
@@ -981,17 +1060,17 @@ pub async fn load_candidate_by_id(
             let Ok(uuid) = Uuid::parse_str(id) else {
                 return Ok(None);
             };
-            sqlx::query_as::<_, CandidateRow>(
-                "SELECT id::text, reference_code, full_name, notes FROM candidates WHERE id = $1",
-            )
+            sqlx::query_as::<_, CandidateRow>(&format!(
+                "SELECT {CANDIDATE_COLUMNS_PG} FROM candidates WHERE id = $1"
+            ))
             .bind(uuid)
             .fetch_optional(pool)
             .await
         }
         DbBackend::Sqlite(pool) => {
-            sqlx::query_as::<_, CandidateRow>(
-                "SELECT id, reference_code, full_name, notes FROM candidates WHERE id = ?1",
-            )
+            sqlx::query_as::<_, CandidateRow>(&format!(
+                "SELECT {CANDIDATE_COLUMNS_SQLITE} FROM candidates WHERE id = ?1"
+            ))
             .bind(id)
             .fetch_optional(pool)
             .await
@@ -1002,40 +1081,47 @@ pub async fn load_candidate_by_id(
 /// Creates a new candidate record (madde 1-6 enrollment pipeline). No
 /// biometric template is attached here — that happens separately via
 /// `db::biometric::insert_template` once a reference photo has been run
-/// through the biometric provider's `enroll` pipeline.
+/// through the biometric provider's `enroll` pipeline. `organization_id`
+/// stamps ownership at creation time, same pattern as
+/// `create_queued_search` — see item 10 in `docs/HARDENING_CHECKLIST.md`.
 pub async fn create_candidate(
     backend: &DbBackend,
     reference_code: &str,
     full_name: &str,
     notes: Option<&str>,
+    organization_id: Option<&str>,
 ) -> Result<CandidateRow, sqlx::Error> {
     match backend {
         DbBackend::Postgres(pool) => {
-            sqlx::query_as::<_, CandidateRow>(
-                "INSERT INTO candidates (reference_code, full_name, notes) VALUES ($1, $2, $3) \
-                 RETURNING id::text, reference_code, full_name, notes",
-            )
+            let org_uuid = organization_id.and_then(|v| Uuid::parse_str(v).ok());
+            sqlx::query_as::<_, CandidateRow>(&format!(
+                "INSERT INTO candidates (reference_code, full_name, notes, organization_id) \
+                 VALUES ($1, $2, $3, $4) \
+                 RETURNING {CANDIDATE_COLUMNS_PG}"
+            ))
             .bind(reference_code)
             .bind(full_name)
             .bind(notes)
+            .bind(org_uuid)
             .fetch_one(pool)
             .await
         }
         DbBackend::Sqlite(pool) => {
             let id = Uuid::new_v4().to_string();
             sqlx::query(
-                "INSERT INTO candidates (id, reference_code, full_name, notes) \
-                 VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO candidates (id, reference_code, full_name, notes, organization_id) \
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
             )
             .bind(&id)
             .bind(reference_code)
             .bind(full_name)
             .bind(notes)
+            .bind(organization_id)
             .execute(pool)
             .await?;
-            sqlx::query_as::<_, CandidateRow>(
-                "SELECT id, reference_code, full_name, notes FROM candidates WHERE id = ?1",
-            )
+            sqlx::query_as::<_, CandidateRow>(&format!(
+                "SELECT {CANDIDATE_COLUMNS_SQLITE} FROM candidates WHERE id = ?1"
+            ))
             .bind(&id)
             .fetch_one(pool)
             .await

@@ -2,17 +2,27 @@
 //! embedding, linked to a `candidates` row. Split out as its own domain
 //! module (see item 31 in `docs/HARDENING_CHECKLIST.md`).
 //!
-//! Embeddings are stored as a JSON array of floats rather than a native
-//! vector column. This is a deliberate, documented interim choice: it
-//! works identically on both PostgreSQL and SQLite without requiring the
-//! `pgvector` extension, whose availability in a given deployment isn't
-//! guaranteed. `pgvector` (or another dedicated vector store, behind the
-//! same provider-abstraction principle CLAUDE.md requires) is the
-//! documented future upgrade path once ANN indexing is actually needed —
-//! see `docs/ROADMAP.md`. Similarity search here is a real, correct O(n)
-//! linear cosine-similarity scan over the filtered candidate set, not an
-//! indexed approximate search; that is an explicit, documented
-//! performance limitation, not a faked capability.
+//! Embeddings are stored as a JSON array of floats (in the `embedding`
+//! column, on both backends) so a plain, correct O(n) linear
+//! cosine-similarity scan (`top_k_matches`) always works identically on
+//! PostgreSQL and SQLite, with no extension dependency. On PostgreSQL,
+//! *in addition*, `insert_template` also writes the same embedding into a
+//! native `vector(EMBEDDING_DIM)` column (`embedding_vector`) — see
+//! `ensure_pgvector_index` — behind an HNSW index using cosine distance,
+//! so `search_top_k` can serve a real Top-K search in `O(log n)` instead
+//! of scanning every row. This is `pgvector` (item 2 in
+//! `docs/HARDENING_CHECKLIST.md`).
+//!
+//! The `pgvector` extension is not guaranteed to be installable on every
+//! Postgres host (a managed provider may not allow-list it). Rather than
+//! fail startup over this, `ensure_pgvector_index` fails soft: if the
+//! `CREATE EXTENSION`/`ALTER TABLE`/`CREATE INDEX` sequence cannot
+//! complete, it logs a clear warning and returns `false`. `AppState`
+//! records that flag once at startup (`pgvector_search_ready`) and
+//! `search_top_k` uses it to choose explicitly, on every search, between
+//! the indexed path and the brute-force scan — so "no index" is a visible
+//! runtime mode, never a silent, unexplained one. SQLite never has an
+//! index; it always uses the brute-force scan.
 //!
 //! A template is only ever compared against another template from the
 //! *same* `model_name`/`model_version` — comparing embeddings produced by
@@ -23,7 +33,7 @@ use sqlx::{FromRow, PgPool, SqlitePool};
 use uuid::Uuid;
 
 use super::DbBackend;
-use crate::biometric::embedding::cosine_similarity;
+use crate::biometric::embedding::{cosine_similarity, EMBEDDING_DIM};
 
 pub(super) async fn migrate_pg(pool: &PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
@@ -57,6 +67,57 @@ pub(super) async fn migrate_pg(pool: &PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Attempts to enable indexed pgvector search: the `vector` extension, a
+/// native `embedding_vector vector(EMBEDDING_DIM)` column alongside the
+/// existing JSON `embedding` column, and an HNSW index over it using
+/// cosine distance. Fails soft — a Postgres host that doesn't allow the
+/// extension (common on managed providers without an explicit opt-in)
+/// logs a warning and leaves the deployment on the brute-force scan
+/// rather than refusing to start. Idempotent: safe to call on every
+/// startup.
+pub(super) async fn ensure_pgvector_index(pool: &PgPool) -> bool {
+    if let Err(err) = sqlx::query("CREATE EXTENSION IF NOT EXISTS vector")
+        .execute(pool)
+        .await
+    {
+        tracing::warn!(
+            error = %err,
+            "pgvector extension unavailable; biometric search will use the brute-force \
+             in-memory scan (see docs/HARDENING_CHECKLIST.md item 2)"
+        );
+        return false;
+    }
+    if let Err(err) = sqlx::query(&format!(
+        "ALTER TABLE biometric_templates ADD COLUMN IF NOT EXISTS embedding_vector vector({EMBEDDING_DIM})"
+    ))
+    .execute(pool)
+    .await
+    {
+        tracing::warn!(
+            error = %err,
+            "could not add biometric_templates.embedding_vector; falling back to the \
+             brute-force scan"
+        );
+        return false;
+    }
+    if let Err(err) = sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_biometric_templates_embedding_hnsw \
+         ON biometric_templates USING hnsw (embedding_vector vector_cosine_ops)",
+    )
+    .execute(pool)
+    .await
+    {
+        tracing::warn!(
+            error = %err,
+            "could not create the HNSW index on biometric_templates.embedding_vector; \
+             falling back to the brute-force scan"
+        );
+        return false;
+    }
+    tracing::info!("pgvector HNSW index ready; biometric search will use indexed lookup");
+    true
 }
 
 pub(super) async fn migrate_sqlite(pool: &SqlitePool) -> Result<(), sqlx::Error> {
@@ -114,6 +175,7 @@ impl BiometricTemplateRow {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn insert_template(
     backend: &DbBackend,
     candidate_id: &str,
@@ -122,6 +184,7 @@ pub async fn insert_template(
     embedding: &[f32],
     quality_score: f64,
     source_reference: Option<&str>,
+    pgvector_ready: bool,
 ) -> Result<Option<BiometricTemplateRow>, sqlx::Error> {
     let embedding_json = serde_json::to_string(embedding).unwrap_or_else(|_| "[]".to_string());
     let dim = embedding.len() as i32;
@@ -130,11 +193,17 @@ pub async fn insert_template(
             let Ok(candidate_uuid) = Uuid::parse_str(candidate_id) else {
                 return Ok(None);
             };
+            // Only a full-dimension embedding gets a vector-column value —
+            // a differently-sized embedding (a future model swap) simply
+            // isn't reachable through the indexed path and falls back to
+            // the brute-force scan for that row, rather than erroring.
+            let vector = (embedding.len() == EMBEDDING_DIM && pgvector_ready)
+                .then(|| pgvector::Vector::from(embedding.to_vec()));
             sqlx::query_as(
                 "INSERT INTO biometric_templates \
                  (candidate_id, model_name, model_version, embedding_dimension, embedding, \
-                  quality_score, source_reference) \
-                 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7) \
+                  quality_score, source_reference, embedding_vector) \
+                 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8) \
                  RETURNING id::text, candidate_id::text, model_name, model_version, \
                            embedding_dimension, embedding::text, quality_score, source_reference, \
                            created_at::text, revoked_at::text",
@@ -146,6 +215,7 @@ pub async fn insert_template(
             .bind(&embedding_json)
             .bind(quality_score)
             .bind(source_reference)
+            .bind(vector)
             .fetch_one(pool)
             .await
             .map(Some)
@@ -316,6 +386,73 @@ pub fn top_k_matches(
     });
     ranked.truncate(top_k);
     ranked
+}
+
+/// Top-K candidate search, choosing explicitly between the indexed
+/// pgvector path (Postgres, when `pgvector_ready`) and the brute-force
+/// in-memory scan (SQLite always; Postgres when the index isn't
+/// available) — see the module doc comment. Both paths apply the same
+/// per-candidate "best template wins" rule and the same
+/// model/model-version filter.
+pub async fn search_top_k(
+    backend: &DbBackend,
+    model_name: &str,
+    model_version: &str,
+    probe_embedding: &[f32],
+    top_k: usize,
+    pgvector_ready: bool,
+) -> Result<Vec<CandidateMatch>, sqlx::Error> {
+    if let DbBackend::Postgres(pool) = backend {
+        if pgvector_ready && probe_embedding.len() == EMBEDDING_DIM {
+            return search_top_k_indexed(pool, model_name, model_version, probe_embedding, top_k)
+                .await;
+        }
+    }
+    let templates = list_active_templates(backend, model_name, model_version).await?;
+    Ok(top_k_matches(&templates, probe_embedding, top_k))
+}
+
+/// The indexed path: one query, using pgvector's `<=>` cosine-distance
+/// operator against the HNSW index, `DISTINCT ON` to keep only each
+/// candidate's closest template, then re-sorted and capped to `top_k`.
+/// `1 - distance` converts pgvector's cosine *distance* back into the
+/// same similarity scale `cosine_similarity`/`top_k_matches` use, so a
+/// caller sees identical semantics regardless of which path served the
+/// search.
+async fn search_top_k_indexed(
+    pool: &PgPool,
+    model_name: &str,
+    model_version: &str,
+    probe_embedding: &[f32],
+    top_k: usize,
+) -> Result<Vec<CandidateMatch>, sqlx::Error> {
+    let probe = pgvector::Vector::from(probe_embedding.to_vec());
+    let rows: Vec<(String, f64)> = sqlx::query_as(
+        "SELECT candidate_id, score FROM ( \
+             SELECT DISTINCT ON (candidate_id) \
+                    candidate_id::text AS candidate_id, \
+                    (1 - (embedding_vector <=> $1))::float8 AS score \
+             FROM biometric_templates \
+             WHERE model_name = $2 AND model_version = $3 AND revoked_at IS NULL \
+               AND embedding_vector IS NOT NULL \
+             ORDER BY candidate_id, embedding_vector <=> $1 \
+         ) ranked \
+         ORDER BY score DESC \
+         LIMIT $4",
+    )
+    .bind(probe)
+    .bind(model_name)
+    .bind(model_version)
+    .bind(top_k as i64)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(candidate_id, score)| CandidateMatch {
+            candidate_id,
+            score,
+        })
+        .collect())
 }
 
 #[cfg(test)]

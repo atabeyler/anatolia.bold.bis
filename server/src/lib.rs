@@ -7,6 +7,7 @@ pub mod candidates;
 pub mod config;
 pub mod db;
 pub mod email;
+pub mod entity_graph;
 pub mod entity_resolution;
 pub mod error;
 pub mod evidence;

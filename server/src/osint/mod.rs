@@ -17,8 +17,14 @@
 //! which is active.
 
 pub mod mock;
+pub mod news;
+pub mod resilience;
+pub mod websearch;
 
 use async_trait::async_trait;
+
+/// Shorthand used throughout the real-provider implementations.
+pub type EvidenceItems = Vec<EvidenceItem>;
 
 /// One piece of evidence returned by a provider, before it's persisted as
 /// a `candidate_evidence` row (see `db::evidence`).
@@ -132,6 +138,41 @@ impl EvidenceOrchestrator {
         Self::new(
             vec![std::sync::Arc::new(mock::MockWebSearchProvider)],
             vec![std::sync::Arc::new(mock::MockNewsProvider)],
+            vec![std::sync::Arc::new(mock::MockSocialProvider)],
+        )
+    }
+
+    /// Builds the real orchestrator this deployment should actually run:
+    /// each provider slot uses its real implementation when the matching
+    /// API key is configured (`BRAVE_SEARCH_API_KEY` for web search,
+    /// `NEWS_API_KEY` for news), and falls back to that slot's mock
+    /// implementation otherwise — so an operator can enable providers
+    /// incrementally, and a deployment with no keys configured at all
+    /// behaves exactly like `mock()`. There is no real
+    /// `AuthorizedSocialProvider` implementation yet (see the trait's doc
+    /// comment on why a real one is more than an API-key away); that slot
+    /// is always the mock today.
+    pub fn from_env() -> Self {
+        let web_search: Vec<std::sync::Arc<dyn WebSearchProvider>> =
+            match std::env::var("BRAVE_SEARCH_API_KEY") {
+                Ok(key) if !key.trim().is_empty() => {
+                    tracing::info!("OSINT: Brave Search web-search provider enabled");
+                    vec![std::sync::Arc::new(websearch::RealWebSearchProvider::new(
+                        key,
+                    ))]
+                }
+                _ => vec![std::sync::Arc::new(mock::MockWebSearchProvider)],
+            };
+        let news: Vec<std::sync::Arc<dyn NewsProvider>> = match std::env::var("NEWS_API_KEY") {
+            Ok(key) if !key.trim().is_empty() => {
+                tracing::info!("OSINT: NewsAPI news provider enabled");
+                vec![std::sync::Arc::new(news::RealNewsProvider::new(key))]
+            }
+            _ => vec![std::sync::Arc::new(mock::MockNewsProvider)],
+        };
+        Self::new(
+            web_search,
+            news,
             vec![std::sync::Arc::new(mock::MockSocialProvider)],
         )
     }
@@ -259,5 +300,30 @@ mod tests {
         let second = orchestrator.collect("Jane Doe").await;
         assert_eq!(first[0].items.len(), second[0].items.len());
         assert_eq!(first[0].items[0].title, second[0].items[0].title);
+    }
+
+    // Serialized: both mutate the same process-wide env vars.
+    static ENV_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[tokio::test]
+    async fn from_env_falls_back_to_every_mock_provider_when_no_keys_are_set() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::remove_var("BRAVE_SEARCH_API_KEY");
+        std::env::remove_var("NEWS_API_KEY");
+        let orchestrator = EvidenceOrchestrator::from_env();
+        let sources = orchestrator.enabled_sources();
+        assert_eq!(sources, vec!["mock-web-search", "mock-news", "mock-social"]);
+    }
+
+    #[tokio::test]
+    async fn from_env_uses_the_real_provider_once_its_api_key_is_set() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("BRAVE_SEARCH_API_KEY", "test-key");
+        std::env::set_var("NEWS_API_KEY", "test-key");
+        let orchestrator = EvidenceOrchestrator::from_env();
+        let sources = orchestrator.enabled_sources();
+        assert_eq!(sources, vec!["brave-web-search", "newsapi", "mock-social"]);
+        std::env::remove_var("BRAVE_SEARCH_API_KEY");
+        std::env::remove_var("NEWS_API_KEY");
     }
 }

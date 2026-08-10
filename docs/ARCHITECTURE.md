@@ -19,7 +19,7 @@ anatolia.bold.bis/
 │   │   ├── auth.rs       # JWT issuing/verification, register/login/refresh
 │   │   ├── admin.rs      # Admin-approval workflow, admin bootstrap
 │   │   ├── search.rs     # Search-workflow route handlers
-│   │   ├── biometric.rs  # BiometricProvider trait + mock implementation
+│   │   ├── biometric/    # BiometricProvider trait, mock + real (ONNX) implementations
 │   │   ├── email.rs      # Resend-backed registration notifications
 │   │   ├── roles.rs      # RBAC role identifiers
 │   │   ├── error.rs      # Shared ApiError type
@@ -58,14 +58,24 @@ anatolia.bold.bis/
   hashing, an admin-approval gate on new registrations, and RBAC
   (`SYSTEM_ADMIN`, `SECURITY_ADMIN`, `OPERATOR`, `REVIEWER`, `AUDITOR`).
   See `API.md` and `docs/SECURITY_ARCHITECTURE.md`.
-- **Provider abstractions**: `BiometricProvider` (`server/src/biometric.rs`)
-  keeps the core application decoupled from any specific model —
-  `MockBiometricProvider` is the only implementation today, ranking
-  candidates deterministically from the probe image's bytes, so the full
-  search workflow (`server/src/search.rs`) is developable and testable
-  without a real model. A production provider (ONNX Runtime via `ort`) and
-  vector-search/connector traits for authorized external data sources are
-  planned for later phases.
+- **Provider abstractions**: `BiometricProvider` (`server/src/biometric/`)
+  keeps the core application decoupled from any specific model.
+  `MockBiometricProvider` ranks candidates deterministically from the
+  probe image's bytes, so the full search workflow (`server/src/search.rs`)
+  is developable and testable without a real model.
+  `OnnxBiometricProvider` (YuNet detection + SFace embedding via ONNX
+  Runtime) is the real implementation, behind the opt-in
+  `onnx-provider` Cargo feature and `BIOMETRIC_PROVIDER=onnx` — see
+  `docs/ENVIRONMENT.md` for why it's off by default on Render's native
+  build and how to enable it via Docker. Biometric search itself uses a
+  brute-force in-memory cosine scan on SQLite, and on PostgreSQL an
+  indexed HNSW search (the `pgvector` extension) when available,
+  falling back to brute-force otherwise — see
+  `docs/SECURITY_ARCHITECTURE.md`. OSINT connector traits
+  (`WebSearchProvider`/`NewsProvider`/`AuthorizedSocialProvider`,
+  `server/src/osint/`) follow the same pattern: real implementations
+  (Brave Search, NewsAPI.org) behind the same interface as their mocks,
+  selected per-provider by whether an API key is configured.
 - **Observability**: structured (JSON) logs, per-request IDs propagated
   via the `x-request-id` header, `GET /api/health` reporting the exact
   running commit SHA.

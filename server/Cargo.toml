@@ -41,6 +41,7 @@ async-trait = "0.1.92"
 strsim = "0.11.1"
 metrics = "0.24.6"
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
+pgvector = { version = "0.4", features = ["sqlx"] }
 
 [features]
 # Compiles in the real ONNX Runtime biometric provider (YuNet/SFace, see

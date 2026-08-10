@@ -80,11 +80,17 @@ pub async fn create_candidate_route(
         return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
     }
 
+    let organization_id = crate::db::primary_organization_id(&state.backend, &claims.id)
+        .await
+        .ok()
+        .flatten();
+
     match create_candidate(
         &state.backend,
         &reference_code,
         &full_name,
         payload.notes.as_deref(),
+        organization_id.as_deref(),
     )
     .await
     {
@@ -194,6 +200,7 @@ pub async fn upload_reference_photo_route(
         &enrollment.embedding,
         enrollment.quality_score,
         None,
+        state.pgvector_search_ready,
     )
     .await
     {

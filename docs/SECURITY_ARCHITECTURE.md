@@ -306,15 +306,31 @@ what these controls defend against.
     (`BIOMETRIC_PROVIDER_UNAVAILABLE`) rather than silently enrolling a
     fake template. Revoking a template (`.../templates/{id}/revoke`)
     excludes it from future searches but keeps its row for audit history.
-    **Not implemented**: duplicate-candidate detection against existing
-    templates at enrollment time, and FAR/FRR/ROC calibration tooling
-    (no authorized labeled dataset exists in this environment to
-    calibrate against).
+    Duplicate-candidate detection against existing templates at
+    enrollment time is implemented (item 23 in
+    `docs/HARDENING_CHECKLIST.md`) — a soft warning only, never a block.
+    FAR/FRR/ROC calibration tooling exists (`server/src/calibration.rs`,
+    `server/src/bin/calibrate.rs`) but cannot itself be run against this
+    deployment's real-world accuracy — no authorized labeled dataset
+    exists in this environment to calibrate against.
+  - **Indexed search on PostgreSQL** (item 2 in
+    `docs/HARDENING_CHECKLIST.md`, `server/src/db/biometric.rs`): in
+    addition to the JSON-column brute-force scan above, each template's
+    embedding is also written to a native `vector(128)` column, indexed
+    with `pgvector`'s HNSW index (cosine distance).
+    `db::biometric::ensure_pgvector_index` runs at startup and fails
+    soft — a Postgres host that won't allow the extension logs a warning
+    and the deployment stays on the brute-force scan, reported at
+    `GET /api/health/ready` (`biometricSearch`: `"pgvector-hnsw"` or
+    `"brute-force"`) rather than left as a silent difference between
+    environments. Verified against a real local Postgres 16 + pgvector
+    0.6 instance: the indexed and brute-force paths agree on ranking and
+    score for a small dataset (`server/tests/pgvector_search.rs`).
 - **OSINT/evidence provider layer** (`server/src/osint/`,
-  `server/src/db/evidence.rs`, `server/src/evidence.rs`) — a first,
-  deliberately scoped slice of the P2 "Connector / OSINT Katmanı" appendix
-  in `docs/HARDENING_CHECKLIST.md`, which was entirely unstarted before
-  this:
+  `server/src/db/evidence.rs`, `server/src/evidence.rs`) — the P2
+  "Connector / OSINT Katmanı" appendix in
+  `docs/HARDENING_CHECKLIST.md`, which was entirely unstarted before this
+  work began:
   - **Provider abstraction**: `WebSearchProvider`/`NewsProvider`/
     `AuthorizedSocialProvider` traits (same `#[async_trait]` shape as
     `BiometricProvider`), plus `SourceRegistry` reporting which named
@@ -332,19 +348,50 @@ what these controls defend against.
     evidence or fails the whole `POST .../evidence/collect` request. The
     response reports per-provider failures in `providerErrors` rather
     than silently dropping them.
-  - **Mock only**: `server/src/osint/mock.rs` implements all three
-    traits with deterministic, content-seeded results and zero network
-    calls — this environment has no authorized OSINT API access, so
-    there is no real provider to add yet.
+  - **Real web-search and news providers** (item 6 in
+    `docs/HARDENING_CHECKLIST.md`): `server/src/osint/websearch.rs`
+    (Brave Search API) and `server/src/osint/news.rs` (NewsAPI.org) —
+    official, documented REST APIs, never scraping. Each is used only
+    when its API key (`BRAVE_SEARCH_API_KEY`/`NEWS_API_KEY`) is
+    configured (`EvidenceOrchestrator::from_env`); unset, that provider
+    slot stays on its mock implementation. Both wrap their HTTP call
+    through a shared timeout/retry/circuit-breaker
+    (`server/src/osint/resilience.rs`): an 8-second request timeout, one
+    retry, and a circuit breaker that opens after 3 consecutive failures
+    for a 30-second cooldown — protecting both this service's own
+    request latency and the upstream API from being hammered while
+    unhealthy. `AuthorizedSocialProvider` still has no real
+    implementation — every candidate platform requires its own developer
+    agreement, not something this environment can obtain.
   - **Storage**: `candidate_evidence` rows are never a verdict about the
     candidate, only a provider's own confidence score for a human
     reviewer to weigh — same "candidates, not verdicts" principle as
-    biometric scores.
+    biometric scores. Every evidence item with a URL also becomes an
+    entity-graph `website` relation automatically — see below.
   - **Not implemented** (each a separate, larger piece of work, not a
-    faked stand-in): an entity graph, reverse image search, an
-    OSINT-specific frontend UI, and a real (non-mock) connector with
-    declared per-connector authorization type, capabilities, and rate
-    limits.
+    faked stand-in): reverse image search, an OSINT-specific frontend
+    workspace, and a declared per-connector capability/rate-limit
+    management API.
+- **Entity graph** (item 10 in `docs/HARDENING_CHECKLIST.md`,
+  `server/src/db/entity_graph.rs`, `server/src/entity_graph.rs`):
+  candidate-centric relations to aliases, usernames, organizations, and
+  websites — a star graph around the candidate, not a general
+  node-to-node graph, so listing a candidate's relations is a single
+  indexed query and organization-scoping never has to walk arbitrary
+  edges to find the owning candidate. `website` relations are recorded
+  automatically the moment an evidence item with a URL is collected — no
+  text extraction involved, just the URL the provider already returned.
+  `alias`/`username`/`organization` relations (and additional `website`
+  ones) are recorded manually by a human reviewer via
+  `POST /api/v1/candidates/{id}/entity-graph` — there is no automatic
+  name/username/organization extraction from evidence text, which would
+  be real NLP work this environment doesn't attempt to fake. Always
+  advisory: a relation is a claim with provenance (which evidence item,
+  or which reviewer), never an automatic identity merge — same principle
+  as `entity_resolution.rs`. Both entity-graph routes enforce
+  `can_view_scoped_resource` against the candidate's `organization_id`,
+  the same rule already proven for searches — see
+  `server/tests/entity_graph.rs` for the negative-authorization coverage.
 - **Metrics** (`GET /metrics`, `server/src/metrics.rs`): a process-wide
   Prometheus recorder (`metrics` crate) backs both scattered
   `counter!`/`histogram!` call sites and the endpoint itself, which
@@ -538,13 +585,20 @@ what these controls defend against.
   `server/tests/organization_scope.rs` for the negative-authorization
   test coverage.
 
-  Not yet covered: `candidates` gained an `organization_id` column but it
-  is not enforced. A real candidate enrollment pipeline exists now
-  (`POST /api/v1/candidates`, see Phase 4 in `docs/ROADMAP.md`), but
-  `create_candidate` doesn't yet accept or stamp an organization — wiring
-  enrollment into the org model is a real, open gap, not a structural
-  blocker anymore. Single-candidate endpoints
-  (`GET /api/v1/candidates/{id}`) are likewise not yet org-scoped.
+  `candidates` is now stamped with its creator's organization at creation
+  time (`POST /api/v1/candidates`, resolved server-side the same way a
+  search is — never accepted from the client) and `CandidateRow` carries
+  `organization_id` through every read path. The entity graph
+  (`GET/POST /api/v1/candidates/{id}/entity-graph`, item 10 in
+  `docs/HARDENING_CHECKLIST.md`) enforces `can_view_scoped_resource`
+  against it — see `server/tests/entity_graph.rs` for the negative-
+  authorization coverage, same shape as `organization_scope.rs`'s search
+  tests. **Not yet covered**: the other candidate-reading endpoints
+  (`GET .../templates`, `GET .../evidence`,
+  `GET .../possible-duplicates`) don't apply this check yet, even though
+  the data they'd need to (`CandidateRow.organization_id`) is now
+  available — extending them is now purely a matter of adding the same
+  check `entity_graph.rs` already demonstrates, not new plumbing.
 
 ## Not yet implemented
 

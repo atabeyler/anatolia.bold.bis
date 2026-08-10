@@ -5,7 +5,7 @@ use axum::routing::{delete, get, post};
 use axum::Router;
 
 use crate::db::AppState;
-use crate::{admin, audit, auth, candidates, evidence, metrics, mfa, org, search};
+use crate::{admin, audit, auth, candidates, entity_graph, evidence, metrics, mfa, org, search};
 
 pub fn router(state: AppState) -> Router {
     let auth_routes = Router::new()
@@ -114,6 +114,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/:candidate_id/possible-duplicates",
             get(candidates::possible_duplicates_route),
+        )
+        .route(
+            "/:candidate_id/entity-graph",
+            get(entity_graph::entity_graph_route).post(entity_graph::add_entity_relation_route),
         );
 
     Router::new()

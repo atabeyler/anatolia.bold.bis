@@ -90,5 +90,14 @@ services:
       # Optional: registration/approval emails are silently skipped if unset.
       - key: RESEND_API_KEY
         sync: false
+      # Optional real OSINT providers (item 6 in
+      # docs/HARDENING_CHECKLIST.md) — see server/src/osint/websearch.rs
+      # and server/src/osint/news.rs. Each falls back to its mock
+      # implementation, independently, when its key is unset; leaving
+      # both unset (the default) reproduces today's mock-only behavior.
+      - key: BRAVE_SEARCH_API_KEY
+        sync: false
+      - key: NEWS_API_KEY
+        sync: false
       - key: RUST_LOG
         value: info

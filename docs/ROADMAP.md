@@ -120,27 +120,37 @@ the individual items.
       (`server/src/biometric/`), selected via `BIOMETRIC_PROVIDER=onnx`.
       Both models are pinned by SHA-256 and fetched from the OpenCV Zoo at
       startup; a hash mismatch or download failure is a hard startup
-      failure, never a silent fallback to the mock provider. See
-      `docs/SECURITY_ARCHITECTURE.md` for exactly what this pipeline does
-      and does not guarantee — in particular, its detection/alignment math
-      could only be verified against synthetic (non-face) test images in
-      this environment, never real photographs, since the repository must
-      never contain real biometric data
+      failure, never a silent fallback to the mock provider. The active
+      provider (and biometric search mode) is reported at
+      `GET /api/health/ready`. See `docs/SECURITY_ARCHITECTURE.md` for
+      exactly what this pipeline does and does not guarantee — in
+      particular, its detection/alignment math could only be verified
+      against synthetic (non-face) test images in this environment, never
+      real photographs, since the repository must never contain real
+      biometric data. Building the `onnx-provider` feature on Render
+      requires switching that service to a Docker-based deploy (Debian
+      "trixie", glibc >= 2.38) — the native Rust buildpack's older glibc
+      cannot link `ort`'s prebuilt runtime; see `docs/ENVIRONMENT.md` for
+      the verified root cause and the Docker path, not yet exercised as a
+      live Render deployment
 - [x] Candidate enrollment pipeline — `POST /api/v1/candidates`,
       `POST /api/v1/candidates/{id}/reference-photos`,
       `GET /api/v1/candidates/{id}/templates`,
       `POST /api/v1/candidates/{id}/templates/{template_id}/revoke`; see
       `API.md`
 - [x] Vector database provider abstraction — `db::biometric` stores
-      embeddings as JSON and performs a real O(n) cosine-similarity Top-K
-      scan (`db::top_k_matches`), filtered to non-revoked,
-      model/version-compatible templates only. This is a deliberate
-      interim choice, not the final architecture: it avoids depending on
-      the `pgvector` extension (not guaranteed available in every
-      deployment) but is not an indexed ANN search. `pgvector` (or another
-      dedicated vector store, behind the same provider-abstraction
-      principle) is the documented upgrade path once ANN indexing is
-      actually needed
+      embeddings as JSON (both backends) for a real, correct O(n)
+      cosine-similarity Top-K scan (`db::top_k_matches`), and, on
+      PostgreSQL, *also* as a native `vector(128)` column behind a real
+      HNSW index using cosine distance (the `pgvector` extension —
+      `db::biometric::ensure_pgvector_index`). `db::search_top_k` chooses
+      explicitly between the indexed and brute-force paths based on
+      whether the extension could be enabled at startup (not every
+      managed Postgres host allow-lists it) — `AppState::pgvector_search_ready`,
+      reported at `GET /api/health/ready`. Verified against a real local
+      Postgres 16 + pgvector 0.6 instance: `server/tests/pgvector_search.rs`
+      confirms the indexed and brute-force paths agree on ranking and
+      score for a small dataset (opt-in, `PGVECTOR_TEST_DATABASE_URL`)
 - [x] Image quality assessment (blur, brightness, face angle, multiple
       faces) — real classical-CV heuristics (Laplacian-variance blur,
       brightness-histogram lighting, landmark-symmetry pose,
@@ -157,23 +167,40 @@ the individual items.
 
 ## Phase 5 — Authorized connectors and administration
 
-- [x] OSINT/evidence provider abstraction — a first, deliberately scoped
-      slice: `WebSearchProvider`/`NewsProvider`/`AuthorizedSocialProvider`
-      traits, `SourceRegistry`, and an `EvidenceOrchestrator` that isolates
-      one provider's failure from the others (`server/src/osint/`); mock
-      implementations only (no authorized real OSINT API access exists in
-      this environment); `candidate_evidence` storage and
+- [x] OSINT/evidence provider abstraction: `WebSearchProvider`/
+      `NewsProvider`/`AuthorizedSocialProvider` traits, `SourceRegistry`,
+      an `EvidenceOrchestrator` that isolates one provider's failure from
+      the others (`server/src/osint/`), and real (non-mock) web-search
+      (Brave Search API) and news (NewsAPI.org) providers with a
+      timeout/retry/circuit-breaker wrapper (`server/src/osint/resilience.rs`) —
+      `EvidenceOrchestrator::from_env` uses the real provider when
+      `BRAVE_SEARCH_API_KEY`/`NEWS_API_KEY` is set, the mock otherwise,
+      independently per slot. `candidate_evidence` storage and
       `POST/GET /api/v1/candidates/{id}/evidence[/collect]`. See `API.md`.
-      **Not implemented**: a real connector, declared per-connector
-      authorization type/capabilities/rate limits, entity graph, reverse
-      image search, and an OSINT-specific frontend UI — each is its own,
-      larger piece of work
+      **Not implemented**: a real `AuthorizedSocialProvider` (every
+      candidate social-platform API requires its own developer agreement,
+      not available in this environment — see that trait's doc comment),
+      a declared per-connector capability/rate-limit management API,
+      reverse image search, and an OSINT-specific frontend workspace —
+      each is its own, larger piece of work
 - [x] Conservative entity resolution over non-biometric signals —
       `server/src/entity_resolution.rs`,
       `GET /api/v1/candidates/{id}/possible-duplicates`: Jaro-Winkler name
       similarity plus shared OSINT-evidence-URL detection, advisory only
       (never auto-merges/links candidates). Not implemented: phonetic
-      matching, a persisted entity graph
+      matching
+- [x] Entity graph — candidate-centric relations to aliases, usernames,
+      organizations, and websites (`server/src/db/entity_graph.rs`,
+      `GET/POST /api/v1/candidates/{id}/entity-graph`). `website`
+      relations are recorded automatically from evidence URLs; `alias`/
+      `username`/`organization` relations are recorded manually by a human
+      reviewer — there is no automatic name/username/organization
+      extraction from evidence text (real NLP work, not attempted).
+      Always advisory, never an automatic merge. Organization-scoped the
+      same way searches are (`permission::can_view_scoped_resource`),
+      which required extending `candidates`/`create_candidate` to actually
+      stamp and read `organization_id` — previously present as a column
+      but never enforced (see `docs/SECURITY_ARCHITECTURE.md`)
 - [x] Secondary verification workflow — `REQUIRE_SECOND_REVIEW` four-eyes
       policy (`db::record_review_decision`); see
       `docs/SECURITY_ARCHITECTURE.md`

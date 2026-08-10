@@ -12,7 +12,7 @@
 use sqlx::{FromRow, PgPool, SqlitePool};
 use uuid::Uuid;
 
-use super::DbBackend;
+use super::{entity_graph, DbBackend};
 use crate::osint::EvidenceItem;
 
 pub(super) async fn migrate_pg(pool: &PgPool) -> Result<(), sqlx::Error> {
@@ -86,7 +86,34 @@ pub struct EvidenceRow {
     pub created_at: String,
 }
 
+/// Stores one evidence item and, when it carries a URL, also records a
+/// `website` entity-graph relation for it (see `entity_graph.rs`'s module
+/// doc comment on why this is the one relation type that gets populated
+/// automatically). The relation insert is best-effort: a failure there
+/// must never turn an otherwise-successful evidence collection into an
+/// error the caller has to handle.
 pub async fn insert_evidence(
+    backend: &DbBackend,
+    candidate_id: &str,
+    item: &EvidenceItem,
+    collected_by: Option<&str>,
+) -> Result<Option<EvidenceRow>, sqlx::Error> {
+    let row = insert_evidence_row(backend, candidate_id, item, collected_by).await?;
+    if let (Some(row), Some(url)) = (&row, &item.url) {
+        let _ = entity_graph::insert_relation(
+            backend,
+            candidate_id,
+            entity_graph::relation_type::WEBSITE,
+            url,
+            Some(&row.id),
+            collected_by,
+        )
+        .await;
+    }
+    Ok(row)
+}
+
+async fn insert_evidence_row(
     backend: &DbBackend,
     candidate_id: &str,
     item: &EvidenceItem,

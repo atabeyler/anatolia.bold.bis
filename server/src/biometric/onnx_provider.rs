@@ -15,7 +15,7 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use crate::db::{list_active_templates, load_candidate_by_id, top_k_matches, AppState};
+use crate::db::{load_candidate_by_id, search_top_k, AppState};
 
 use super::alignment::align_face;
 use super::detection::FaceDetector;
@@ -142,11 +142,16 @@ impl BiometricProvider for OnnxBiometricProvider {
         let (probe_embedding, _confidence) =
             self.process_image(&rgb, width, height, MIN_SEARCH_CONFIDENCE)?;
 
-        let templates = list_active_templates(&state.backend, MODEL_NAME, MODEL_VERSION)
-            .await
-            .map_err(|e| BiometricError::Internal(e.to_string()))?;
-
-        let matches = top_k_matches(&templates, &probe_embedding, top_k);
+        let matches = search_top_k(
+            &state.backend,
+            MODEL_NAME,
+            MODEL_VERSION,
+            &probe_embedding,
+            top_k,
+            state.pgvector_search_ready,
+        )
+        .await
+        .map_err(|e| BiometricError::Internal(e.to_string()))?;
 
         let mut scored = Vec::with_capacity(matches.len());
         for m in matches {

@@ -59,11 +59,28 @@ a pushed commit to confirm a deployment has actually gone live.
 
 Readiness check: runs a trivial query against the real database backend.
 Use this, not `/api/health`, to gate whether traffic should be routed to
-this instance.
+this instance. Also reports the active biometric provider and search
+mode (item 1/2 in `docs/HARDENING_CHECKLIST.md`) — read-only facts about
+how this instance is configured, not signals of a degraded instance, so
+they're present on both `200` and `503` responses.
 
-**Response `200 OK`** (`{ "status": "ready", "version": "...", "timestamp": "..." }`)
-if the database answered; **`503 Service Unavailable`**
-(`{ "status": "not_ready", ... }`) if it didn't.
+**Response `200 OK`**
+```json
+{
+  "status": "ready",
+  "version": "<commit-sha>",
+  "timestamp": "2026-08-08T12:00:00Z",
+  "biometricProvider": "mock",
+  "biometricSearch": "brute-force"
+}
+```
+`biometricProvider` is `"mock"` or `"onnx"`. `biometricSearch` is
+`"pgvector-hnsw"` (indexed PostgreSQL search) or `"brute-force"` (in-memory
+linear scan — always this on SQLite, or on Postgres if the `vector`
+extension couldn't be enabled).
+
+**`503 Service Unavailable`** (`{ "status": "not_ready", ... }`, same
+extra fields) if the database didn't answer.
 
 ### `GET /metrics`
 
@@ -620,13 +637,13 @@ is excluded from every future search — see `db::list_active_templates`.
 
 ### Evidence (OSINT)
 
-All routes below require `Authorization: Bearer <accessToken>`. This is a
-deliberately scoped first slice of the P2 OSINT appendix in
-`docs/HARDENING_CHECKLIST.md` — provider abstractions, a mock
-implementation, and per-provider failure isolation. Entity resolution
-over the collected evidence, an entity graph, reverse image search, and
-an OSINT-specific frontend UI are separate, larger pieces of work and are
-not implemented here.
+All routes below require `Authorization: Bearer <accessToken>`. Provider
+abstractions (`WebSearchProvider`/`NewsProvider`/`AuthorizedSocialProvider`),
+per-provider failure isolation, timeout/retry/circuit-breaker resilience,
+and real (non-mock) web-search and news providers are implemented — see
+item 6 in `docs/HARDENING_CHECKLIST.md`. Reverse image search and an
+OSINT-specific frontend workspace are separate, larger pieces of work and
+are not implemented here.
 
 #### `POST /api/v1/candidates/{candidate_id}/evidence/collect`
 
@@ -635,12 +652,21 @@ Requires `OPERATOR`, `SECURITY_ADMIN`, or `SYSTEM_ADMIN`
 typically the candidate's full name or another identifying string.
 
 Runs every configured `WebSearchProvider`/`NewsProvider`/
-`AuthorizedSocialProvider` (currently mock implementations only — see
-`server/src/osint/mock.rs`; no real external OSINT API access exists in
-this environment) and stores whatever each one returns. **One provider
-failing does not fail the request** — its failure is reported per-provider
-in `providerErrors` instead, and every other provider's results are still
-stored (`osint::EvidenceOrchestrator::collect`).
+`AuthorizedSocialProvider` and stores whatever each one returns.
+Web search uses the Brave Search API and news uses NewsAPI.org when
+`BRAVE_SEARCH_API_KEY`/`NEWS_API_KEY` are set (each independently; see
+`docs/ENVIRONMENT.md`), falling back to that slot's mock implementation
+when its key is unset — a deployment with neither key set behaves exactly
+like before (mock-only). There is no real `AuthorizedSocialProvider`
+implementation yet — see that trait's doc comment in
+`server/src/osint/mod.rs` for why. Real providers apply a timeout, one
+retry, and a circuit breaker (opens after 3 consecutive failures, a
+30-second cooldown) — see `server/src/osint/resilience.rs`. **One
+provider failing does not fail the request** — its failure is reported
+per-provider in `providerErrors` instead, and every other provider's
+results are still stored (`osint::EvidenceOrchestrator::collect`). Every
+evidence item with a URL also automatically becomes a `website` entity
+relation (see "Entity graph" below).
 
 **`200 OK`**:
 ```json
@@ -694,6 +720,55 @@ fuzzy/plaintext comparison (see `national_id.rs`).
   ]
 }
 ```
+
+### Entity graph
+
+Item 10 in `docs/HARDENING_CHECKLIST.md`: candidate-centric relations to
+aliases, usernames, organizations, and websites
+(`server/src/db/entity_graph.rs`). A star graph around the candidate, not
+a general node-to-node graph. `website` relations are recorded
+automatically from evidence URLs (see above); `alias`/`username`/
+`organization` (and additional `website`) relations are recorded manually
+by a human reviewer. Always advisory — a relation is a claim with
+provenance, never an automatic identity merge. Both routes are
+organization-scoped the same way searches are
+(`permission::can_view_scoped_resource`): a candidate with an owning
+organization is only visible to members of that organization (or
+`SYSTEM_ADMIN`); an orgless/legacy candidate stays visible to anyone who
+passes the role check.
+
+#### `GET /api/v1/candidates/{candidate_id}/entity-graph`
+
+Requires `permission::can_view_search`, plus the organization-scoping
+check above. **`403 Forbidden`** if the candidate belongs to an
+organization the caller isn't a member of.
+
+**`200 OK`**:
+```json
+{
+  "candidateId": "...",
+  "items": [
+    {
+      "id": "...", "candidateId": "...", "relationType": "website",
+      "value": "https://example.test/profile", "evidenceId": "...",
+      "addedBy": null, "createdAt": "..."
+    }
+  ]
+}
+```
+`relationType` is one of `alias`, `username`, `organization`, `website`.
+`evidenceId` is set for automatically-recorded `website` relations,
+`null` otherwise. `addedBy` is the reviewer's user id for manually-added
+relations, `null` for automatic ones.
+
+#### `POST /api/v1/candidates/{candidate_id}/entity-graph`
+
+Requires `OPERATOR`, `SECURITY_ADMIN`, or `SYSTEM_ADMIN`
+(`permission::can_manage_candidates`), plus the organization-scoping
+check above. Body: `{ "relationType": "alias", "value": "..." }`.
+**`400 Bad Request`** (`VALIDATION_ERROR`) for an unknown `relationType`
+or an empty `value`. Records a `CANDIDATE_ENTITY_RELATION_ADDED` audit
+event.
 
 ### Audit trail
 

@@ -969,6 +969,49 @@
         }
       }
     },
+    "/api/v1/candidates/{candidateId}/entity-graph": {
+      "get": {
+        "summary": "A candidate's entity graph: alias/username/organization/website relations, organization-scoped",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Forbidden (role check, or organization scoping)"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      },
+      "post": {
+        "summary": "Manually record an alias/username/organization/website relation for a candidate",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Validation error (unknown relation type, or empty value)"
+          },
+          "403": {
+            "description": "Forbidden (role check, or organization scoping)"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
     "/metrics": {
       "get": {
         "summary": "Prometheus-format metrics snapshot (optionally gated by METRICS_TOKEN)",

@@ -8,16 +8,31 @@ file — only placeholders belong in the repository.
 `server/Cargo.toml` defines one opt-in feature: **`onnx-provider`**,
 which compiles in the real `BiometricProvider` implementation (YuNet
 detection + SFace embedding via ONNX Runtime — see `server/src/biometric/onnx_provider.rs`).
-It is **off by default** — the standard `cargo build --release` (and
-Render's `buildCommand` in `render.yaml`) does not include it. This is
-deliberate, not an oversight: the `ort` crate's prebuilt native shim
-requires glibc/libstdc++ symbols (the ISO C23 `__isoc23_strtoll` family
-and others) that are not present on every build host, and were missing
-on Render's standard Rust build image specifically — enabling this
-feature there made the release build fail to link entirely, even though
-`BIOMETRIC_PROVIDER` defaults to `"mock"` and never touches this code
-at runtime. Enable it explicitly only on a build host you've confirmed
-can link `ort` successfully:
+It is **off by default** on Render's native Rust buildpack
+(`render.yaml`'s `env: rust`, `buildCommand`) — enabling it there fails
+to link. The root cause, confirmed empirically (not just inferred from
+the error message): `ort`'s "download-binaries" feature statically links
+a prebuilt `libonnxruntime.a` at build time, and that archive requires
+glibc **>= 2.38** (the ISO C23 additions, e.g. `__isoc23_strtoll`).
+Render's build image, like Debian "bookworm" (glibc 2.36), is too old;
+Debian "trixie" (glibc 2.40) links it cleanly. Once linked, the binary is
+fully self-contained — no runtime network dependency for ONNX Runtime
+itself (`ldd` shows no `onnxruntime` entry at all); only the YuNet/SFace
+*model* files are a runtime download, already documented below
+(`MODEL_CACHE_DIR`).
+
+**To enable it on Render**: switch the service from `env: rust` to
+`env: docker` in `render.yaml` and build with
+`--build-arg ONNX_PROVIDER=true` — `Dockerfile` (repository root) already
+targets Debian trixie and supports this build arg. This has been
+verified locally (Docker build reaching and successfully compiling
+`ort-sys` against the trixie toolchain) but not yet verified as a live
+Render deployment — do that as a deliberate, watched change, not a
+default flip, given this project's history of Render build breakage from
+under-tested biometric-provider changes.
+
+To build locally on a host you've confirmed can link `ort` (this
+repository's own dev/CI environment does, on a glibc >= 2.38 host):
 
 ```bash
 cargo build --release --features onnx-provider
@@ -46,6 +61,8 @@ Configured, but fails silently if wrong or missing — deserve extra care:
 |---|---|
 | `RESEND_API_KEY` | Registration/approval/rejection emails are silently skipped (logged as a warning) — the register endpoint still responds `201 Created` regardless of whether the notification email actually went out. |
 | `ADMIN_EMAIL` | Falls back to `info@boldkimya.com.tr` if unset. |
+| `BRAVE_SEARCH_API_KEY` | Web-search OSINT evidence collection falls back to `MockWebSearchProvider` (synthetic results, clearly labeled as such) — see `server/src/osint/websearch.rs`, item 6 in `docs/HARDENING_CHECKLIST.md`. |
+| `NEWS_API_KEY` | News OSINT evidence collection falls back to `MockNewsProvider` — see `server/src/osint/news.rs`. |
 
 Everything else:
 

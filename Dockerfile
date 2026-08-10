@@ -9,18 +9,47 @@ RUN npm ci
 COPY client/ ./
 RUN npm run build
 
-FROM rust:1-slim-bookworm AS server-builder
+# Debian "trixie" (13), not the older "bookworm" (12): the real ONNX
+# biometric provider (`--features onnx-provider`, see ARG ONNX_PROVIDER
+# below) statically links a prebuilt `libonnxruntime.a` at build time
+# that requires glibc >= 2.38 (the ISO C23 additions, e.g.
+# `__isoc23_strtoll`) — bookworm ships glibc 2.36, which is exactly what
+# made this feature fail to link on Render's (bookworm-based) native Rust
+# build image. trixie ships glibc 2.40. This was verified empirically,
+# not assumed: building with `--features onnx-provider` against a glibc
+# 2.39 host linked cleanly and produced a fully self-contained binary —
+# `ldd` shows no `onnxruntime` dependency at all, because the archive is
+# statically embedded, not dynamically loaded; there is no runtime
+# network dependency for ONNX Runtime itself (the YuNet/SFace *model*
+# files are a separate, already-documented runtime download — see
+# `server/src/biometric/models.rs`).
+FROM rust:1-slim-trixie AS server-builder
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev g++ \
     && rm -rf /var/lib/apt/lists/*
 COPY server/Cargo.toml server/Cargo.lock* ./
 COPY server/build.rs ./build.rs
 COPY server/src ./src
+# Cargo parses every declared target in Cargo.toml — including
+# `[[bench]]` — before building anything, even just the binary; without
+# this, the build fails at the manifest-parsing stage looking for
+# benches/biometric_pipeline.rs.
+COPY server/benches ./benches
 ARG GIT_COMMIT_SHA=unknown
 ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
-RUN cargo build --release
+# Off by default, matching server/Cargo.toml's default-off `onnx-provider`
+# feature — building this image with no extra build args reproduces
+# today's known-good mock-only artifact. Pass
+# `--build-arg ONNX_PROVIDER=true` to build the real biometric provider
+# in; see docs/DEPLOYMENT.md "Enabling the real ONNX biometric provider".
+ARG ONNX_PROVIDER=false
+RUN if [ "$ONNX_PROVIDER" = "true" ]; then \
+        cargo build --release --features onnx-provider; \
+    else \
+        cargo build --release; \
+    fi
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
