@@ -59,6 +59,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 COPY --from=server-builder /app/target/release/anatolia-bis-server /usr/local/bin/anatolia-bis-server
 COPY --from=client-builder /app/client/dist ./client/dist
 
+# `WORKDIR`/`COPY` above run as root, so /app and everything under it is
+# root-owned; the `app` user (below) has no write access to it otherwise.
+# BIOMETRIC_PROVIDER=onnx's default MODEL_CACHE_DIR (./data/models,
+# relative to this working directory) needs to be creatable at runtime —
+# without this, the non-root `app` user hits a "Permission denied"
+# creating it and the server refuses to start (fail-closed, per
+# server/src/biometric/onnx_provider.rs).
+RUN mkdir -p /app/data/models && chown -R app:app /app
+
 ENV STATIC_DIR=client/dist
 USER app
 EXPOSE 8080
