@@ -22,6 +22,7 @@ cd server
 cargo test
 cargo clippy --all-targets -- -D warnings
 cargo run
+cargo bench   # performance benchmarks — see benches/biometric_pipeline.rs
 ```
 
 Frontend:

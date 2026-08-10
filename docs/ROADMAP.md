@@ -177,7 +177,13 @@ the individual items.
       login failures by reason, biometric search duration/outcome, OSINT
       provider outcomes. All labels are fixed-cardinality, no PII. Not
       covered: DB connection pool gauges
-- [ ] Security tests, performance tests
+- [x] Performance benchmarks — `server/benches/biometric_pipeline.rs`
+      (`cargo bench`, via `criterion`): probe-image validation/decode,
+      template vector search, face alignment, quality checks, and a
+      SQLite-backed DB-path example. Real ONNX inference and a
+      Postgres-backed DB path are deliberately not benchmarked here — see
+      the file's own doc comment for why
+- [ ] Security tests
 - [ ] Institutional deployment hardening
 
 ## Operator geolocation

@@ -549,6 +549,20 @@ eşleşme bu dosyanın sonunda listelidir.
     şekilde test ediliyor; frontend tarafında component-seviyeli bir
     permission testi hâlâ eksik.
 
+64a. [x] Performans benchmark'ları — `server/benches/biometric_pipeline.rs`
+    (`criterion`, `cargo bench`). Probe image doğrulama/decode (640x480,
+    1920x1080, 4000x3000), template vector search (`db::top_k_matches`,
+    100/1.000/10.000 template üzerinde gerçek cosine-similarity taraması),
+    face alignment (`biometric::alignment::align_face`), blur/lighting
+    kalite kontrolü, ve SQLite in-memory backend üzerinden bir DB path
+    örneği (`db::list_candidates`). **Kapsanmayan, bilinçli olarak:**
+    gerçek ONNX inference (YuNet/SFace) — model dosyalarının diskte
+    olmasını ve ağ erişimini gerektiriyor, bu ortamda garanti edilemiyor;
+    gerçek bir Postgres deployment'ına karşı DB path benchmark'i — bu test
+    ortamında çalışan bir Postgres yok. İkisi de sahte bir stand-in ile
+    doldurulmadı, gerçek koşullara sahip bir deployment'ta ayrı olarak
+    çalıştırılması gereken, dokümante edilmiş bir sonraki adım.
+
 ## P2 — CI
 
 65. [ ] CI genişletme (dependency vuln scan, secret scan, locale parity CI

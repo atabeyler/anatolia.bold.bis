@@ -43,7 +43,12 @@ metrics = "0.24.6"
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
 
 [dev-dependencies]
+criterion = { version = "0.8.2", features = ["async_tokio", "html_reports"] }
 http-body-util = "0.1"
+
+[[bench]]
+name = "biometric_pipeline"
+harness = false
 
 [profile.release]
 opt-level = 2
