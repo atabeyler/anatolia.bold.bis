@@ -378,6 +378,16 @@ what these controls defend against.
   a persisted entity graph (a many-to-many resolved-identity structure) —
   the current endpoint recomputes similarity on each request rather than
   maintaining resolved clusters.
+- **Role change with immediate session revoke** (`POST
+  /api/v1/admin/users/{id}/role`, `server/src/admin.rs::change_role_route`,
+  item 11): every active session for the target account is revoked the
+  moment its role changes, for a promotion as much as a demotion — a
+  session token issued under the old role must never keep answering to
+  either a stale set of permissions or an unexpectedly different one. The
+  account must sign in again to receive claims for its new role. Refuses
+  (`409 Conflict`, `LAST_ADMIN_PROTECTED`) a change that would demote the
+  last active `SYSTEM_ADMIN`, and records a mandatory `USER_ROLE_CHANGED`
+  audit event (`from`/`to` role in the metadata).
 - **Last-admin protection** (`server/src/admin.rs`
   `would_remove_last_admin`): `ban_user` and `delete_user_route` both check
   `db::count_active_system_admins` before acting and refuse
@@ -539,11 +549,7 @@ what these controls defend against.
 ## Not yet implemented
 
 Enterprise SSO is planned (see `docs/ROADMAP.md`) but not present in the
-codebase yet. Do not assume it is active. There is also no endpoint to change an
-already-active account's role, so a role-downgrade session-revoke
-protection (item 11) has nothing to attach to yet — adding one is real
-feature work (who may assign which role to whom, self-role-change
-handling) rather than a hardening fix. Async search (item 57) is now
+codebase yet. Do not assume it is active. Async search (item 57) is now
 implemented — see "Async search with a real status state machine" above.
 The audit hash chain is tamper-*evident*, not tamper-*proof*: there is no
 dedicated append-only database role/permission grant for `audit_events`

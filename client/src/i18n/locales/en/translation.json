@@ -105,7 +105,9 @@
     "poorLighting": "The image lighting is too poor to process.",
     "lowFaceQuality": "The detected face does not meet the minimum quality threshold.",
     "biometricProviderUnavailable": "The biometric provider is currently unavailable.",
-    "candidateReferenceCodeTaken": "A candidate with this reference code already exists."
+    "candidateReferenceCodeTaken": "A candidate with this reference code already exists.",
+    "invalidRole": "That is not a valid role.",
+    "roleUnchanged": "The user already has this role."
   },
   "settings": {
     "openLabel": "Settings",
@@ -192,6 +194,16 @@
     "org": {
       "membershipAssigned": "Membership assigned.",
       "membershipRemoved": "Membership removed."
+    },
+    "roleChanged": "Role updated. The account will need to sign in again.",
+    "roleLabel": "Role",
+    "confirmRoleChange": "Change this user's role? This immediately signs them out everywhere.",
+    "roles": {
+      "SYSTEM_ADMIN": "System administrator",
+      "SECURITY_ADMIN": "Security administrator",
+      "OPERATOR": "Operator",
+      "REVIEWER": "Reviewer",
+      "AUDITOR": "Auditor"
     }
   },
   "search": {
@@ -226,7 +238,8 @@
     "createError": "Failed to start search.",
     "location": "Operator location at time of search: {{lat}} · {{lon}}",
     "mockNotice": "Demo mode: this deployment uses a mock matching engine — scores are simulated, not derived from real biometric matching.",
-    "viewOnlyNotice": "Your role allows viewing searches and candidates only. Starting a new search requires the OPERATOR, REVIEWER, SECURITY_ADMIN, or SYSTEM_ADMIN role."
+    "viewOnlyNotice": "Your role allows viewing searches and candidates only. Starting a new search requires the OPERATOR, REVIEWER, SECURITY_ADMIN, or SYSTEM_ADMIN role.",
+    "evidenceCount": "{{count}} evidence item(s) collected"
   },
   "audit": {
     "panelTitle": "AUDIT LOG",

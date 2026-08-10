@@ -105,7 +105,9 @@
     "poorLighting": "Görüntü ışığı işlenemeyecek kadar yetersiz.",
     "lowFaceQuality": "Tespit edilen yüz asgari kalite eşiğini karşılamıyor.",
     "biometricProviderUnavailable": "Biyometrik sağlayıcı şu anda kullanılamıyor.",
-    "candidateReferenceCodeTaken": "Bu referans koduna sahip bir aday zaten mevcut."
+    "candidateReferenceCodeTaken": "Bu referans koduna sahip bir aday zaten mevcut.",
+    "invalidRole": "Bu geçerli bir rol değil.",
+    "roleUnchanged": "Kullanıcı zaten bu role sahip."
   },
   "settings": {
     "openLabel": "Ayarlar",
@@ -192,6 +194,16 @@
     "org": {
       "membershipAssigned": "Üyelik atandı.",
       "membershipRemoved": "Üyelik kaldırıldı."
+    },
+    "roleChanged": "Rol güncellendi. Hesabın yeniden oturum açması gerekecek.",
+    "roleLabel": "Rol",
+    "confirmRoleChange": "Bu kullanıcının rolünü değiştirmek istiyor musunuz? Bu, kullanıcının tüm cihazlardaki oturumunu anında kapatır.",
+    "roles": {
+      "SYSTEM_ADMIN": "Sistem yöneticisi",
+      "SECURITY_ADMIN": "Güvenlik yöneticisi",
+      "OPERATOR": "Operatör",
+      "REVIEWER": "İnceleyici",
+      "AUDITOR": "Denetçi"
     }
   },
   "search": {
@@ -226,7 +238,8 @@
     "createError": "Arama başlatılamadı.",
     "location": "Arama sırasında operatör konumu: {{lat}} · {{lon}}",
     "mockNotice": "Demo modu: bu dağıtım simüle bir eşleştirme motoru kullanıyor — skorlar gerçek biyometrik eşleştirmeden değil, simülasyondan türetilmiştir.",
-    "viewOnlyNotice": "Rolünüz yalnızca aramaları ve adayları görüntülemenize izin veriyor. Yeni arama başlatmak için OPERATOR, REVIEWER, SECURITY_ADMIN veya SYSTEM_ADMIN rolü gerekir."
+    "viewOnlyNotice": "Rolünüz yalnızca aramaları ve adayları görüntülemenize izin veriyor. Yeni arama başlatmak için OPERATOR, REVIEWER, SECURITY_ADMIN veya SYSTEM_ADMIN rolü gerekir.",
+    "evidenceCount": "{{count}} kanıt öğesi toplandı"
   },
   "audit": {
     "panelTitle": "DENETİM KAYDI",

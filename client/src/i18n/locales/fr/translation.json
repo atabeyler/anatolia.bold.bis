@@ -105,7 +105,9 @@
     "poorLighting": "L'éclairage de l'image est insuffisant pour le traitement.",
     "lowFaceQuality": "Le visage détecté n'atteint pas le seuil de qualité minimal.",
     "biometricProviderUnavailable": "Le fournisseur biométrique est actuellement indisponible.",
-    "candidateReferenceCodeTaken": "Un candidat avec ce code de référence existe déjà."
+    "candidateReferenceCodeTaken": "Un candidat avec ce code de référence existe déjà.",
+    "invalidRole": "Ce n'est pas un rôle valide.",
+    "roleUnchanged": "L'utilisateur a déjà ce rôle."
   },
   "settings": {
     "openLabel": "Paramètres",
@@ -192,6 +194,16 @@
     "org": {
       "membershipAssigned": "Adhésion attribuée.",
       "membershipRemoved": "Adhésion supprimée."
+    },
+    "roleChanged": "Rôle mis à jour. Le compte devra se reconnecter.",
+    "roleLabel": "Rôle",
+    "confirmRoleChange": "Changer le rôle de cet utilisateur ? Cela le déconnecte immédiatement partout.",
+    "roles": {
+      "SYSTEM_ADMIN": "Administrateur système",
+      "SECURITY_ADMIN": "Administrateur sécurité",
+      "OPERATOR": "Opérateur",
+      "REVIEWER": "Examinateur",
+      "AUDITOR": "Auditeur"
     }
   },
   "search": {
@@ -226,7 +238,8 @@
     "createError": "Échec du démarrage de la recherche.",
     "location": "Position de l'opérateur au moment de la recherche : {{lat}} · {{lon}}",
     "mockNotice": "Mode démo : ce déploiement utilise un moteur de correspondance simulé — les scores sont simulés, pas issus d'une correspondance biométrique réelle.",
-    "viewOnlyNotice": "Votre rôle permet uniquement de consulter les recherches et les candidats. Démarrer une nouvelle recherche requiert le rôle OPERATOR, REVIEWER, SECURITY_ADMIN ou SYSTEM_ADMIN."
+    "viewOnlyNotice": "Votre rôle permet uniquement de consulter les recherches et les candidats. Démarrer une nouvelle recherche requiert le rôle OPERATOR, REVIEWER, SECURITY_ADMIN ou SYSTEM_ADMIN.",
+    "evidenceCount": "{{count}} élément(s) de preuve collecté(s)"
   },
   "audit": {
     "panelTitle": "JOURNAL D'AUDIT",

@@ -9,6 +9,22 @@
    keyboard/assistive-tech focus, not every mouse click. Never rely on
    an element's own bespoke focus styling alone — this is the floor
    every button/link/input gets regardless of component-specific CSS. */
+
+/* Visually hidden but still readable by screen readers — for labels a
+   control needs for accessibility but the visual design already conveys
+   another way (e.g. a select next to a name label). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,

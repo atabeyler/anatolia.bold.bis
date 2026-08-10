@@ -71,3 +71,9 @@ export async function unbanUser(id: string): Promise<void> {
 export async function deleteUser(id: string): Promise<void> {
   await apiClient.delete(`/v1/admin/users/${id}`);
 }
+
+export const ASSIGNABLE_ROLES = ['SYSTEM_ADMIN', 'SECURITY_ADMIN', 'OPERATOR', 'REVIEWER', 'AUDITOR'] as const;
+
+export async function changeRole(id: string, role: string): Promise<void> {
+  await apiClient.post(`/v1/admin/users/${id}/role`, { role });
+}

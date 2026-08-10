@@ -41,6 +41,7 @@ pub fn router(state: AppState) -> Router {
         .route("/users/:id/ban", post(admin::ban_user))
         .route("/users/:id/unban", post(admin::unban_user))
         .route("/users/:id/mfa-reset", post(admin::mfa_reset_route))
+        .route("/users/:id/role", post(admin::change_role_route))
         .route(
             "/users/:id",
             delete(admin::delete_user_route).patch(admin::update_user_route),

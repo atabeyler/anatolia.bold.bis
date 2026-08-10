@@ -105,7 +105,9 @@
     "poorLighting": "Die Bildbeleuchtung ist zu schlecht zur Verarbeitung.",
     "lowFaceQuality": "Das erkannte Gesicht erfüllt nicht den Mindestqualitätsschwellenwert.",
     "biometricProviderUnavailable": "Der biometrische Anbieter ist derzeit nicht verfügbar.",
-    "candidateReferenceCodeTaken": "Ein Kandidat mit diesem Referenzcode existiert bereits."
+    "candidateReferenceCodeTaken": "Ein Kandidat mit diesem Referenzcode existiert bereits.",
+    "invalidRole": "Das ist keine gültige Rolle.",
+    "roleUnchanged": "Der Benutzer hat bereits diese Rolle."
   },
   "settings": {
     "openLabel": "Einstellungen",
@@ -192,6 +194,16 @@
     "org": {
       "membershipAssigned": "Mitgliedschaft zugewiesen.",
       "membershipRemoved": "Mitgliedschaft entfernt."
+    },
+    "roleChanged": "Rolle aktualisiert. Das Konto muss sich erneut anmelden.",
+    "roleLabel": "Rolle",
+    "confirmRoleChange": "Rolle dieses Benutzers ändern? Dies meldet ihn sofort überall ab.",
+    "roles": {
+      "SYSTEM_ADMIN": "Systemadministrator",
+      "SECURITY_ADMIN": "Sicherheitsadministrator",
+      "OPERATOR": "Operator",
+      "REVIEWER": "Prüfer",
+      "AUDITOR": "Auditor"
     }
   },
   "search": {
@@ -226,7 +238,8 @@
     "createError": "Suche konnte nicht gestartet werden.",
     "location": "Standort des Operators bei der Suche: {{lat}} · {{lon}}",
     "mockNotice": "Demo-Modus: Diese Instanz verwendet eine simulierte Abgleich-Engine — die Werte sind simuliert, nicht aus echtem biometrischem Abgleich abgeleitet.",
-    "viewOnlyNotice": "Ihre Rolle erlaubt nur das Ansehen von Suchen und Kandidaten. Für eine neue Suche ist die Rolle OPERATOR, REVIEWER, SECURITY_ADMIN oder SYSTEM_ADMIN erforderlich."
+    "viewOnlyNotice": "Ihre Rolle erlaubt nur das Ansehen von Suchen und Kandidaten. Für eine neue Suche ist die Rolle OPERATOR, REVIEWER, SECURITY_ADMIN oder SYSTEM_ADMIN erforderlich.",
+    "evidenceCount": "{{count}} Beweismittel gesammelt"
   },
   "audit": {
     "panelTitle": "AUDIT-PROTOKOLL",

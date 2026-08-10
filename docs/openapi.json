@@ -651,6 +651,33 @@
         }
       }
     },
+    "/api/v1/admin/users/{id}/role": {
+      "post": {
+        "summary": "Change a user's role; revokes their active sessions immediately",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Validation error (unknown role, or role unchanged)"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Conflict (would demote the last active SYSTEM_ADMIN)"
+          }
+        }
+      }
+    },
     "/api/v1/admin/users/{id}/mfa-reset": {
       "post": {
         "summary": "Administratively reset (remove) a target account's MFA credential",

@@ -266,6 +266,26 @@ export function AdminPage() {
                   {!user.email && <p className="admin-user-card__note">{t('admin.noEmail')}</p>}
                 </div>
                 <div className="admin-user-card__actions">
+                  <label className="admin-role-select">
+                    <span className="sr-only">{t('admin.roleLabel')}</span>
+                    <select
+                      value={user.role}
+                      disabled={isBusy || isPending}
+                      onChange={(event) => {
+                        const role = event.target.value;
+                        if (role === user.role) return;
+                        if (window.confirm(t('admin.confirmRoleChange') ?? '')) {
+                          runAction(user.id, () => adminClient.changeRole(user.id, role));
+                        }
+                      }}
+                    >
+                      {adminClient.ASSIGNABLE_ROLES.map((role) => (
+                        <option key={role} value={role}>
+                          {t(`admin.roles.${role}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   {isPending && !user.isBanned && (
                     <>
                       <button

@@ -546,6 +546,75 @@ pub async fn mfa_reset_route(
     Json(json!({ "messageKey": "admin.mfaResetComplete" })).into_response()
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ChangeRolePayload {
+    pub role: String,
+}
+
+/// `POST /api/v1/admin/users/:id/role` — changes a user's role. Every
+/// active session for that user is revoked immediately, regardless of
+/// whether the change is a promotion or a demotion: a session token
+/// issued under the old role must never keep working under either the
+/// old permission set (a stale downgrade) or an unexpectedly different
+/// one (a stale upgrade) — the account must re-authenticate to pick up
+/// its new claims. See docs/HARDENING_CHECKLIST.md item 11.
+pub async fn change_role_route(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    Json(payload): Json<ChangeRolePayload>,
+) -> Response {
+    if let Some(denied) = require_admin(&state, &headers) {
+        return denied;
+    }
+    let rid = request_id(&headers);
+    if !roles::is_assignable_role(&payload.role) {
+        return ApiError::new("VALIDATION_ERROR", "errors.invalidRole", rid).into_response();
+    }
+    let Some(target) = load_user_by_id(&state.backend, &id).await.ok().flatten() else {
+        return ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response();
+    };
+    if target.role == payload.role {
+        return ApiError::new("VALIDATION_ERROR", "errors.roleUnchanged", rid).into_response();
+    }
+    let demotes_last_admin = target.role == roles::SYSTEM_ADMIN
+        && payload.role != roles::SYSTEM_ADMIN
+        && count_active_system_admins(&state.backend)
+            .await
+            .map(|count| count <= 1)
+            .unwrap_or(false);
+    if demotes_last_admin {
+        return ApiError::new("LAST_ADMIN_PROTECTED", "errors.lastAdminProtected", rid)
+            .into_response();
+    }
+    let previous_role = target.role.clone();
+    match update_user_flags(&state.backend, &id, None, None, None, Some(&payload.role)).await {
+        Ok(Some(_)) => {
+            let _ = revoke_all_sessions_for_user(&state.backend, &id).await;
+            // MANDATORY — see AuditRecorder::save_mandatory. A role
+            // change is a permission-boundary change, always audited.
+            if let Err(mut err) = AuditRecorder::new(
+                action::USER_ROLE_CHANGED,
+                audit_result::SUCCESS,
+                rid.clone(),
+            )
+            .actor_opt(actor_claims(&state, &headers).as_ref())
+            .headers(&headers)
+            .resource("user", &id)
+            .metadata(json!({ "from": previous_role, "to": payload.role }))
+            .save_mandatory(&state)
+            .await
+            {
+                err.request_id = rid;
+                return err.into_response();
+            }
+            Json(json!({ "messageKey": "admin.roleChanged" })).into_response()
+        }
+        Ok(None) => ApiError::new("NOT_FOUND", "errors.notFound", rid).into_response(),
+        Err(_) => ApiError::new("INTERNAL_ERROR", "errors.internal", rid).into_response(),
+    }
+}
+
 pub async fn delete_user_route(
     State(state): State<AppState>,
     Path(id): Path<String>,

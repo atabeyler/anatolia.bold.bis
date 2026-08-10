@@ -5,6 +5,7 @@ import { useAuth } from '../features/auth/AuthContext';
 import { formatLatitude, formatLongitude, getLastKnownLocation } from '../hooks/useGeolocation';
 import * as searchClient from '../services/searchClient';
 import type { SearchCandidate, SearchSummary } from '../services/searchClient';
+import * as evidenceClient from '../services/evidenceClient';
 import { apiErrorMessageKey } from '../services/apiClient';
 
 const REVIEW_ROLES = ['REVIEWER', 'SECURITY_ADMIN', 'SYSTEM_ADMIN'];
@@ -29,6 +30,7 @@ export function DashboardPage() {
   const [activeCandidatesError, setActiveCandidatesError] = useState(false);
   const [reviewBusyId, setReviewBusyId] = useState<string | null>(null);
   const [reviewErrorKey, setReviewErrorKey] = useState<string | null>(null);
+  const [evidenceCounts, setEvidenceCounts] = useState<Record<string, number>>({});
 
   const [pastSearches, setPastSearches] = useState<SearchSummary[] | null>(null);
   const [pastSearchesError, setPastSearchesError] = useState(false);
@@ -45,13 +47,33 @@ export function DashboardPage() {
     loadPastSearches();
   }, []);
 
+  // Evidence counts are fetched per candidate, best-effort: a provider
+  // outage or a candidate with no evidence yet must never block or break
+  // rendering the (already-successful) search results themselves.
+  const loadEvidenceCounts = (candidates: SearchCandidate[]) => {
+    setEvidenceCounts({});
+    candidates.forEach((candidate) => {
+      evidenceClient
+        .listEvidence(candidate.candidateId)
+        .then((items) => {
+          setEvidenceCounts((counts) => ({ ...counts, [candidate.candidateId]: items.length }));
+        })
+        .catch(() => {
+          // Leave the count absent for this candidate; the badge simply
+          // doesn't render rather than showing a wrong number.
+        });
+    });
+  };
+
   const openSearch = async (search: SearchSummary) => {
     setActiveSearch(search);
     setActiveCandidates([]);
     setActiveCandidatesError(false);
     setActiveCandidatesLoading(true);
     try {
-      setActiveCandidates(await searchClient.getSearchCandidates(search.id));
+      const candidates = await searchClient.getSearchCandidates(search.id);
+      setActiveCandidates(candidates);
+      loadEvidenceCounts(candidates);
     } catch {
       setActiveCandidatesError(true);
     } finally {
@@ -78,6 +100,7 @@ export function DashboardPage() {
       } else {
         setActiveSearch(result.search);
         setActiveCandidates(result.candidates);
+        loadEvidenceCounts(result.candidates);
         setCaseReference('');
         setPurpose('');
         setImage(null);
@@ -220,6 +243,11 @@ export function DashboardPage() {
                       {candidate.reviewedByName && (
                         <p className="admin-user-card__note">
                           {t('search.reviewedBy', { name: candidate.reviewedByName })}
+                        </p>
+                      )}
+                      {evidenceCounts[candidate.candidateId] !== undefined && (
+                        <p className="admin-user-card__note">
+                          {t('search.evidenceCount', { count: evidenceCounts[candidate.candidateId] })}
                         </p>
                       )}
                     </div>

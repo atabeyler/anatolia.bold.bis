@@ -105,7 +105,9 @@
     "poorLighting": "إضاءة الصورة سيئة جدًا لمعالجتها.",
     "lowFaceQuality": "الوجه المكتشف لا يستوفي الحد الأدنى لعتبة الجودة.",
     "biometricProviderUnavailable": "مزوّد القياسات الحيوية غير متاح حاليًا.",
-    "candidateReferenceCodeTaken": "يوجد بالفعل مرشح بهذا الرمز المرجعي."
+    "candidateReferenceCodeTaken": "يوجد بالفعل مرشح بهذا الرمز المرجعي.",
+    "invalidRole": "هذا ليس دورًا صالحًا.",
+    "roleUnchanged": "المستخدم لديه بالفعل هذا الدور."
   },
   "settings": {
     "openLabel": "الإعدادات",
@@ -192,6 +194,16 @@
     "org": {
       "membershipAssigned": "تم تعيين العضوية.",
       "membershipRemoved": "تمت إزالة العضوية."
+    },
+    "roleChanged": "تم تحديث الدور. سيحتاج الحساب إلى تسجيل الدخول مرة أخرى.",
+    "roleLabel": "الدور",
+    "confirmRoleChange": "هل تريد تغيير دور هذا المستخدم؟ سيؤدي هذا إلى تسجيل خروجه فورًا من جميع الأجهزة.",
+    "roles": {
+      "SYSTEM_ADMIN": "مسؤول النظام",
+      "SECURITY_ADMIN": "مسؤول الأمن",
+      "OPERATOR": "مشغل",
+      "REVIEWER": "مراجع",
+      "AUDITOR": "مدقق"
     }
   },
   "search": {
@@ -226,7 +238,8 @@
     "createError": "تعذّر بدء البحث.",
     "location": "موقع المشغّل وقت البحث: {{lat}} · {{lon}}",
     "mockNotice": "وضع تجريبي: يستخدم هذا النشر محرك مطابقة وهمي — النتائج محاكاة وليست مستمدة من مطابقة بيومترية حقيقية.",
-    "viewOnlyNotice": "يسمح دورك بعرض عمليات البحث والمرشحين فقط. يتطلب بدء بحث جديد دور OPERATOR أو REVIEWER أو SECURITY_ADMIN أو SYSTEM_ADMIN."
+    "viewOnlyNotice": "يسمح دورك بعرض عمليات البحث والمرشحين فقط. يتطلب بدء بحث جديد دور OPERATOR أو REVIEWER أو SECURITY_ADMIN أو SYSTEM_ADMIN.",
+    "evidenceCount": "تم جمع {{count}} من عناصر الأدلة"
   },
   "audit": {
     "panelTitle": "سجل التدقيق",

@@ -15,7 +15,7 @@ anatolia.bold.bis/
 │   │   │                 #   frontend static-file serving with SPA fallback
 │   │   ├── lib.rs        # Library surface (used by main.rs and tests)
 │   │   ├── config.rs     # Environment-driven configuration
-│   │   ├── db.rs         # DbBackend (Postgres/SQLite), AppState, all tables
+│   │   ├── db/           # DbBackend (Postgres/SQLite), AppState, split by domain
 │   │   ├── auth.rs       # JWT issuing/verification, register/login/refresh
 │   │   ├── admin.rs      # Admin-approval workflow, admin bootstrap
 │   │   ├── search.rs     # Search-workflow route handlers
@@ -41,11 +41,13 @@ anatolia.bold.bis/
 - **Persistence**: SQLx — PostgreSQL in production (in its own
   `anatolia_bis` schema, so the database can safely be shared with another
   project — see `server/src/db/mod.rs`'s `PG_SCHEMA`), SQLite as a local
-  development fallback. `server/src/db/` is split by domain where the
-  boundary is clean (`db/audit.rs` for the append-only audit trail);
-  connection setup, schema migration, and the identity/session/search
-  tables that are more interdependent still live in `db/mod.rs` — see
-  item 31 in `docs/HARDENING_CHECKLIST.md` for the rest of this split.
+  development fallback. `server/src/db/` is split by domain: `db/audit.rs`
+  (append-only audit trail), `db/mfa.rs`, `db/org.rs`, `db/biometric.rs`,
+  `db/evidence.rs`, `db/identity.rs` (user accounts), and `db/session.rs`
+  (refresh-token sessions and approval tokens). Connection setup, schema
+  migration, and the search/candidate/verification tables — more
+  interdependent with the others than a mechanical split allows — still
+  live in `db/mod.rs`; see item 31 in `docs/HARDENING_CHECKLIST.md`.
 - **Background jobs**: a retention task (`main.rs::spawn_retention_job`)
   purges expired `sessions`/`approval_tokens` rows on a fixed interval
   (`db::purge_expired_auth_records`); configurable via

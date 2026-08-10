@@ -305,6 +305,12 @@ links require a `SYSTEM_ADMIN` or `SECURITY_ADMIN` bearer token.
   Immediately revokes all of the user's active sessions, not just future
   logins.
 - `POST /api/v1/admin/users/{id}/unban`
+- `POST /api/v1/admin/users/{id}/role` — body `{ "role": "SYSTEM_ADMIN" | "SECURITY_ADMIN" | "OPERATOR" | "REVIEWER" | "AUDITOR" }`.
+  Immediately revokes all of the user's active sessions, whether the change
+  is a promotion or a demotion — a session issued under the old role must
+  never keep working under stale claims. `409 Conflict` (`LAST_ADMIN_PROTECTED`)
+  if this would demote the last active `SYSTEM_ADMIN`. Records a
+  `USER_ROLE_CHANGED` audit event.
 - `POST /api/v1/admin/users/{id}/mfa-reset` — removes a target account's
   MFA credential and recovery codes entirely, forcing re-enrollment on its
   next login. This is the recovery path when an account with a

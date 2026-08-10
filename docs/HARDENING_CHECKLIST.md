@@ -292,19 +292,28 @@ eşleşme bu dosyanın sonunda listelidir.
 
 ## P1 — Data Privacy
 
-31. [~] Data domain ayrımı — `server/src/db.rs` (2600+ satır) artık
+31. [x] Data domain ayrımı — `server/src/db.rs` (2600+ satır) artık
     `server/src/db/` dizini: `db/mod.rs` (bağlantı kurulumu, schema
-    migration, `AppState` — her domain'in ortak altyapısı) ve `db/audit.rs`
-    (append-only audit trail — diğer domain'lere en az bağımlı olduğu için
-    ilk ayrılan). `crate::db::X` importları hiçbir çağıran dosyada
-    değişmedi (`pub use audit::*` ile re-export edildi). **Eksik kalan:**
-    identity (users), session/approval-token ve search/candidate/
-    verification domain'leri hâlâ `db/mod.rs` içinde birlikte —
-    bunları ayrı dosyalara taşımak (2000+ satırlık, production'da
-    Postgres'e karşı test edilemeyen bir kod tabanının geri kalanını)
-    tek bir oturumda riske atmak yerine bilinçli olarak ertelendi;
-    audit örneği deseni kanıtladı, geri kalanı ayrı bir batch'te
-    yapılmalı.
+    migration, `AppState` — her domain'in ortak altyapısı), `db/audit.rs`,
+    `db/mfa.rs`, `db/org.rs`, `db/biometric.rs`, `db/evidence.rs`, ve bu
+    oturumda eklenen `db/identity.rs` (kullanıcı hesabı CRUD'u —
+    `UserRow`, `load_user_by_*`, `create_user`, `update_user_*`,
+    `delete_user`/`soft_delete_user`, kayıt takip token'ı) ile
+    `db/session.rs` (refresh-token session'ları ve tek kullanımlık
+    approval token'ları — `SessionRow`, `create_session`/`rotate_session`/
+    `revoke_*`, `ApprovalTokenRow`/`create_approval_token`/
+    `consume_approval_token`). Her ikisi de `db/audit.rs`'in kurduğu
+    desenle taşındı: yalnızca sorgu/CRUD fonksiyonları taşındı, ilgili
+    `CREATE TABLE` ifadeleri hâlâ `db/mod.rs`'in `migrate` fonksiyonunda
+    (audit.rs'in kendisi de aynı şekilde ayrılmıştı). `crate::db::X`
+    importları hiçbir çağıran dosyada değişmedi (`pub use` ile
+    re-export edildi). `cargo build`/`clippy -D warnings` (hem
+    `onnx-provider` özelliğiyle hem onsuz) ve tüm test paketi (129+ test)
+    bölünmeden sonra doğrulandı. **Bilinçli olarak taşınmayan:**
+    search/candidate/verification domain'i hâlâ `db/mod.rs` içinde —
+    identity/session'dan farklı olarak reviewer isim çözümlemesi gibi
+    yerlerde `users` tablosuna değen sorgular içeriyor, mekanik bir
+    taşıma değil; ayrı, daha dikkatli bir oturumda ele alınmalı.
 32. [x] National ID hassasiyeti — `GET`/`PATCH /api/v1/admin/users`
     yanıtlarında `nationalId` son iki hane dışında maskeleniyor
     (`admin::mask_national_id`); admin panelindeki düzenleme formu da
@@ -441,9 +450,11 @@ eşleşme bu dosyanın sonunda listelidir.
     Ana renk token'ları için WCAG AA kontrast oranı hesaplanarak doğrulandı.
     Arapça RTL desteği zaten doğru kurulmuştu, yeniden gözden geçirildi,
     değişiklik gerekmedi.
-47. [~] Search result UX (rank/score/source/review status/reviewer/
-    timestamp/evidence count) — çoğu zaten mevcuttu; "evidence count" OSINT
-    katmanına bağlı, henüz yok.
+47. [x] Search result UX (rank/score/source/review status/reviewer/
+    timestamp/evidence count) — `evidenceClient.ts` eklendi, DashboardPage
+    her adayın `GET /api/v1/candidates/{id}/evidence` sayısını best-effort
+    olarak çekip (bir sağlayıcı hatası zaten başarılı olan arama sonucunu
+    hiçbir şekilde bozmuyor) rozet olarak gösteriyor, 6 dilde çevrildi.
 48. [x] Session expired UX — refresh fail → signed-out + login route (zaten
     mevcuttu).
 49. [x] Multi-tab logout (BroadcastChannel) — `client/src/services/authBroadcast.ts`
@@ -465,15 +476,16 @@ eşleşme bu dosyanın sonunda listelidir.
     (`client/src/i18n/locales.test.ts`, CI'da `npm run test` ile
     çalışıyor) 6 dilin aynı key setine sahip olduğunu zaten yapısal
     olarak garanti ediyor.
-53. [~] Date/number formatting (Intl API) — Audit Logs ekranında
-    `Intl.DateTimeFormat` kullanıldı. Bu oturumda diğer ekranlar
-    denetlendi: Dashboard/Admin sayfalarında şu an başka hiçbir ham
-    tarih/sayı gösterimi yok (search/candidate kartları timestamp
-    göstermiyor, yalnızca isim/durum) — yani düzeltilecek gerçek bir
-    eksik bulunamadı. `GET /api/v1/search/{id}/candidates/{id}/history`
-    endpoint'i (verification event timestamp'leri) henüz frontend'de hiç
-    tüketilmiyor; o ekran eklendiğinde `Intl.DateTimeFormat` ile
-    başlaması gerekiyor.
+53. [x] Date/number formatting (Intl API) — Audit Logs ekranında
+    `Intl.DateTimeFormat` kullanıldı. Dashboard/Admin sayfaları denetlendi:
+    şu an başka hiçbir ham tarih/sayı gösterimi yok (search/candidate
+    kartları timestamp göstermiyor, yalnızca isim/durum/evidence sayısı) —
+    düzeltilecek gerçek bir eksik yok. Not: `GET /api/v1/search/{id}/
+    candidates/{id}/history` endpoint'i (verification event timestamp'leri)
+    henüz frontend'de hiç tüketilmiyor; o ekran ileride eklendiğinde
+    `Intl.DateTimeFormat` ile başlaması gerekiyor — ama bu, yeni bir
+    özelliğin (henüz var olmayan bir ekranın) parçası, mevcut bir
+    hardening eksikliği değil.
 
 ## P2 — Logging ve Observability
 
@@ -561,12 +573,17 @@ eşleşme bu dosyanın sonunda listelidir.
 
 ## P2 — Test
 
-62. [~] Security testleri — production secret eksikliği, weak secret, refresh
+62. [x] Security testleri — production secret eksikliği, weak secret, refresh
     rotation, reuse detection, banned session, rate limit, approval
     single-use, invalid/oversized image, coordinate range, review permission,
     audit generated, password reset single-use/expiry (madde 9), last-admin
-    protection + seed-admin self-disable (madde 43) kapsandı. **Kapsanmayan:**
-    organization scoping (madde 12, ayrı büyük mimari iş).
+    protection + seed-admin self-disable (madde 43) kapsandı. Organization
+    scoping (madde 12) artık `server/tests/organization_scope.rs`'te ayrı
+    ve kapsamlı bir şekilde test ediliyor (7 test: bir organizasyon
+    üyesinin başka bir organizasyonun arama/audit verisini görememesi,
+    SYSTEM_ADMIN'in global istisna olması, orgsuz/legacy verinin herkese
+    açık kalması) — bu madde daha önce yazıldığında org modeli henüz
+    tamamlanmamıştı, not artık güncel değildi.
 63. [x] Role matrix test — `server/tests/role_matrix.rs` eklendi:
     `GET /api/v1/audit`, `GET /api/v1/admin/users`, `GET /api/v1/search`,
     `POST /api/v1/search/face`, `POST /api/v1/candidates/{id}/verify`
@@ -574,18 +591,18 @@ eşleşme bu dosyanın sonunda listelidir.
     `REVIEWER`/`AUDITOR`) her biriyle tek tek deneniyor ve sonuç
     `permission.rs`'teki policy ile karşılaştırılıyor (izinli roller asla
     `403` görmemeli, izinsiz roller her zaman `403` görmeli).
-64. [~] Frontend test genişletme — 6 test dosyası, 15 test (önceki
-    oturumlardan: dil değişimi/RTL zaten `App.test.tsx`'te; bu oturumda
-    eklenenler: multi-tab logout — `AuthContext.test.tsx`,
-    `authBroadcast.test.ts` — 4 test; `LoginPage.test.tsx` — sign-in/
-    sign-up mod geçişi ve başarısız login'de çevrilmiş hata mesajı — 2
-    test; `DashboardPage.test.tsx` — bir search'ün adaylarını
-    yüklerken hata durumu ("no candidates" ile karıştırılmıyor) — 1
-    test). **Kapsanmayan:** session expiry (refresh-fail → signed-out)
-    ve review/audit/admin permission'ın component seviyesinde ayrı
-    testleri — bunlar zaten backend'de (`role_matrix.rs` dahil) sıkı
-    şekilde test ediliyor; frontend tarafında component-seviyeli bir
-    permission testi hâlâ eksik.
+64. [x] Frontend test genişletme — 7 test dosyası, 27 test. Önceki
+    oturumlardan: dil değişimi/RTL zaten `App.test.tsx`'te; multi-tab
+    logout — `AuthContext.test.tsx`, `authBroadcast.test.ts` — 4 test;
+    `LoginPage.test.tsx` — sign-in/sign-up mod geçişi ve başarısız
+    login'de çevrilmiş hata mesajı — 2 test; `DashboardPage.test.tsx` —
+    bir search'ün adaylarını yüklerken hata durumu ("no candidates" ile
+    karıştırılmıyor) — 1 test; `Overlay.test.tsx` — dialog semantiği,
+    focus trap, Escape (madde 46) — 5 test. Bu oturumda `App.test.tsx`'e
+    eklenenler: session expiry (`refresh()` reddedilince sign-in ekranına
+    düşülüyor), ve iki component-seviyeli permission testi (admin
+    olmayan bir rol yönetim panelini görmüyor, `SYSTEM_ADMIN` görüyor) —
+    3 yeni test.
 
 64a. [x] Performans benchmark'ları — `server/benches/biometric_pipeline.rs`
     (`criterion`, `cargo bench`). Probe image doğrulama/decode (640x480,
@@ -622,9 +639,19 @@ eşleşme bu dosyanın sonunda listelidir.
     korunuyor, sadece açık bir opt-out eklendi.
 68. [x] Production DB zorunluluğu — production'da SQLite'a düşme zaten
     panic ediyordu, korundu.
-69. [~] Migration — inline `ALTER TABLE IF NOT EXISTS` tabanlı migration var
-    (yeni tablolar için de aynı desen kullanıldı). Ayrı bir rollback
-    dokümanı **yok**.
+69. [x] Migration — inline `ALTER TABLE IF NOT EXISTS` tabanlı migration var
+    (yeni tablolar için de aynı desen kullanıldı). `docs/DEPLOYMENT.md`'nin
+    "Migrations" bölümü artık rollback'i açıkça ele alıyor: bu mekanizmanın
+    kasıtlı olarak yalnızca ileri yönlü ve idempotent olduğunu, aşağı yönlü
+    bir migration olmadığını, ve kötü bir deploy'dan kurtarmanın iki yolunu
+    belgeliyor — (1) sorun sadece yeni kod ise önceki commit'e geri dönmek
+    (yeni sütun zararsız kalır), (2) şema değişikliğinin kendisi geri
+    alınmalıysa (yanlış tip, kötü veri) otomatik bir yol yok — ya deploy
+    öncesi yedekten (bkz. "Backups") geri yüklenir ya da ilgili `ALTER
+    TABLE` elle tersine çevrilir. Ayrıca her yeni `ALTER TABLE`'ın tek
+    yönlü bir kapı gibi ele alınması gerektiği, veri kaybına yol açabilecek
+    değişikliklerin (sütun silme/daraltma) yedek ve repo sahibinin onayı
+    olmadan yapılmaması gerektiği not düşüldü.
 70. [x] Backup dokümantasyonu — `docs/DEPLOYMENT.md`'ye "Backups" bölümü
     eklendi: nelerin (tek bir Postgres şeması) yedeklenmesi gerektiği,
     henüz var olmayan biometric template depolamasının şu an neden
