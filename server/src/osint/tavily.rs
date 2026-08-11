@@ -1,13 +1,10 @@
 //! Real `WebSearchProvider`: the Tavily Search API
 //! (<https://docs.tavily.com/documentation/api-reference/endpoint/search>)
 //! — an official, documented REST API requiring an API key, not scraping.
-//! Chosen alongside `websearch::RealWebSearchProvider` (Brave) as a
-//! lower-cost alternative: Tavily's free tier does not require a payment
-//! method at signup, unlike Brave's. Configured entirely from the
-//! environment: set `TAVILY_API_KEY` to enable it. Without that variable,
-//! `EvidenceOrchestrator::from_env` (see `osint/mod.rs`) falls back to
-//! `BRAVE_SEARCH_API_KEY` if set, or `MockWebSearchProvider` otherwise —
-//! this module is never constructed with an empty key.
+//! Configured entirely from the environment: set `TAVILY_API_KEY` to enable
+//! it. In addition to ordinary web results this provider asks Tavily for
+//! query-related public-web images and emits those as `web_image` evidence.
+//! This is text-query image discovery, not reverse-image/face matching.
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -20,9 +17,9 @@ const ENDPOINT: &str = "https://api.tavily.com/search";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
 const MAX_ATTEMPTS: u32 = 2;
 const RETRY_DELAY: Duration = Duration::from_millis(300);
-/// Consecutive failures before the circuit opens.
 const FAILURE_THRESHOLD: u32 = 3;
 const COOLDOWN: Duration = Duration::from_secs(30);
+const MAX_IMAGE_RESULTS: usize = 12;
 
 pub struct TavilyWebSearchProvider {
     client: reqwest::Client,
@@ -50,6 +47,9 @@ impl TavilyWebSearchProvider {
             .json(&TavilyRequest {
                 query,
                 max_results: 10,
+                include_images: true,
+                include_image_descriptions: true,
+                safe_search: true,
             })
             .send()
             .await
@@ -67,7 +67,7 @@ impl TavilyWebSearchProvider {
             .await
             .map_err(|e| OsintError::Internal(format!("failed to parse response: {e}")))?;
 
-        Ok(body
+        let mut evidence: EvidenceItems = body
             .results
             .into_iter()
             .map(|result| EvidenceItem {
@@ -76,14 +76,35 @@ impl TavilyWebSearchProvider {
                 title: result.title,
                 url: Some(result.url),
                 snippet: result.content,
-                // Tavily's own relevance score, already in [0, 1] — unlike
-                // Brave (see websearch.rs), a real per-result signal rather
-                // than a rank-derived placeholder; still never treated as a
-                // match/no-match verdict, only a display/sort hint (see
-                // `EvidenceItem::confidence`'s doc comment).
                 confidence: result.score.clamp(0.0, 1.0),
             })
-            .collect())
+            .collect();
+
+        // Tavily's `include_images` output is query-related public-web image
+        // discovery. Keep it as a separate evidence type so neither the API
+        // nor the UI can mistake it for a biometric/reverse-image match.
+        evidence.extend(
+            body.images
+                .into_iter()
+                .take(MAX_IMAGE_RESULTS)
+                .map(|image| EvidenceItem {
+                    source_type: "web_image".to_string(),
+                    provider_name: "tavily-image-search".to_string(),
+                    title: image
+                        .description
+                        .clone()
+                        .filter(|value| !value.trim().is_empty())
+                        .unwrap_or_else(|| "Public web image".to_string()),
+                    url: Some(image.url),
+                    snippet: image.description,
+                    // Tavily does not expose a calibrated identity/match score
+                    // for these images. This is only a neutral display/sort
+                    // hint and must never be presented as identity confidence.
+                    confidence: 0.5,
+                }),
+        );
+
+        Ok(evidence)
     }
 }
 
@@ -104,12 +125,17 @@ impl WebSearchProvider for TavilyWebSearchProvider {
 struct TavilyRequest<'a> {
     query: &'a str,
     max_results: u32,
+    include_images: bool,
+    include_image_descriptions: bool,
+    safe_search: bool,
 }
 
 #[derive(Debug, Deserialize)]
 struct TavilyResponse {
     #[serde(default)]
     results: Vec<TavilyResult>,
+    #[serde(default)]
+    images: Vec<TavilyImage>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,21 +147,31 @@ struct TavilyResult {
     score: f64,
 }
 
+#[derive(Debug, Deserialize)]
+struct TavilyImage {
+    url: String,
+    description: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn tavily_response_with_no_results_field_parses_as_empty() {
+    fn tavily_response_with_no_results_or_images_parses_as_empty() {
         let json = r#"{"query": "test"}"#;
         let parsed: TavilyResponse = serde_json::from_str(json).unwrap();
         assert!(parsed.results.is_empty());
+        assert!(parsed.images.is_empty());
     }
 
     #[test]
-    fn tavily_response_deserializes_results() {
+    fn tavily_response_deserializes_results_and_images() {
         let json = r#"{
             "query": "test",
+            "images": [
+                {"url": "https://example.test/photo.jpg", "description": "Example photo"}
+            ],
             "results": [
                 {"title": "Example", "url": "https://example.test", "content": "A test result", "score": 0.92}
             ],
@@ -143,7 +179,9 @@ mod tests {
         }"#;
         let parsed: TavilyResponse = serde_json::from_str(json).unwrap();
         assert_eq!(parsed.results.len(), 1);
+        assert_eq!(parsed.images.len(), 1);
         assert_eq!(parsed.results[0].title, "Example");
+        assert_eq!(parsed.images[0].url, "https://example.test/photo.jpg");
         assert!((parsed.results[0].score - 0.92).abs() < f64::EPSILON);
     }
 }
