@@ -1,0 +1,27 @@
+{
+  "candidateEnrollment": {
+    "heading": "ENREGISTREMENT DU CANDIDAT",
+    "hint": "Créez une fiche candidat, puis enregistrez une ou plusieurs photos faciales de référence pour la recherche biométrique.",
+    "referenceCode": "Code de référence du candidat",
+    "fullName": "Nom complet",
+    "notes": "Notes (facultatif)",
+    "create": "CRÉER LE CANDIDAT",
+    "creating": "Création…",
+    "createError": "Impossible de créer le candidat.",
+    "referencePhoto": "Photo faciale de référence",
+    "enroll": "ENREGISTRER LA PHOTO",
+    "enrolling": "Enregistrement…",
+    "enrollError": "Impossible d'enregistrer la photo de référence.",
+    "mockBlocked": "L'enregistrement biométrique réel nécessite le fournisseur ONNX. Le fournisseur fictif actif ne peut pas créer de véritables modèles faciaux.",
+    "newCandidate": "Nouveau candidat",
+    "duplicatesHeading": "Doublon biométrique possible",
+    "duplicateItem": "Candidat {{candidateId}} · similarité {{score}}",
+    "duplicatesHint": "Il s'agit uniquement d'un avertissement consultatif de similarité. Ne fusionnez pas et ne confirmez pas automatiquement l'identité.",
+    "templatesHeading": "MODÈLES BIOMÉTRIQUES",
+    "noTemplates": "Aucun modèle biométrique enregistré pour le moment.",
+    "templateMeta": "Dimension {{dimension}} · qualité {{quality}} · enregistré le {{date}}",
+    "revoke": "Révoquer le modèle",
+    "revoked": "RÉVOQUÉ",
+    "revokeError": "Impossible de révoquer le modèle biométrique."
+  }
+}
