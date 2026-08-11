@@ -6,18 +6,8 @@
 # collide with the other project's.
 
 services:
-  # Single service, one URL: the Rust binary serves both the API (under
-  # /api/*) and the built frontend (everything else, with an SPA fallback
-  # to index.html) from the same process — no separate static-site
-  # resource, so the deployed URL never has "api" or "web" in it.
   - type: web
     name: anatolia-bis
-    # Docker, not the native Rust buildpack: the real ONNX biometric
-    # provider (`onnx-provider` Cargo feature) statically links a
-    # prebuilt `libonnxruntime.a` that requires glibc >= 2.38, which the
-    # native buildpack's build image does not have — see the root
-    # `Dockerfile`'s comments and docs/ENVIRONMENT.md. `runtime` is the
-    # current field name (replaces the deprecated `env` field).
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
@@ -26,60 +16,24 @@ services:
     autoDeployTrigger: commit
     healthCheckPath: /api/health
     envVars:
-      # Render passes every service env var to the Docker build as a
-      # `--build-arg` of the same name, which the `Dockerfile`'s
-      # `ARG ONNX_PROVIDER=false` (in its `server-builder` stage) picks
-      # up. This is also visible to the running container as a plain
-      # runtime env var, which is harmless — nothing in the server reads
-      # `ONNX_PROVIDER` at runtime, only `BIOMETRIC_PROVIDER` below does.
       - key: ONNX_PROVIDER
         value: "true"
-      # Set in the Render dashboard: the existing Postgres instance's
-      # "Internal Database URL" (from that database's own Render page).
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
-      # Signs the registration approve/reject email links only — kept
-      # separate from the two secrets above so compromising one token type
-      # never compromises the others (see docs/SECURITY_ARCHITECTURE.md).
       - key: APPROVAL_TOKEN_SECRET
         generateValue: true
-      # Signs the short-lived login-time MFA challenge token — separate
-      # from the access/refresh secrets above so a compromised MFA
-      # challenge token can never be replayed as a real session token.
-      # Required in production once TOTP MFA is enabled — see
-      # server/src/mfa.rs, docs/ENVIRONMENT.md.
       - key: MFA_TOKEN_SECRET
         generateValue: true
-      # AES-256-GCM key encrypting national ID numbers at rest — see
-      # server/src/national_id.rs, docs/ENVIRONMENT.md. Required in
-      # production, and must be exactly 64 hex characters (32 bytes) —
-      # `generateValue` is deliberately not used here since its output
-      # isn't guaranteed to be valid hex, which would just trade this
-      # startup panic for a different one. Set once in the Render
-      # dashboard with the output of `openssl rand -hex 32`. Rotating
-      # this key makes every existing encrypted national ID undecryptable.
       - key: NATIONAL_ID_ENCRYPTION_KEY
         sync: false
-      # This service builds with the onnx-provider Cargo feature (see
-      # ONNX_PROVIDER above) and runs the real, server-side YuNet/SFace
-      # biometric pipeline — see server/src/biometric/onnx_provider.rs
-      # and docs/SECURITY_ARCHITECTURE.md for exactly what it does and
-      # does not guarantee. Left unset deliberately: production refuses
-      # to start under the mock provider without this explicit override
-      # (see server/src/config.rs), and it is not needed once
-      # BIOMETRIC_PROVIDER=onnx below is set — an unset value here means
-      # a future accidental revert of BIOMETRIC_PROVIDER fails loudly at
-      # startup instead of silently serving mock "matches" again.
       - key: ALLOW_MOCK_BIOMETRICS
         sync: false
       - key: BIOMETRIC_PROVIDER
         value: onnx
-      # Set in the Render dashboard (not this blueprint) once, then used to
-      # seed the first SYSTEM_ADMIN via POST /api/v1/admin/seed-admin.
       - key: ADMIN_SEED_TOKEN
         generateValue: true
       - key: ADMIN_USER_CODE
@@ -88,60 +42,47 @@ services:
         sync: false
       - key: ADMIN_EMAIL
         sync: false
-      # Frontend is served from this same service now, so no separate
-      # origin needs to be allow-listed for the web app itself; leave
-      # unset unless/until a mobile or desktop client needs cross-origin
-      # API access.
       - key: ALLOWED_ORIGINS
         sync: false
-      # Where the built frontend lives relative to this service's working
-      # directory (repository root on Render, since rootDir is unset
-      # above) — see server/src/main.rs.
       - key: STATIC_DIR
         value: client/dist
-      # Falls back to RENDER_EXTERNAL_URL (this service's own URL) if
-      # unset, which is now always correct since there's only one URL.
       - key: APP_URL
         sync: false
-      # Optional: registration/approval emails are silently skipped if unset.
       - key: RESEND_API_KEY
         sync: false
-      # Automatically collect configured web/news evidence after the
-      # biometric search returns ranked candidates. This intentionally
-      # does not enable social or reverse-image search; those remain
-      # unavailable until an authorized real connector is configured.
+
+      # One completed face search can fan out to every configured external
+      # source class. Reverse-image sources receive only the sanitized probe;
+      # text sources receive permitted candidate/public-page context.
       - key: AUTO_OSINT_AFTER_BIOMETRIC_SEARCH
         value: "true"
-      # Bound automatic OSINT fan-out even when a search requests a large
-      # topK. Only the highest-ranked candidates up to this limit trigger
-      # external web/news evidence collection.
       - key: OSINT_AUTO_MAX_CANDIDATES
         value: "5"
-      # Optional real OSINT providers — see server/src/osint/mod.rs's
-      # from_env for the exact precedence. Each slot falls back to its
-      # mock implementation when no key for it is set; leaving all four
-      # unset (the default) reproduces today's mock-only behavior.
-      #
-      # Web search: TAVILY_API_KEY is checked first (see
-      # server/src/osint/tavily.rs — its free tier needs no payment
-      # method), then BRAVE_SEARCH_API_KEY (server/src/osint/websearch.rs).
+
+      # Text web sources. If both keys are configured, both providers run.
       - key: TAVILY_API_KEY
         sync: false
       - key: BRAVE_SEARCH_API_KEY
         sync: false
-      # News: CURRENTS_API_KEY is checked first (see
-      # server/src/osint/currents.rs — NewsAPI's free tier forbids
-      # production use), then NEWS_API_KEY (server/src/osint/news.rs).
+
+      # News/publication sources. If both keys are configured, both run.
       - key: CURRENTS_API_KEY
         sync: false
       - key: NEWS_API_KEY
         sync: false
+
+      # Reverse-image/public-web sources. Every configured source receives
+      # the same sanitized probe and reports its own evidence independently.
+      - key: TINEYE_API_KEY
+        sync: false
+      - key: GOOGLE_CLOUD_VISION_API_KEY
+        sync: false
+      - key: YANDEX_SEARCH_API_KEY
+        sync: false
+      - key: YANDEX_SEARCH_FOLDER_ID
+        sync: false
+
       - key: RUST_LOG
         value: info
-      # Defaults to disabled (see server/src/main.rs) since a background
-      # self-callback is surprising behavior most deployments shouldn't get
-      # for free. This service runs on the free plan, which spins down
-      # after ~15 minutes idle, so it opts in explicitly here to avoid the
-      # resulting cold-start latency.
       - key: ENABLE_SELF_PING
         value: "true"

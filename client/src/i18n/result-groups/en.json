@@ -1,0 +1,15 @@
+{
+  "resultGroups": {
+    "biometric": "GROUP A — BIOMETRIC CANDIDATE MATCHES",
+    "visualSource": "GROUP B — VISUAL SOURCE MATCHES",
+    "visualSimilarity": "GROUP C — VISUAL SIMILARITY FINDINGS",
+    "openSource": "GROUP D — OPEN-SOURCE IDENTITY FINDINGS",
+    "crossSource": "GROUP E — CROSS-SOURCE CORROBORATION",
+    "visualSourceNote": "Pages containing the same or a modified version of the submitted image. This is image evidence, not an identity verdict.",
+    "visualSimilarityNote": "Visually related public-web images. Similar appearance alone does not establish identity.",
+    "openSourceNote": "Public web, news, publication, and authorized-source findings related to the search context.",
+    "crossSourceNote": "The same public URL was independently returned by more than one search source. This strengthens source corroboration, not biometric identity certainty.",
+    "independentSources": "Independent sources: {{count}}",
+    "openSourcePage": "OPEN SOURCE PAGE"
+  }
+}

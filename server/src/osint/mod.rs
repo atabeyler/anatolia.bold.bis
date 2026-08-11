@@ -1,10 +1,9 @@
 //! OSINT/evidence provider abstraction for textual web/news sources,
 //! authorized social sources, and direct public-web reverse-image discovery.
 //!
-//! Text providers (Tavily/Brave and Currents/NewsAPI) never receive the probe
-//! image. Reverse-image providers receive the sanitized probe itself and search
-//! for the same or modified image on the public web. This is image matching,
-//! not biometric identity matching.
+//! Text providers never receive the probe image. Reverse-image providers receive
+//! the sanitized probe itself and search for the same or modified image on the
+//! public web. This is image matching, not biometric identity matching.
 
 pub mod currents;
 pub mod google_vision;
@@ -15,6 +14,7 @@ pub mod resilience;
 pub mod tavily;
 pub mod tineye;
 pub mod websearch;
+pub mod yandex_images;
 
 use async_trait::async_trait;
 
@@ -147,56 +147,56 @@ impl EvidenceOrchestrator {
         )
     }
 
-    /// Build providers from deployment environment variables.
-    ///
-    /// Web: `TAVILY_API_KEY`, then `BRAVE_SEARCH_API_KEY`.
-    /// News: `CURRENTS_API_KEY`, then `NEWS_API_KEY`.
-    /// Reverse image: every configured direct provider is enabled:
-    /// `TINEYE_API_KEY` and/or `GOOGLE_CLOUD_VISION_API_KEY`.
+    /// Build every configured provider from deployment environment variables.
+    /// No real provider suppresses another provider in the same evidence class.
+    /// Mock text providers are used only when that class has no real provider.
     pub fn from_env() -> Self {
-        let web_search: Vec<std::sync::Arc<dyn WebSearchProvider>> =
-            match (env_key("TAVILY_API_KEY"), env_key("BRAVE_SEARCH_API_KEY")) {
-                (Some(key), _) => {
-                    tracing::info!("OSINT: Tavily web-search provider enabled");
-                    vec![std::sync::Arc::new(tavily::TavilyWebSearchProvider::new(
-                        key,
-                    ))]
-                }
-                (None, Some(key)) => {
-                    tracing::info!("OSINT: Brave Search web-search provider enabled");
-                    vec![std::sync::Arc::new(websearch::RealWebSearchProvider::new(
-                        key,
-                    ))]
-                }
-                (None, None) => vec![std::sync::Arc::new(mock::MockWebSearchProvider)],
-            };
+        let mut web_search: Vec<std::sync::Arc<dyn WebSearchProvider>> = Vec::new();
+        if let Some(key) = env_key("TAVILY_API_KEY") {
+            tracing::info!("OSINT: Tavily web-search provider enabled");
+            web_search.push(std::sync::Arc::new(tavily::TavilyWebSearchProvider::new(key)));
+        }
+        if let Some(key) = env_key("BRAVE_SEARCH_API_KEY") {
+            tracing::info!("OSINT: Brave Search web-search provider enabled");
+            web_search.push(std::sync::Arc::new(websearch::RealWebSearchProvider::new(key)));
+        }
+        if web_search.is_empty() {
+            web_search.push(std::sync::Arc::new(mock::MockWebSearchProvider));
+        }
 
-        let news: Vec<std::sync::Arc<dyn NewsProvider>> =
-            match (env_key("CURRENTS_API_KEY"), env_key("NEWS_API_KEY")) {
-                (Some(key), _) => {
-                    tracing::info!("OSINT: Currents news provider enabled");
-                    vec![std::sync::Arc::new(currents::CurrentsNewsProvider::new(
-                        key,
-                    ))]
-                }
-                (None, Some(key)) => {
-                    tracing::info!("OSINT: NewsAPI news provider enabled");
-                    vec![std::sync::Arc::new(news::RealNewsProvider::new(key))]
-                }
-                (None, None) => vec![std::sync::Arc::new(mock::MockNewsProvider)],
-            };
+        let mut news: Vec<std::sync::Arc<dyn NewsProvider>> = Vec::new();
+        if let Some(key) = env_key("CURRENTS_API_KEY") {
+            tracing::info!("OSINT: Currents news provider enabled");
+            news.push(std::sync::Arc::new(currents::CurrentsNewsProvider::new(key)));
+        }
+        if let Some(key) = env_key("NEWS_API_KEY") {
+            tracing::info!("OSINT: NewsAPI news provider enabled");
+            news.push(std::sync::Arc::new(news::RealNewsProvider::new(key)));
+        }
+        if news.is_empty() {
+            news.push(std::sync::Arc::new(mock::MockNewsProvider));
+        }
 
         let mut reverse_image: Vec<std::sync::Arc<dyn ReverseImageSearchProvider>> = Vec::new();
         if let Some(key) = env_key("TINEYE_API_KEY") {
-            tracing::info!("OSINT: TinEye reverse-image provider enabled");
+            tracing::info!("OSINT: reverse-image source enabled");
             reverse_image.push(std::sync::Arc::new(
                 tineye::TinEyeReverseImageProvider::new(key),
             ));
         }
         if let Some(key) = env_key("GOOGLE_CLOUD_VISION_API_KEY") {
-            tracing::info!("OSINT: Google Vision web-detection provider enabled");
+            tracing::info!("OSINT: reverse-image source enabled");
             reverse_image.push(std::sync::Arc::new(
                 google_vision::GoogleVisionWebDetectionProvider::new(key),
+            ));
+        }
+        if let (Some(api_key), Some(folder_id)) = (
+            env_key("YANDEX_SEARCH_API_KEY"),
+            env_key("YANDEX_SEARCH_FOLDER_ID"),
+        ) {
+            tracing::info!("OSINT: reverse-image source enabled");
+            reverse_image.push(std::sync::Arc::new(
+                yandex_images::YandexImagesReverseProvider::new(api_key, folder_id),
             ));
         }
 
@@ -262,8 +262,9 @@ impl EvidenceOrchestrator {
         (web, news)
     }
 
-    /// Search the public web directly with the sanitized probe image. This
-    /// runs independently of the internal biometric candidate repository.
+    /// Search the public web directly with the sanitized probe image. Every
+    /// configured reverse-image provider runs independently; one provider's
+    /// failure never suppresses another provider's result.
     pub async fn collect_reverse_image(&self, image_bytes: &[u8]) -> Vec<ProviderOutcome> {
         let mut outcomes = Vec::new();
         for provider in &self.reverse_image {
@@ -323,6 +324,9 @@ impl SourceRegistry for EvidenceOrchestrator {
         for provider in &self.social {
             sources.push(provider.name());
         }
+        for provider in &self.reverse_image {
+            sources.push(provider.name());
+        }
         sources
     }
 }
@@ -356,6 +360,8 @@ mod tests {
             "NEWS_API_KEY",
             "TINEYE_API_KEY",
             "GOOGLE_CLOUD_VISION_API_KEY",
+            "YANDEX_SEARCH_API_KEY",
+            "YANDEX_SEARCH_FOLDER_ID",
         ] {
             std::env::remove_var(key);
         }
@@ -400,7 +406,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn from_env_prefers_tavily_and_currents_over_fallback_keys() {
+    async fn from_env_runs_all_configured_text_providers() {
         let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
         clear_osint_env_keys();
         std::env::set_var("TAVILY_API_KEY", "test-key");
@@ -410,24 +416,40 @@ mod tests {
         let orchestrator = EvidenceOrchestrator::from_env();
         assert_eq!(
             orchestrator.enabled_sources(),
-            vec!["tavily-web-search", "currents-news", "mock-social"]
+            vec![
+                "tavily-web-search",
+                "brave-web-search",
+                "currents-news",
+                "newsapi",
+                "mock-social",
+            ]
         );
         clear_osint_env_keys();
     }
 
     #[tokio::test]
-    async fn from_env_enables_tineye_reverse_image_provider() {
+    async fn from_env_enables_all_configured_reverse_image_providers() {
         let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
         clear_osint_env_keys();
         std::env::set_var("TINEYE_API_KEY", "test-key");
+        std::env::set_var("GOOGLE_CLOUD_VISION_API_KEY", "test-key");
+        std::env::set_var("YANDEX_SEARCH_API_KEY", "test-key");
+        std::env::set_var("YANDEX_SEARCH_FOLDER_ID", "test-folder");
         let orchestrator = EvidenceOrchestrator::from_env();
-        let status = orchestrator.provider_status();
-        let reverse = status
-            .iter()
-            .find(|status| status.slot == "reverse_image")
-            .unwrap();
-        assert_eq!(reverse.provider_name, "tineye-reverse-image");
-        assert!(!reverse.is_mock);
+        let reverse_names = orchestrator
+            .provider_status()
+            .into_iter()
+            .filter(|status| status.slot == "reverse_image")
+            .map(|status| status.provider_name)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            reverse_names,
+            vec![
+                "tineye-reverse-image",
+                "google-vision-web-detection",
+                "yandex-images-reverse-search",
+            ]
+        );
         clear_osint_env_keys();
     }
 }

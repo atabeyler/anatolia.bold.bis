@@ -1,0 +1,15 @@
+{
+  "resultGroups": {
+    "biometric": "GRUP A — BİYOMETRİK ADAY EŞLEŞMELERİ",
+    "visualSource": "GRUP B — GÖRSEL KAYNAK EŞLEŞMELERİ",
+    "visualSimilarity": "GRUP C — GÖRSEL BENZERLİK BULGULARI",
+    "openSource": "GRUP D — AÇIK KAYNAK KİMLİK BULGULARI",
+    "crossSource": "GRUP E — ÇAPRAZ KAYNAK DOĞRULAMALARI",
+    "visualSourceNote": "Gönderilen görselin aynı veya değiştirilmiş sürümünü içeren sayfalar. Bu bir görsel bulgudur, kimlik hükmü değildir.",
+    "visualSimilarityNote": "Açık webde görsel olarak ilişkili sonuçlar. Yalnızca benzer görünüm kimliği doğrulamaz.",
+    "openSourceNote": "Arama bağlamıyla ilişkili açık web, haber, yayın ve yetkili kaynak bulguları.",
+    "crossSourceNote": "Aynı genel URL birden fazla bağımsız arama kaynağı tarafından bulundu. Bu, kaynak doğrulamasını güçlendirir; biyometrik kimlik kesinliğini değil.",
+    "independentSources": "Bağımsız kaynak: {{count}}",
+    "openSourcePage": "KAYNAK SAYFAYI AÇ"
+  }
+}

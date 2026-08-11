@@ -14,6 +14,12 @@ import en from './locales/en/translation.json';
 import fr from './locales/fr/translation.json';
 import ru from './locales/ru/translation.json';
 import tr from './locales/tr/translation.json';
+import arResultGroups from './result-groups/ar.json';
+import deResultGroups from './result-groups/de.json';
+import enResultGroups from './result-groups/en.json';
+import frResultGroups from './result-groups/fr.json';
+import ruResultGroups from './result-groups/ru.json';
+import trResultGroups from './result-groups/tr.json';
 
 export const SUPPORTED_LANGUAGES = ['en', 'tr', 'de', 'fr', 'ar', 'ru'] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
@@ -43,12 +49,54 @@ i18n
   .use(initReactI18next)
   .init({
     resources: {
-      en: { translation: { ...en, ...enEnrollment } },
-      tr: { translation: { ...tr, ...trEnrollment } },
-      de: { translation: { ...de, ...deEnrollment } },
-      fr: { translation: { ...fr, ...frEnrollment } },
-      ar: { translation: { ...ar, ...arEnrollment } },
-      ru: { translation: { ...ru, ...ruEnrollment } },
+      en: {
+        translation: {
+          ...en,
+          ...enEnrollment,
+          ...enResultGroups,
+          search: { ...en.search, subtitle: enResultGroups.resultGroups.biometric },
+        },
+      },
+      tr: {
+        translation: {
+          ...tr,
+          ...trEnrollment,
+          ...trResultGroups,
+          search: { ...tr.search, subtitle: trResultGroups.resultGroups.biometric },
+        },
+      },
+      de: {
+        translation: {
+          ...de,
+          ...deEnrollment,
+          ...deResultGroups,
+          search: { ...de.search, subtitle: deResultGroups.resultGroups.biometric },
+        },
+      },
+      fr: {
+        translation: {
+          ...fr,
+          ...frEnrollment,
+          ...frResultGroups,
+          search: { ...fr.search, subtitle: frResultGroups.resultGroups.biometric },
+        },
+      },
+      ar: {
+        translation: {
+          ...ar,
+          ...arEnrollment,
+          ...arResultGroups,
+          search: { ...ar.search, subtitle: arResultGroups.resultGroups.biometric },
+        },
+      },
+      ru: {
+        translation: {
+          ...ru,
+          ...ruEnrollment,
+          ...ruResultGroups,
+          search: { ...ru.search, subtitle: ruResultGroups.resultGroups.biometric },
+        },
+      },
     },
     supportedLngs: SUPPORTED_LANGUAGES,
     fallbackLng: 'en',

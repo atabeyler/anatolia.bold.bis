@@ -1,0 +1,15 @@
+{
+  "resultGroups": {
+    "biometric": "GRUPPE A — BIOMETRISCHE KANDIDATENTREFFER",
+    "visualSource": "GRUPPE B — VISUELLE QUELLENTREFFER",
+    "visualSimilarity": "GRUPPE C — BEFUNDE ZUR VISUELLEN ÄHNLICHKEIT",
+    "openSource": "GRUPPE D — OPEN-SOURCE-IDENTITÄTSBEFUNDE",
+    "crossSource": "GRUPPE E — QUELLENÜBERGREIFENDE BESTÄTIGUNGEN",
+    "visualSourceNote": "Seiten mit derselben oder einer veränderten Version des übermittelten Bildes. Dies ist ein Bildbefund, kein Identitätsurteil.",
+    "visualSimilarityNote": "Visuell verwandte Bilder im öffentlichen Web. Ähnliches Aussehen allein bestätigt keine Identität.",
+    "openSourceNote": "Befunde aus öffentlichem Web, Nachrichten, Publikationen und autorisierten Quellen im Zusammenhang mit dem Suchkontext.",
+    "crossSourceNote": "Dieselbe öffentliche URL wurde unabhängig von mehr als einer Suchquelle geliefert. Das stärkt die Quellenbestätigung, nicht die biometrische Identitätssicherheit.",
+    "independentSources": "Unabhängige Quellen: {{count}}",
+    "openSourcePage": "QUELLSEITE ÖFFNEN"
+  }
+}

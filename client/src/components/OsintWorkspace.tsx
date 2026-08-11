@@ -20,10 +20,6 @@ interface OsintWorkspaceProps {
 
 type Section = 'evidence' | 'entityGraph' | 'duplicates';
 
-/** Groups evidence by the source types emitted by the backend. Tavily's
- * query-related `web_image` results live under the existing Web group;
- * `reverse_image` remains reserved for an actual image-to-web provider.
- */
 const EVIDENCE_SOURCE_GROUPS: Array<{ key: string; sourceTypes: string[] }> = [
   { key: 'web', sourceTypes: ['web_search', 'web_image'] },
   { key: 'news', sourceTypes: ['news'] },
@@ -39,7 +35,7 @@ export function OsintWorkspace({ candidateId, candidateName, canManage, onClose 
   const [evidenceError, setEvidenceError] = useState(false);
   const [collectQuery, setCollectQuery] = useState(candidateName);
   const [collecting, setCollecting] = useState(false);
-  const [providerErrors, setProviderErrors] = useState<Array<{ provider: string; error: string }>>([]);
+  const [, setProviderErrors] = useState<Array<{ provider: string; error: string }>>([]);
   const [collectMessage, setCollectMessage] = useState<string | null>(null);
 
   const [relations, setRelations] = useState<EntityRelation[] | null>(null);
@@ -157,13 +153,6 @@ export function OsintWorkspace({ candidateId, candidateName, canManage, onClose 
             </form>
           )}
           {collectMessage && <p className="auth-message auth-message--error">{collectMessage}</p>}
-          {providerErrors.length > 0 && (
-            <p className="admin-hint">
-              {t('osint.evidence.providerErrors', {
-                providers: providerErrors.map((e) => e.provider).join(', '),
-              })}
-            </p>
-          )}
           {evidence === null && !evidenceError && <p className="status-card__line">{t('admin.loading')}</p>}
           {evidenceError && <p className="status-card__line status-card__line--offline">{t('admin.loadError')}</p>}
           {evidence !== null && evidence.length === 0 && (
@@ -181,13 +170,8 @@ export function OsintWorkspace({ candidateId, candidateName, canManage, onClose 
                   {items.map((item) => (
                     <li key={item.id} className="overlay-list__item overlay-list__item--session">
                       <div>
-                        <div>{item.title ?? item.snippet ?? item.url ?? item.providerName}</div>
-                        <div className="admin-user-card__note">
-                          {item.providerName.startsWith('mock-')
-                            ? t('osint.status.mock')
-                            : item.providerName}
-                          {item.url ? ` · ${item.url}` : ''}
-                        </div>
+                        <div>{item.title ?? item.snippet ?? item.url ?? ''}</div>
+                        {item.url && <div className="admin-user-card__note">{item.url}</div>}
                       </div>
                     </li>
                   ))}

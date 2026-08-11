@@ -1,0 +1,15 @@
+{
+  "resultGroups": {
+    "biometric": "GROUPE A — CORRESPONDANCES BIOMÉTRIQUES DE CANDIDATS",
+    "visualSource": "GROUPE B — CORRESPONDANCES DE SOURCES VISUELLES",
+    "visualSimilarity": "GROUPE C — RÉSULTATS DE SIMILARITÉ VISUELLE",
+    "openSource": "GROUPE D — RÉSULTATS D’IDENTITÉ EN SOURCES OUVERTES",
+    "crossSource": "GROUPE E — CORROBORATIONS CROISÉES DE SOURCES",
+    "visualSourceNote": "Pages contenant la même image ou une version modifiée de l’image soumise. Il s’agit d’un élément visuel, pas d’un verdict d’identité.",
+    "visualSimilarityNote": "Images du web public visuellement liées. Une apparence similaire ne suffit pas à établir une identité.",
+    "openSourceNote": "Résultats issus du web public, des actualités, des publications et des sources autorisées liés au contexte de recherche.",
+    "crossSourceNote": "La même URL publique a été renvoyée indépendamment par plusieurs sources de recherche. Cela renforce la corroboration des sources, pas la certitude biométrique d’identité.",
+    "independentSources": "Sources indépendantes : {{count}}",
+    "openSourcePage": "OUVRIR LA PAGE SOURCE"
+  }
+}
