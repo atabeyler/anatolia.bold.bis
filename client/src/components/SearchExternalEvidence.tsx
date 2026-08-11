@@ -28,8 +28,47 @@ function reverseRank(item: SearchExternalEvidenceItem): number {
   return 3;
 }
 
+function reverseImageCopy(language: string): { title: string; note: string } {
+  const normalized = language.toLowerCase();
+  if (normalized.startsWith('tr')) {
+    return {
+      title: 'İnternet görsel eşleşmeleri',
+      note: 'Aynı veya kısmi görsel eşleşmesidir; yüz kimliği eşleşmesi değildir.',
+    };
+  }
+  if (normalized.startsWith('de')) {
+    return {
+      title: 'Internet-Bildtreffer',
+      note: 'Dies ist ein vollständiger oder teilweiser Bildtreffer, kein biometrischer Identitätsabgleich.',
+    };
+  }
+  if (normalized.startsWith('fr')) {
+    return {
+      title: 'Correspondances d’images sur Internet',
+      note: 'Il s’agit d’une correspondance d’image complète ou partielle, et non d’une correspondance biométrique d’identité.',
+    };
+  }
+  if (normalized.startsWith('ar')) {
+    return {
+      title: 'مطابقات الصور على الإنترنت',
+      note: 'هذه مطابقة كاملة أو جزئية للصورة وليست مطابقة بيومترية للهوية.',
+    };
+  }
+  if (normalized.startsWith('ru')) {
+    return {
+      title: 'Совпадения изображений в интернете',
+      note: 'Это полное или частичное совпадение изображения, а не биометрическое подтверждение личности.',
+    };
+  }
+  return {
+    title: 'Internet image matches',
+    note: 'This is a full or partial image match, not a biometric identity match.',
+  };
+}
+
 export function SearchExternalEvidence({ items }: SearchExternalEvidenceProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const reverseCopy = reverseImageCopy(i18n.resolvedLanguage ?? i18n.language ?? 'en');
   const groupedItems = useMemo(() => {
     const seen = new Set<string>();
     const groups: Record<EvidenceGroup, SearchExternalEvidenceItem[]> = {
@@ -51,7 +90,7 @@ export function SearchExternalEvidence({ items }: SearchExternalEvidenceProps) {
   }, [items]);
 
   const sections: Array<{ key: EvidenceGroup; title: string }> = [
-    { key: 'reverse', title: t('search.externalEvidence.reverseImage') },
+    { key: 'reverse', title: reverseCopy.title },
     { key: 'web', title: t('search.externalEvidence.web') },
     { key: 'news', title: t('search.externalEvidence.news') },
   ];
@@ -64,6 +103,7 @@ export function SearchExternalEvidence({ items }: SearchExternalEvidenceProps) {
         return (
           <section key={key} className="admin-user-list" aria-label={title}>
             <h3 className="admin-panel__heading">{title}</h3>
+            {key === 'reverse' && <p className="admin-hint">{reverseCopy.note}</p>}
             {sectionItems.map((item) => (
               <article key={evidenceKey(item)} className="admin-user-card">
                 <div className="admin-user-card__row">
