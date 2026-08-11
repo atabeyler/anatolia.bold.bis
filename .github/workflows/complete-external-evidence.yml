@@ -1,0 +1,412 @@
+name: Complete external evidence integration
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message != 'Complete external image and web evidence integration'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply integration
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import json, re
+
+          def read(path):
+              return Path(path).read_text()
+          def write(path, text):
+              Path(path).write_text(text)
+          def replace_once(text, old, new, label):
+              if old not in text:
+                  raise SystemExit(f'missing expected text: {label}')
+              return text.replace(old, new, 1)
+
+          # Integrate the reverse-image provider into the OSINT orchestrator.
+          p = Path('server/src/osint/mod.rs')
+          s = p.read_text()
+          if 'pub mod google_vision;' not in s:
+              s = replace_once(s, 'pub mod currents;\n', 'pub mod currents;\npub mod google_vision;\n', 'google_vision module')
+          s = s.replace(
+              '    social: Vec<std::sync::Arc<dyn AuthorizedSocialProvider>>,\n}',
+              '    social: Vec<std::sync::Arc<dyn AuthorizedSocialProvider>>,\n    reverse_image: Vec<std::sync::Arc<dyn ReverseImageSearchProvider>>,\n}',
+              1,
+          )
+          s = s.replace(
+              '        social: Vec<std::sync::Arc<dyn AuthorizedSocialProvider>>,\n    ) -> Self {\n        Self {\n            web_search,\n            news,\n            social,\n        }\n    }',
+              '        social: Vec<std::sync::Arc<dyn AuthorizedSocialProvider>>,\n        reverse_image: Vec<std::sync::Arc<dyn ReverseImageSearchProvider>>,\n    ) -> Self {\n        Self {\n            web_search,\n            news,\n            social,\n            reverse_image,\n        }\n    }',
+              1,
+          )
+          s = s.replace(
+              '            vec![std::sync::Arc::new(mock::MockSocialProvider)],\n        )',
+              '            vec![std::sync::Arc::new(mock::MockSocialProvider)],\n            Vec::new(),\n        )',
+              1,
+          )
+          old = '''        Self::new(\n            web_search,\n            news,\n            vec![std::sync::Arc::new(mock::MockSocialProvider)],\n        )\n    }\n'''
+          new = '''        let reverse_image: Vec<std::sync::Arc<dyn ReverseImageSearchProvider>> =\n            match env_key("GOOGLE_CLOUD_VISION_API_KEY") {\n                Some(key) => {\n                    tracing::info!("OSINT: Google Vision web-detection provider enabled");\n                    vec![std::sync::Arc::new(\n                        google_vision::GoogleVisionWebDetectionProvider::new(key),\n                    )]\n                }\n                None => Vec::new(),\n            };\n        Self::new(\n            web_search,\n            news,\n            vec![std::sync::Arc::new(mock::MockSocialProvider)],\n            reverse_image,\n        )\n    }\n'''
+          s = replace_once(s, old, new, 'from_env constructor')
+          old = '''        // No `ReverseImageSearchProvider` is ever registered (see its doc\n        // comment) — this slot always reports the same fixed,\n        // never-mock, never-real placeholder rather than being silently\n        // absent from the list.\n        statuses.push(ConnectorStatus {\n            slot: "reverse_image",\n            provider_name: "not-configured",\n            is_mock: false,\n        });\n'''
+          new = '''        if self.reverse_image.is_empty() {\n            statuses.push(ConnectorStatus {\n                slot: "reverse_image",\n                provider_name: "not-configured",\n                is_mock: false,\n            });\n        } else {\n            for provider in &self.reverse_image {\n                statuses.push(ConnectorStatus::new("reverse_image", provider.name()));\n            }\n        }\n'''
+          s = replace_once(s, old, new, 'provider_status reverse_image')
+          marker = '''    pub async fn collect_web_and_news(\n        &self,\n        query: &str,\n    ) -> (Vec<ProviderOutcome>, Vec<ProviderOutcome>) {\n        let mut web = Vec::new();\n        for provider in &self.web_search {\n            web.push(run_provider(provider.name(), provider.search(query).await));\n        }\n        let mut news = Vec::new();\n        for provider in &self.news {\n            news.push(run_provider(provider.name(), provider.search(query).await));\n        }\n        (web, news)\n    }\n'''
+          replacement = marker + '''\n    /// Runs configured public-web image discovery providers against the\n    /// sanitized probe image. An empty vector means this deployment has\n    /// no reverse-image provider configured; no image is sent externally.\n    pub async fn collect_reverse_image(&self, image_bytes: &[u8]) -> Vec<ProviderOutcome> {\n        let mut outcomes = Vec::new();\n        for provider in &self.reverse_image {\n            outcomes.push(run_provider(\n                provider.name(),\n                provider.search_by_image(image_bytes).await,\n            ));\n        }\n        outcomes\n    }\n'''
+          s = replace_once(s, marker, replacement, 'collect_reverse_image insertion')
+          # Existing direct constructor in tests gains the reverse-image slot.
+          s = s.replace(
+              '            vec![std::sync::Arc::new(mock::MockSocialProvider)],\n        );',
+              '            vec![std::sync::Arc::new(mock::MockSocialProvider)],\n            Vec::new(),\n        );',
+          )
+          s = s.replace(
+              '            "NEWS_API_KEY",\n        ] {',
+              '            "NEWS_API_KEY",\n            "GOOGLE_CLOUD_VISION_API_KEY",\n        ] {',
+              1,
+          )
+          p.write_text(s)
+
+          # Search orchestration: run image discovery even when local biometric candidates are empty.
+          p = Path('server/src/search.rs')
+          s = p.read_text()
+          s = replace_once(
+              s,
+              '                run_auto_osint(&state, &search, &claims, &headers).await;',
+              '                run_auto_osint(&state, &search, &claims, &headers, &image_bytes).await;',
+              'run_auto_osint call',
+          )
+          start = s.index('async fn run_auto_osint(')
+          end = s.index('/// Real (non-mock) or mock', start)
+          new_fn = r'''async fn run_auto_osint(
+    state: &AppState,
+    search: &SearchRow,
+    claims: &Claims,
+    headers: &HeaderMap,
+    image_bytes: &[u8],
+) {
+    if !state.auto_osint_after_biometric_search {
+        return;
+    }
+    let candidates = match list_search_candidates(&state.backend, &search.id).await {
+        Ok(rows) => rows,
+        Err(err) => {
+            tracing::warn!(error = %err, search_id = %search.id, "auto-OSINT: failed to load search candidates");
+            return;
+        }
+    };
+    let cap = state.osint_auto_max_candidates.max(0) as usize;
+    let eligible: Vec<SearchCandidateRow> = candidates.into_iter().take(cap).collect();
+
+    let auto_rid = uuid::Uuid::new_v4().to_string();
+    AuditRecorder::new(
+        action::OSINT_AUTO_STARTED,
+        audit_result::SUCCESS,
+        auto_rid.clone(),
+    )
+    .actor(claims)
+    .headers(headers)
+    .resource("search", &search.id)
+    .metadata(json!({ "candidateCount": eligible.len() }))
+    .save(state)
+    .await;
+
+    // Public-web image discovery is independent of the local candidate
+    // repository. This is what lets a probe with zero internal matches
+    // still discover matching/visually-similar images on the public web.
+    let reverse_outcomes = state.osint_orchestrator.collect_reverse_image(image_bytes).await;
+    let reverse_success = reverse_outcomes.iter().filter(|o| o.error.is_none()).count();
+    let reverse_fail = reverse_outcomes.len().saturating_sub(reverse_success);
+    let mut external_items = Vec::new();
+    let mut any_provider_error = reverse_outcomes.iter().any(|o| o.error.is_some());
+    for outcome in &reverse_outcomes {
+        for item in &outcome.items {
+            external_items.push(json!({
+                "sourceType": item.source_type,
+                "providerName": item.provider_name,
+                "title": item.title,
+                "url": item.url,
+                "snippet": item.snippet,
+                "confidenceScore": item.confidence,
+            }));
+        }
+    }
+
+    let mut handles = Vec::with_capacity(eligible.len());
+    for candidate in eligible.iter().cloned() {
+        let Some(query) = query_builder::build_query(&candidate.candidate_full_name) else {
+            continue;
+        };
+        let task_state = state.clone();
+        let candidate_id = candidate.candidate_id;
+        let collected_by = claims.id.clone();
+        handles.push(tokio::spawn(async move {
+            let (web, news) = task_state
+                .osint_orchestrator
+                .collect_web_and_news(&query)
+                .await;
+            let web_success = web.iter().filter(|o| o.error.is_none()).count();
+            let web_fail = web.len() - web_success;
+            let news_success = news.iter().filter(|o| o.error.is_none()).count();
+            let news_fail = news.len() - news_success;
+            let mut outcomes = web;
+            outcomes.extend(news);
+            let result = collect_and_store_candidate_evidence(
+                &task_state,
+                &candidate_id,
+                Some(&collected_by),
+                &outcomes,
+            )
+            .await;
+            (web_success, web_fail, news_success, news_fail, result)
+        }));
+    }
+
+    let (mut web_success, mut web_fail, mut news_success, mut news_fail) = (0, 0, 0, 0);
+    let mut any_stored = false;
+    for handle in handles {
+        let Ok((ws, wf, ns, nf, result)) = handle.await else {
+            any_provider_error = true;
+            continue;
+        };
+        web_success += ws;
+        web_fail += wf;
+        news_success += ns;
+        news_fail += nf;
+        any_stored = any_stored || !result.stored.is_empty();
+        any_provider_error = any_provider_error || !result.provider_errors.is_empty();
+    }
+
+    let statuses = state.osint_orchestrator.provider_status();
+    let web_is_mock = statuses.iter().any(|s| s.slot == "web_search" && s.is_mock);
+    let news_is_mock = statuses.iter().any(|s| s.slot == "news" && s.is_mock);
+    let reverse_configured = statuses
+        .iter()
+        .any(|s| s.slot == "reverse_image" && s.provider_name != "not-configured");
+    let web_status = if eligible.is_empty() {
+        if web_is_mock { "mock" } else { "not_run" }
+    } else {
+        slot_status(web_is_mock, web_success, web_fail)
+    };
+    let news_status = if eligible.is_empty() {
+        if news_is_mock { "mock" } else { "not_run" }
+    } else {
+        slot_status(news_is_mock, news_success, news_fail)
+    };
+    let reverse_status = if !reverse_configured {
+        "not_configured"
+    } else {
+        slot_status(false, reverse_success, reverse_fail)
+    };
+    let status = json!({
+        "web": web_status,
+        "news": news_status,
+        "social": "not_configured",
+        "reverseImage": reverse_status,
+        "items": external_items,
+    });
+    let _ =
+        set_search_external_evidence_status(&state.backend, &search.id, &status.to_string()).await;
+
+    let outcome_action = if any_provider_error {
+        action::OSINT_AUTO_PARTIAL
+    } else {
+        action::OSINT_AUTO_COMPLETED
+    };
+    let outcome_result = if any_provider_error {
+        audit_result::FAILURE
+    } else {
+        audit_result::SUCCESS
+    };
+    AuditRecorder::new(
+        outcome_action,
+        outcome_result,
+        uuid::Uuid::new_v4().to_string(),
+    )
+    .actor(claims)
+    .headers(headers)
+    .resource("search", &search.id)
+    .metadata(json!({
+        "candidateEvidenceStored": any_stored,
+        "reverseImageResultCount": external_items.len(),
+        "status": status,
+    }))
+    .save(state)
+    .await;
+}
+
+'''
+          s = s[:start] + new_fn + s[end:]
+
+          # Split stored status payload into clean status + evidence fields for clients.
+          old = '''    let external_evidence_status = search
+        .external_evidence_status
+        .as_deref()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok());
+    json!({
+'''
+          new = '''    let external_payload = search
+        .external_evidence_status
+        .as_deref()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok());
+    let external_evidence_status = external_payload.as_ref().map(|payload| json!({
+        "web": payload.get("web").cloned().unwrap_or_else(|| json!("not_run")),
+        "news": payload.get("news").cloned().unwrap_or_else(|| json!("not_run")),
+        "social": payload.get("social").cloned().unwrap_or_else(|| json!("not_configured")),
+        "reverseImage": payload.get("reverseImage").cloned().unwrap_or_else(|| json!("not_configured")),
+    }));
+    let external_evidence = external_payload
+        .as_ref()
+        .and_then(|payload| payload.get("items"))
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    json!({
+'''
+          s = replace_once(s, old, new, 'search_json external payload')
+          s = replace_once(
+              s,
+              '        "externalEvidenceStatus": external_evidence_status,\n',
+              '        "externalEvidenceStatus": external_evidence_status,\n        "externalEvidence": external_evidence,\n',
+              'search_json external evidence field',
+          )
+          # Report whether the client should wait for the automatic OSINT phase.
+          s = replace_once(
+              s,
+              '    tokio::spawn(run_queued_search(\n',
+              '    let auto_osint_enabled = state.auto_osint_after_biometric_search;\n\n    tokio::spawn(run_queued_search(\n',
+              'auto osint flag before spawn',
+          )
+          s = replace_once(
+              s,
+              '        Json(json!({ "search": search_json(&queued) })),\n',
+              '        Json(json!({ "search": search_json(&queued), "autoOsintEnabled": auto_osint_enabled })),\n',
+              'create search response auto flag',
+          )
+          s = replace_once(
+              s,
+              '        "candidates": candidate_rows.iter().map(search_candidate_json).collect::<Vec<_>>(),\n',
+              '        "candidates": candidate_rows.iter().map(search_candidate_json).collect::<Vec<_>>(),\n        "autoOsintEnabled": state.auto_osint_after_biometric_search,\n',
+              'status response auto flag',
+          )
+          p.write_text(s)
+
+          # Client types/polling and result rendering.
+          p = Path('client/src/services/searchClient.ts')
+          s = p.read_text()
+          s = s.replace("  | 'not_configured';", "  | 'not_configured'\n  | 'not_run';", 1)
+          insert = '''\nexport interface SearchExternalEvidenceItem {\n  sourceType: string;\n  providerName: string;\n  title: string;\n  url: string | null;\n  snippet: string | null;\n  confidenceScore: number;\n}\n'''
+          s = replace_once(s, 'export interface SearchSummary {\n', insert + '\nexport interface SearchSummary {\n', 'external evidence interface')
+          s = replace_once(
+              s,
+              '  externalEvidenceStatus: ExternalEvidenceStatus | null;\n}',
+              '  externalEvidenceStatus: ExternalEvidenceStatus | null;\n  externalEvidence: SearchExternalEvidenceItem[];\n}',
+              'SearchSummary external evidence',
+          )
+          s = replace_once(
+              s,
+              'export interface CreateSearchResult {\n  search: SearchSummary;\n  candidates: SearchCandidate[];\n}',
+              'export interface CreateSearchResult {\n  search: SearchSummary;\n  candidates: SearchCandidate[];\n  autoOsintEnabled?: boolean;\n}',
+              'CreateSearchResult auto flag',
+          )
+          s = replace_once(
+              s,
+              "  while (latest.search.status === 'queued' || latest.search.status === 'processing') {",
+              "  while (\n    latest.search.status === 'queued' ||\n    latest.search.status === 'processing' ||\n    (latest.autoOsintEnabled === true &&\n      latest.search.status === 'completed' &&\n      latest.search.externalEvidenceStatus === null)\n  ) {",
+              'client polling condition',
+          )
+          p.write_text(s)
+
+          p = Path('client/src/pages/DashboardPage.tsx')
+          s = p.read_text()
+          old = '''    try {\n      const candidates = await searchClient.getSearchCandidates(search.id);\n      setActiveCandidates(candidates);\n      loadEvidenceCounts(candidates);\n    } catch {'''
+          new = '''    try {\n      const result = await searchClient.getSearchStatus(search.id);\n      setActiveSearch(result.search);\n      setActiveCandidates(result.candidates);\n      loadEvidenceCounts(result.candidates);\n    } catch {'''
+          s = replace_once(s, old, new, 'openSearch refresh')
+          marker = '''          <div className="admin-user-list">\n'''
+          evidence_block = '''          {(activeSearch.externalEvidence?.length ?? 0) > 0 && (\n            <div className="search-external-evidence">\n              <h3 className="overlay-content__heading">{t('search.externalEvidence.results')}</h3>\n              <ul className="overlay-list">\n                {activeSearch.externalEvidence.map((item, index) => (\n                  <li key={`${item.providerName}-${item.url ?? index}`} className="overlay-list__item overlay-list__item--session">\n                    <div>\n                      <div>{item.title}</div>\n                      <div className="admin-user-card__note">\n                        {item.providerName}\n                        {item.snippet ? ` · ${item.snippet}` : ''}\n                      </div>\n                      {item.url && (\n                        <a href={item.url} target="_blank" rel="noopener noreferrer">\n                          {t('search.externalEvidence.openSource')}\n                        </a>\n                      )}\n                    </div>\n                  </li>\n                ))}\n              </ul>\n            </div>\n          )}\n'''
+          s = replace_once(s, marker, evidence_block + marker, 'dashboard evidence rendering')
+          p.write_text(s)
+
+          # Preserve locale parity across every locale already shipped by this repository.
+          translations = {
+              'en': ('External image/web evidence', 'Open source', 'Not run'),
+              'tr': ('Harici görsel/web kanıtları', 'Kaynağı aç', 'Çalıştırılmadı'),
+              'de': ('Externe Bild-/Web-Nachweise', 'Quelle öffnen', 'Nicht ausgeführt'),
+              'fr': ('Éléments externes image/web', 'Ouvrir la source', 'Non exécuté'),
+              'ar': ('أدلة الصور/الويب الخارجية', 'فتح المصدر', 'لم يتم التشغيل'),
+              'ru': ('Внешние доказательства по изображению/вебу', 'Открыть источник', 'Не запускалось'),
+          }
+          for lang, (results, open_source, not_run) in translations.items():
+              path = Path(f'client/src/i18n/locales/{lang}/translation.json')
+              data = json.loads(path.read_text())
+              data['search']['externalEvidence']['results'] = results
+              data['search']['externalEvidence']['openSource'] = open_source
+              data['osint']['status']['not_run'] = not_run
+              path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+
+          # Deployment/environment docs.
+          p = Path('render.yaml')
+          s = p.read_text()
+          if 'GOOGLE_CLOUD_VISION_API_KEY' not in s:
+              anchor = '      - key: NEWS_API_KEY\n        sync: false\n'
+              s = replace_once(
+                  s,
+                  anchor,
+                  anchor + '      # Optional public-web image discovery (Google Cloud Vision WEB_DETECTION).\n      - key: GOOGLE_CLOUD_VISION_API_KEY\n        sync: false\n',
+                  'render google vision secret',
+              )
+          p.write_text(s)
+
+          p = Path('.env.example')
+          s = p.read_text()
+          if 'GOOGLE_CLOUD_VISION_API_KEY=' not in s:
+              s += '\n# Optional public-web reverse image / web detection provider.\nGOOGLE_CLOUD_VISION_API_KEY=\n'
+          p.write_text(s)
+
+          note = '''\n\n## External image discovery\n\nWhen `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH=true`, B.I.S. can now run public-web image discovery directly from the sanitized probe image when `GOOGLE_CLOUD_VISION_API_KEY` is configured. This uses Google Cloud Vision `WEB_DETECTION`; it is independent of the local biometric candidate repository, so a search with zero internal candidates can still return matching-image pages or visually similar public-web images. Tavily/Brave and Currents/NewsAPI remain text providers and are only queried from permitted candidate identity fields. No social-platform scraping or access-control bypass is performed; the social slot remains not configured until an authorized connector is deployed.\n'''
+          for doc in ['README.md', 'AGENTS.md', 'CLAUDE.md', 'docs/ENVIRONMENT.md', 'docs/DATA_FLOW.md', 'docs/SECURITY_ARCHITECTURE.md']:
+              path = Path(doc)
+              if path.exists():
+                  text = path.read_text()
+                  if '## External image discovery' not in text:
+                      path.write_text(text.rstrip() + note + '\n')
+
+          # Remove temporary patch artifacts if they exist.
+          patch_dir = Path('.github/osint-patch')
+          if patch_dir.exists():
+              for child in patch_dir.iterdir():
+                  child.unlink()
+              patch_dir.rmdir()
+          PY
+
+          # Version bump is required for application-code changes in this repository.
+          npm version patch --no-git-tag-version
+
+          # Keep documentation copies and code mechanically valid before committing.
+          cargo fmt --manifest-path server/Cargo.toml
+          cargo test --manifest-path server/Cargo.toml
+          cd client
+          npm ci
+          npm run typecheck
+          npm run test -- --run
+          npm run build
+          cd ..
+
+          # This workflow is a one-shot migration helper; do not leave it in the repository.
+          rm -f .github/workflows/complete-external-evidence.yml
+
+          git config --local user.name "atabeyler"
+          git config --local user.email "info@boldkimya.com.tr"
+          git add -A
+          git commit -m "Complete external image and web evidence integration"
+          git push origin main
