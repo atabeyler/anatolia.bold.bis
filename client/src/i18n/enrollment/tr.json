@@ -1,0 +1,27 @@
+{
+  "candidateEnrollment": {
+    "heading": "ADAY KAYDI",
+    "hint": "Bir aday kaydı oluşturun, ardından biyometrik arama için bir veya daha fazla referans yüz fotoğrafı kaydedin.",
+    "referenceCode": "Aday referans kodu",
+    "fullName": "Ad soyad",
+    "notes": "Notlar (isteğe bağlı)",
+    "create": "ADAY OLUŞTUR",
+    "creating": "Oluşturuluyor…",
+    "createError": "Aday oluşturulamadı.",
+    "referencePhoto": "Referans yüz fotoğrafı",
+    "enroll": "FOTOĞRAFI KAYDET",
+    "enrolling": "Kaydediliyor…",
+    "enrollError": "Referans fotoğraf kaydedilemedi.",
+    "mockBlocked": "Gerçek biyometrik kayıt için ONNX sağlayıcısı gerekir. Etkin mock sağlayıcı gerçek yüz şablonu oluşturamaz.",
+    "newCandidate": "Yeni aday",
+    "duplicatesHeading": "Olası biyometrik mükerrer kayıt",
+    "duplicateItem": "Aday {{candidateId}} · benzerlik {{score}}",
+    "duplicatesHint": "Bu yalnızca danışma amaçlı bir benzerlik uyarısıdır. Otomatik birleştirme veya kimlik doğrulaması yapmayın.",
+    "templatesHeading": "BİYOMETRİK ŞABLONLAR",
+    "noTemplates": "Henüz biyometrik şablon kaydedilmedi.",
+    "templateMeta": "Boyut {{dimension}} · kalite {{quality}} · kayıt {{date}}",
+    "revoke": "Şablonu iptal et",
+    "revoked": "İPTAL EDİLDİ",
+    "revokeError": "Biyometrik şablon iptal edilemedi."
+  }
+}
