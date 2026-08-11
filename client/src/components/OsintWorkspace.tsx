@@ -20,6 +20,22 @@ interface OsintWorkspaceProps {
 
 type Section = 'evidence' | 'entityGraph' | 'duplicates';
 
+/**
+ * Groups evidence for display by the real `sourceType` values the
+ * backend actually produces (`server/src/osint/*.rs`) — `web_search`,
+ * `news`, `social`. `reverseImage` has no matching `sourceType` in this
+ * codebase (no `ReverseImageSearchProvider` implementation exists), so
+ * its group is always empty and simply never renders; it's kept in the
+ * list only so a future real reverse-image provider slots in without
+ * this component needing to change.
+ */
+const EVIDENCE_SOURCE_GROUPS: Array<{ key: string; sourceTypes: string[] }> = [
+  { key: 'web', sourceTypes: ['web_search'] },
+  { key: 'news', sourceTypes: ['news'] },
+  { key: 'social', sourceTypes: ['social'] },
+  { key: 'reverseImage', sourceTypes: ['reverse_image'] },
+];
+
 export function OsintWorkspace({ candidateId, candidateName, canManage, onClose }: OsintWorkspaceProps) {
   const { t } = useTranslation();
   const [section, setSection] = useState<Section>('evidence');
@@ -158,19 +174,32 @@ export function OsintWorkspace({ candidateId, candidateName, canManage, onClose 
           {evidence !== null && evidence.length === 0 && (
             <p className="status-card__line">{t('osint.evidence.empty')}</p>
           )}
-          <ul className="overlay-list">
-            {evidence?.map((item) => (
-              <li key={item.id} className="overlay-list__item overlay-list__item--session">
-                <div>
-                  <div>{item.title ?? item.snippet ?? item.url ?? item.providerName}</div>
-                  <div className="admin-user-card__note">
-                    {item.providerName}
-                    {item.url ? ` · ${item.url}` : ''}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+          {EVIDENCE_SOURCE_GROUPS.map(({ key, sourceTypes }) => {
+            const items = evidence?.filter((item) => sourceTypes.includes(item.sourceType)) ?? [];
+            if (items.length === 0) return null;
+            return (
+              <div key={key}>
+                <h3 className="overlay-content__heading">
+                  {t(`osint.evidence.group.${key}`, { count: items.length })}
+                </h3>
+                <ul className="overlay-list">
+                  {items.map((item) => (
+                    <li key={item.id} className="overlay-list__item overlay-list__item--session">
+                      <div>
+                        <div>{item.title ?? item.snippet ?? item.url ?? item.providerName}</div>
+                        <div className="admin-user-card__note">
+                          {item.providerName.startsWith('mock-')
+                            ? t('osint.status.mock')
+                            : item.providerName}
+                          {item.url ? ` · ${item.url}` : ''}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
         </div>
       )}
 

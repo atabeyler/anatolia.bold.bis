@@ -1,5 +1,27 @@
 import { apiClient } from './apiClient';
 
+/**
+ * Per-slot outcome of `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH`'s automatic
+ * web/news evidence collection for one search — see
+ * `search::run_auto_osint` (server). `social` and `reverseImage` are
+ * always `'not_configured'`: the automatic trigger never runs either
+ * (no real implementation of either exists in this deployment).
+ */
+export type ExternalEvidenceSlotStatus =
+  | 'completed'
+  | 'partial'
+  | 'failed'
+  | 'mock'
+  | 'unavailable'
+  | 'not_configured';
+
+export interface ExternalEvidenceStatus {
+  web: ExternalEvidenceSlotStatus;
+  news: ExternalEvidenceSlotStatus;
+  social: ExternalEvidenceSlotStatus;
+  reverseImage: ExternalEvidenceSlotStatus;
+}
+
 export interface SearchSummary {
   id: string;
   caseReference: string;
@@ -14,6 +36,14 @@ export interface SearchSummary {
   failureCode: string | null;
   failureMessageKey: string | null;
   createdAt: string;
+  /**
+   * `null` until automatic OSINT has actually reported an outcome for
+   * this search — either `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH` is off, or
+   * its background work (which runs after the search itself is already
+   * `completed`) hasn't finished yet. Re-fetch the search status a
+   * moment later to pick it up once it lands.
+   */
+  externalEvidenceStatus: ExternalEvidenceStatus | null;
 }
 
 export interface SearchSummaryPage {

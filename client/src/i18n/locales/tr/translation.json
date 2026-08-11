@@ -258,10 +258,12 @@
       "connectorSlot": {
         "web_search": "Web araması",
         "news": "Haberler",
-        "social": "Sosyal medya"
+        "social": "Sosyal medya",
+        "reverse_image": "Ters görsel arama"
       },
       "connectorMock": "sahte",
       "connectorReal": "canlı",
+      "connectorNotConfigured": "yapılandırılmadı",
       "uptime": "Çalışma süresi",
       "uptimeSeconds": "{{count}} saniye",
       "dbPool": "Veritabanı havuzu",
@@ -306,6 +308,12 @@
     "createError": "Arama başlatılamadı.",
     "location": "Arama sırasında operatör konumu: {{lat}} · {{lon}}",
     "mockNotice": "Demo modu: bu dağıtım simüle bir eşleştirme motoru kullanıyor — skorlar gerçek biyometrik eşleştirmeden değil, simülasyondan türetilmiştir.",
+    "externalEvidence": {
+      "web": "Web",
+      "news": "Haberler",
+      "social": "Sosyal medya",
+      "reverseImage": "Ters görsel arama"
+    },
     "viewOnlyNotice": "Rolünüz yalnızca aramaları ve adayları görüntülemenize izin veriyor. Yeni arama başlatmak için OPERATOR, REVIEWER, SECURITY_ADMIN veya SYSTEM_ADMIN rolü gerekir.",
     "evidenceCount": "{{count}} kanıt öğesi toplandı"
   },
@@ -358,7 +366,24 @@
       "queryPlaceholder": "Arama sorgusu (örn. tam ad)",
       "collect": "Kanıt topla",
       "providerErrors": "Bazı sağlayıcılar başarısız oldu: {{providers}}",
-      "empty": "Henüz kanıt toplanmadı."
+      "empty": "Henüz kanıt toplanmadı.",
+      "group": {
+        "web": "Web ({{count}})",
+        "news": "Haberler ({{count}})",
+        "social": "Yetkili sosyal medya ({{count}})",
+        "reverseImage": "Ters görsel arama ({{count}})"
+      }
+    },
+    "status": {
+      "queued": "Sırada",
+      "running": "Çalışıyor",
+      "completed": "Tamamlandı",
+      "partial": "Kısmi",
+      "failed": "Başarısız",
+      "rateLimited": "Hız sınırına takıldı",
+      "unavailable": "Kullanılamıyor",
+      "not_configured": "Yapılandırılmadı",
+      "mock": "Sahte"
     },
     "entityGraph": {
       "valuePlaceholder": "Değer",

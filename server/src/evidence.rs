@@ -18,7 +18,91 @@ use crate::db::{
     insert_evidence, list_evidence_for_candidate, load_candidate_by_id, AppState, EvidenceRow,
 };
 use crate::error::{request_id, ApiError};
+use crate::osint::ProviderOutcome;
 use crate::permission;
+
+/// Result of running one or more OSINT providers against a candidate and
+/// persisting whatever came back — shared by the manual
+/// `POST /candidates/{id}/evidence/collect` route and the automatic
+/// biometric-search trigger (`search::run_queued_search`), so there is
+/// exactly one place that turns provider outcomes into stored evidence.
+pub struct CollectedEvidence {
+    pub stored: Vec<EvidenceRow>,
+    pub provider_errors: Vec<serde_json::Value>,
+}
+
+/// Runs `outcomes` (already-collected provider results — see
+/// `osint::EvidenceOrchestrator::collect`/`collect_web_and_news`) against
+/// `candidate_id` and persists each successful item, skipping any item
+/// that duplicates one already stored for this candidate.
+///
+/// Deduplication key: `(provider_name, normalized_url)` when the item has
+/// a URL (lowercased, trailing slash trimmed — good enough to catch a
+/// provider returning the same link twice across repeated collection
+/// runs, not a general URL-canonicalization library); `(provider_name,
+/// title)` otherwise, since a provider that never sets a URL (e.g. a
+/// social profile match) still shouldn't be stored twice for an
+/// identical title. This is checked against *every* evidence item already
+/// on the candidate, not just ones from the same run — re-running manual
+/// "Collect Evidence" (or the automatic trigger firing again on a repeat
+/// search) must not keep re-inserting the same item.
+pub async fn collect_and_store_candidate_evidence(
+    state: &AppState,
+    candidate_id: &str,
+    collected_by: Option<&str>,
+    outcomes: &[ProviderOutcome],
+) -> CollectedEvidence {
+    let existing = list_evidence_for_candidate(&state.backend, candidate_id)
+        .await
+        .unwrap_or_default();
+    let mut seen: std::collections::HashSet<(String, String)> = existing
+        .iter()
+        .map(|row| (row.provider_name.clone(), dedupe_key(&row.url, &row.title)))
+        .collect();
+
+    let mut stored = Vec::new();
+    let mut provider_errors = Vec::new();
+    for outcome in outcomes {
+        if let Some(error) = &outcome.error {
+            provider_errors.push(serde_json::json!({
+                "provider": outcome.provider_name,
+                "error": error,
+            }));
+            continue;
+        }
+        for item in &outcome.items {
+            let key = (
+                item.provider_name.clone(),
+                dedupe_key(&item.url, &item.title),
+            );
+            if !seen.insert(key) {
+                continue;
+            }
+            if let Ok(Some(row)) =
+                insert_evidence(&state.backend, candidate_id, item, collected_by).await
+            {
+                stored.push(row);
+            }
+        }
+    }
+
+    CollectedEvidence {
+        stored,
+        provider_errors,
+    }
+}
+
+fn dedupe_key(url: &Option<String>, title: &str) -> String {
+    match url {
+        Some(url) if !url.trim().is_empty() => {
+            format!(
+                "url:{}",
+                url.trim().to_ascii_lowercase().trim_end_matches('/')
+            )
+        }
+        _ => format!("title:{}", title.trim().to_ascii_lowercase()),
+    }
+}
 
 fn evidence_json(row: &EvidenceRow) -> serde_json::Value {
     json!({
@@ -76,22 +160,11 @@ pub async fn collect_evidence_route(
     }
 
     let outcomes = state.osint_orchestrator.collect(&query).await;
-
-    let mut stored = Vec::new();
-    let mut provider_errors = Vec::new();
-    for outcome in &outcomes {
-        if let Some(error) = &outcome.error {
-            provider_errors.push(json!({ "provider": outcome.provider_name, "error": error }));
-            continue;
-        }
-        for item in &outcome.items {
-            if let Ok(Some(row)) =
-                insert_evidence(&state.backend, &candidate_id, item, Some(&claims.id)).await
-            {
-                stored.push(row);
-            }
-        }
-    }
+    let CollectedEvidence {
+        stored,
+        provider_errors,
+    } = collect_and_store_candidate_evidence(&state, &candidate_id, Some(&claims.id), &outcomes)
+        .await;
 
     AuditRecorder::new(
         action::CANDIDATE_EVIDENCE_COLLECTED,

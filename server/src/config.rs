@@ -28,6 +28,10 @@ const DEFAULT_SEARCH_DEFAULT_TOP_K: i64 = 10;
 /// `search::create_search_route`.
 const DEFAULT_SEARCH_MAX_TOP_K: i64 = 50;
 
+/// Fallback when `OSINT_AUTO_MAX_CANDIDATES` is unset — see
+/// `Config::osint_auto_max_candidates`.
+const DEFAULT_OSINT_AUTO_MAX_CANDIDATES: i64 = 5;
+
 pub struct Config {
     pub port: u16,
     pub allowed_origins: Vec<String>,
@@ -55,6 +59,20 @@ pub struct Config {
     /// (`MFA_REQUIRED_ROLES=`) disables mandatory MFA entirely — voluntary
     /// enrollment remains available to every role regardless.
     pub mfa_required_roles: Vec<String>,
+    /// When `true`, a completed biometric search automatically runs
+    /// web/news OSINT evidence collection against its top-scoring
+    /// candidates before the search itself is reported `completed` — see
+    /// `search::run_queued_search`. Defaults to `false`: an operator must
+    /// explicitly opt in (`AUTO_OSINT_AFTER_BIOMETRIC_SEARCH=true`),
+    /// including in production. Never touches the `AuthorizedSocialProvider`
+    /// or any reverse-image capability — see `osint::EvidenceOrchestrator::collect_web_and_news`.
+    pub auto_osint_after_biometric_search: bool,
+    /// Upper bound on how many of a search's top-scoring candidates
+    /// `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH` runs evidence collection
+    /// against, regardless of the search's own `topK` — see
+    /// `OSINT_AUTO_MAX_CANDIDATES`. Prevents a `topK=50` search from
+    /// firing 50 external provider calls. Defaults to 5.
+    pub osint_auto_max_candidates: i64,
 }
 
 /// True when this process should apply production security posture:
@@ -138,6 +156,15 @@ impl Config {
             .map(|v| v == "true")
             .unwrap_or(false);
 
+        let auto_osint_after_biometric_search = env::var("AUTO_OSINT_AFTER_BIOMETRIC_SEARCH")
+            .map(|v| v == "true")
+            .unwrap_or(false);
+        let osint_auto_max_candidates = env::var("OSINT_AUTO_MAX_CANDIDATES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(DEFAULT_OSINT_AUTO_MAX_CANDIDATES);
+
         Self {
             port,
             allowed_origins,
@@ -151,6 +178,8 @@ impl Config {
             biometric_provider,
             mfa_required_roles,
             require_second_review,
+            auto_osint_after_biometric_search,
+            osint_auto_max_candidates,
         }
     }
 }
@@ -395,6 +424,37 @@ mod tests {
         env::remove_var("NATIONAL_ID_ENCRYPTION_KEY");
         assert_eq!(key.len(), 32);
         assert_eq!(key[0], 0xaa);
+    }
+
+    #[test]
+    fn auto_osint_defaults_to_disabled() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        env::remove_var("AUTO_OSINT_AFTER_BIOMETRIC_SEARCH");
+        env::remove_var("OSINT_AUTO_MAX_CANDIDATES");
+        let config = Config::from_env();
+        assert!(!config.auto_osint_after_biometric_search);
+        assert_eq!(config.osint_auto_max_candidates, 5);
+    }
+
+    #[test]
+    fn auto_osint_can_be_enabled_with_a_custom_candidate_cap() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        env::set_var("AUTO_OSINT_AFTER_BIOMETRIC_SEARCH", "true");
+        env::set_var("OSINT_AUTO_MAX_CANDIDATES", "3");
+        let config = Config::from_env();
+        env::remove_var("AUTO_OSINT_AFTER_BIOMETRIC_SEARCH");
+        env::remove_var("OSINT_AUTO_MAX_CANDIDATES");
+        assert!(config.auto_osint_after_biometric_search);
+        assert_eq!(config.osint_auto_max_candidates, 3);
+    }
+
+    #[test]
+    fn osint_auto_max_candidates_ignores_a_non_positive_override() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        env::set_var("OSINT_AUTO_MAX_CANDIDATES", "0");
+        let config = Config::from_env();
+        env::remove_var("OSINT_AUTO_MAX_CANDIDATES");
+        assert_eq!(config.osint_auto_max_candidates, 5);
     }
 
     #[test]

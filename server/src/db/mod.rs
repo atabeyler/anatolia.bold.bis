@@ -84,6 +84,13 @@ pub struct AppState {
     /// provider slot independently selects a real or mock implementation,
     /// matching the `biometric_provider` pattern.
     pub osint_orchestrator: Arc<crate::osint::EvidenceOrchestrator>,
+    /// Whether a completed biometric search automatically triggers web/news
+    /// OSINT evidence collection against its top candidates — see
+    /// `config::Config::auto_osint_after_biometric_search`.
+    pub auto_osint_after_biometric_search: bool,
+    /// Cap on how many top-scoring candidates that automatic collection
+    /// runs against — see `config::Config::osint_auto_max_candidates`.
+    pub osint_auto_max_candidates: i64,
     /// Renders the current Prometheus snapshot for `GET /metrics` — see
     /// `metrics.rs`. The recorder itself is process-wide/global (the
     /// `metrics` crate's macros work anywhere without this handle); the
@@ -160,6 +167,8 @@ impl AppState {
             biometric_provider_name,
             pgvector_search_ready,
             osint_orchestrator: Arc::new(crate::osint::EvidenceOrchestrator::from_env()),
+            auto_osint_after_biometric_search: config.auto_osint_after_biometric_search,
+            osint_auto_max_candidates: config.osint_auto_max_candidates,
             metrics_handle: crate::metrics::init(),
         })
     }
@@ -202,6 +211,11 @@ impl AppState {
             biometric_provider_name: "mock",
             pgvector_search_ready: false,
             osint_orchestrator: Arc::new(crate::osint::EvidenceOrchestrator::mock()),
+            // Off by default in tests too — tests exercising the automatic
+            // flow build their own state with these overridden via struct
+            // update syntax (`AppState { auto_osint_after_biometric_search: true, ..AppState::for_tests().await }`).
+            auto_osint_after_biometric_search: false,
+            osint_auto_max_candidates: 5,
             metrics_handle: crate::metrics::init(),
         }
     }
@@ -242,6 +256,8 @@ impl AppState {
             biometric_provider_name: "mock",
             pgvector_search_ready,
             osint_orchestrator: Arc::new(crate::osint::EvidenceOrchestrator::mock()),
+            auto_osint_after_biometric_search: false,
+            osint_auto_max_candidates: 5,
             metrics_handle: crate::metrics::init(),
         })
     }
@@ -472,6 +488,17 @@ async fn migrate(backend: &DbBackend) -> Result<bool, sqlx::Error> {
             sqlx::query("ALTER TABLE searches ADD COLUMN IF NOT EXISTS failure_message_key TEXT")
                 .execute(pool)
                 .await?;
+            // JSON-encoded per-slot summary of AUTO_OSINT_AFTER_BIOMETRIC_SEARCH's
+            // outcome for this search (web/news/social/reverseImage — see
+            // `search::run_queued_search`) — NULL when automatic OSINT
+            // never ran for this search (feature off, or no eligible
+            // candidates). Text, not JSONB: read/written as an opaque
+            // blob by the application, never queried column-wise.
+            sqlx::query(
+                "ALTER TABLE searches ADD COLUMN IF NOT EXISTS external_evidence_status TEXT",
+            )
+            .execute(pool)
+            .await?;
             sqlx::query(
                 r#"
                 CREATE TABLE IF NOT EXISTS search_candidates (
@@ -783,6 +810,9 @@ async fn migrate(backend: &DbBackend) -> Result<bool, sqlx::Error> {
                 .execute(pool)
                 .await;
             let _ = sqlx::query("ALTER TABLE searches ADD COLUMN failure_message_key TEXT")
+                .execute(pool)
+                .await;
+            let _ = sqlx::query("ALTER TABLE searches ADD COLUMN external_evidence_status TEXT")
                 .execute(pool)
                 .await;
             sqlx::query(
@@ -1162,14 +1192,20 @@ pub struct SearchRow {
     /// `None` if they had no membership (see `db::org::primary_organization_id`).
     /// Never client-supplied — see `permission::can_view_scoped_resource`.
     pub organization_id: Option<String>,
+    /// JSON-encoded per-slot `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH` outcome
+    /// summary (see `search::run_queued_search`), or `None` when automatic
+    /// OSINT never ran for this search. Passed through to the API response
+    /// as-is (already a JSON value) rather than re-parsed and re-shaped.
+    pub external_evidence_status: Option<String>,
 }
 
 const SEARCH_COLUMNS_PG: &str = "id::text, case_reference, purpose, requested_by::text, requested_by_name, status, \
      latitude, longitude, top_k, started_at::text, completed_at::text, failure_code, failure_message_key, created_at::text, \
-     organization_id::text";
+     organization_id::text, external_evidence_status";
 const SEARCH_COLUMNS_SQLITE: &str =
     "id, case_reference, purpose, requested_by, requested_by_name, status, latitude, \
-     longitude, top_k, started_at, completed_at, failure_code, failure_message_key, created_at, organization_id";
+     longitude, top_k, started_at, completed_at, failure_code, failure_message_key, created_at, organization_id, \
+     external_evidence_status";
 
 pub async fn load_search_by_id(
     backend: &DbBackend,
@@ -1480,6 +1516,38 @@ pub async fn mark_queued_search_failed(
             .await
         }
     }
+}
+
+/// Records `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH`'s outcome for a search
+/// that has already finished its biometric phase — see
+/// `search::run_queued_search`. `status_json` is stored as-is (already a
+/// serialized `serde_json::Value`); this function does not itself touch
+/// `searches.status`, only the separate `external_evidence_status` column.
+pub async fn set_search_external_evidence_status(
+    backend: &DbBackend,
+    search_id: &str,
+    status_json: &str,
+) -> Result<(), sqlx::Error> {
+    match backend {
+        DbBackend::Postgres(pool) => {
+            let Ok(search_uuid) = Uuid::parse_str(search_id) else {
+                return Ok(());
+            };
+            sqlx::query("UPDATE searches SET external_evidence_status = $2 WHERE id = $1")
+                .bind(search_uuid)
+                .bind(status_json)
+                .execute(pool)
+                .await?;
+        }
+        DbBackend::Sqlite(pool) => {
+            sqlx::query("UPDATE searches SET external_evidence_status = ?2 WHERE id = ?1")
+                .bind(search_id)
+                .bind(status_json)
+                .execute(pool)
+                .await?;
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, FromRow)]

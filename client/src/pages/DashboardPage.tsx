@@ -227,6 +227,26 @@ export function DashboardPage() {
               })}
             </p>
           )}
+          {activeSearch.externalEvidenceStatus && (
+            <ul className="admin-key-value-list">
+              <li>
+                <span>{t('search.externalEvidence.web')}</span>
+                <span>{t(`osint.status.${activeSearch.externalEvidenceStatus.web}`)}</span>
+              </li>
+              <li>
+                <span>{t('search.externalEvidence.news')}</span>
+                <span>{t(`osint.status.${activeSearch.externalEvidenceStatus.news}`)}</span>
+              </li>
+              <li>
+                <span>{t('search.externalEvidence.social')}</span>
+                <span>{t(`osint.status.${activeSearch.externalEvidenceStatus.social}`)}</span>
+              </li>
+              <li>
+                <span>{t('search.externalEvidence.reverseImage')}</span>
+                <span>{t(`osint.status.${activeSearch.externalEvidenceStatus.reverseImage}`)}</span>
+              </li>
+            </ul>
+          )}
           <div className="admin-user-list">
             {activeCandidatesLoading && <p className="status-card__line">{t('search.candidatesLoading')}</p>}
             {activeCandidatesError && (

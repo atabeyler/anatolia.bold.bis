@@ -258,10 +258,12 @@
       "connectorSlot": {
         "web_search": "بحث الويب",
         "news": "الأخبار",
-        "social": "وسائل التواصل الاجتماعي"
+        "social": "وسائل التواصل الاجتماعي",
+        "reverse_image": "البحث العكسي بالصورة"
       },
       "connectorMock": "تجريبي",
       "connectorReal": "مباشر",
+      "connectorNotConfigured": "غير مُهيَّأ",
       "uptime": "مدة التشغيل",
       "uptimeSeconds": "{{count}} ثانية",
       "dbPool": "تجمع قاعدة البيانات",
@@ -306,6 +308,12 @@
     "createError": "تعذّر بدء البحث.",
     "location": "موقع المشغّل وقت البحث: {{lat}} · {{lon}}",
     "mockNotice": "وضع تجريبي: يستخدم هذا النشر محرك مطابقة وهمي — النتائج محاكاة وليست مستمدة من مطابقة بيومترية حقيقية.",
+    "externalEvidence": {
+      "web": "الويب",
+      "news": "الأخبار",
+      "social": "وسائل التواصل الاجتماعي",
+      "reverseImage": "البحث العكسي بالصورة"
+    },
     "viewOnlyNotice": "يسمح دورك بعرض عمليات البحث والمرشحين فقط. يتطلب بدء بحث جديد دور OPERATOR أو REVIEWER أو SECURITY_ADMIN أو SYSTEM_ADMIN.",
     "evidenceCount": "تم جمع {{count}} من عناصر الأدلة"
   },
@@ -358,7 +366,24 @@
       "queryPlaceholder": "استعلام البحث (مثل الاسم الكامل)",
       "collect": "جمع الأدلة",
       "providerErrors": "فشل بعض المزودين: {{providers}}",
-      "empty": "لم يتم جمع أي أدلة بعد."
+      "empty": "لم يتم جمع أي أدلة بعد.",
+      "group": {
+        "web": "الويب ({{count}})",
+        "news": "الأخبار ({{count}})",
+        "social": "التواصل الاجتماعي المصرَّح به ({{count}})",
+        "reverseImage": "البحث العكسي بالصورة ({{count}})"
+      }
+    },
+    "status": {
+      "queued": "قيد الانتظار",
+      "running": "قيد التشغيل",
+      "completed": "مكتمل",
+      "partial": "جزئي",
+      "failed": "فشل",
+      "rateLimited": "تم تجاوز حد المعدل",
+      "unavailable": "غير متاح",
+      "not_configured": "غير مُهيَّأ",
+      "mock": "تجريبي"
     },
     "entityGraph": {
       "valuePlaceholder": "القيمة",

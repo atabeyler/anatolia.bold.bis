@@ -28,21 +28,29 @@ trail with an on-demand integrity check.
 Biometric search runs behind a `BiometricProvider` trait: a deterministic
 mock implementation by default, and a real, non-mock ONNX-based
 implementation (YuNet detection + SFace embedding) opt-in via
-`BIOMETRIC_PROVIDER=onnx` and the `onnx-provider` Cargo feature — not yet
-exercised as a live production deployment, see
-`docs/ENTERPRISE_DEPLOYMENT.md`. Vector search runs a correct in-memory
-scan everywhere, plus a native `pgvector`-indexed path on PostgreSQL when
-the extension is available.
+`BIOMETRIC_PROVIDER=onnx` and the `onnx-provider` Cargo feature. Vector
+search runs a correct in-memory scan everywhere, plus a native
+`pgvector`-indexed path on PostgreSQL when the extension is available.
 
 OSINT/evidence collection has real (non-mock) web-search and news
 connectors, independently enabled per API key; conservative entity
 resolution and a candidate-centric entity graph (aliases, usernames,
 organizations, websites) surface possible duplicates and related
 identifiers, both advisory-only, editable from a per-candidate OSINT
-workspace in the frontend. Administration covers user management,
-organization/unit management, and system diagnostics (readiness,
-calibrated biometric thresholds, OSINT connector status, an on-demand
-audit-integrity check) in a tabbed admin panel.
+workspace in the frontend. A completed biometric search can automatically
+trigger web/news evidence collection against its top-scoring candidates
+(`AUTO_OSINT_AFTER_BIOMETRIC_SEARCH`, off by default — see
+`docs/ENVIRONMENT.md`); it never runs the social slot or any
+reverse-image capability, both of which stay `NOT CONFIGURED` in this
+codebase (no real implementation of either exists — see
+`docs/ENTERPRISE_DEPLOYMENT.md`) rather than being simulated. Biometric
+similarity and OSINT evidence are always reported as separate signals,
+never combined into a single identity-confidence score — the final
+identity decision stays a human reviewer's, recorded through the existing
+confirm/reject/inconclusive review workflow. Administration covers user
+management, organization/unit management, and system diagnostics
+(readiness, calibrated biometric thresholds, OSINT connector status, an
+on-demand audit-integrity check) in a tabbed admin panel.
 
 Not yet implemented: occlusion detection (no reliable heuristic exists
 without a trained model), a real `AuthorizedSocialProvider` (every

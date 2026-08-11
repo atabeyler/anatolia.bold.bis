@@ -75,16 +75,29 @@ async fn admin_can_list_connector_status_and_others_cannot() {
     // AppState::for_tests() always wires the mock orchestrator (no API
     // keys set in the test environment), so every slot should report
     // its mock provider — a real assertion on this test's actual state,
-    // not just "the endpoint responds".
-    assert_eq!(items.len(), 3, "web_search, news, and social slots");
+    // not just "the endpoint responds". `reverse_image` is the one
+    // exception: no provider for it exists in this codebase at all (see
+    // `ReverseImageSearchProvider`'s doc comment), so it always reports
+    // the fixed "not-configured" placeholder rather than a mock one.
+    assert_eq!(
+        items.len(),
+        4,
+        "web_search, news, social, and reverse_image slots"
+    );
     for item in items {
-        assert_eq!(item["isMock"], true);
-        assert!(item["providerName"].as_str().unwrap().starts_with("mock-"));
+        if item["slot"] == "reverse_image" {
+            assert_eq!(item["isMock"], false);
+            assert_eq!(item["providerName"], "not-configured");
+        } else {
+            assert_eq!(item["isMock"], true);
+            assert!(item["providerName"].as_str().unwrap().starts_with("mock-"));
+        }
     }
     let slots: Vec<&str> = items.iter().map(|i| i["slot"].as_str().unwrap()).collect();
     assert!(slots.contains(&"web_search"));
     assert!(slots.contains(&"news"));
     assert!(slots.contains(&"social"));
+    assert!(slots.contains(&"reverse_image"));
 
     // No auth at all — must not leak connector configuration.
     let response = app

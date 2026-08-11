@@ -258,10 +258,12 @@
       "connectorSlot": {
         "web_search": "Web search",
         "news": "News",
-        "social": "Social"
+        "social": "Social",
+        "reverse_image": "Reverse image"
       },
       "connectorMock": "mock",
       "connectorReal": "live",
+      "connectorNotConfigured": "not configured",
       "uptime": "Uptime",
       "uptimeSeconds": "{{count}} seconds",
       "dbPool": "Database pool",
@@ -306,6 +308,12 @@
     "createError": "Failed to start search.",
     "location": "Operator location at time of search: {{lat}} · {{lon}}",
     "mockNotice": "Demo mode: this deployment uses a mock matching engine — scores are simulated, not derived from real biometric matching.",
+    "externalEvidence": {
+      "web": "Web",
+      "news": "News",
+      "social": "Social",
+      "reverseImage": "Reverse image"
+    },
     "viewOnlyNotice": "Your role allows viewing searches and candidates only. Starting a new search requires the OPERATOR, REVIEWER, SECURITY_ADMIN, or SYSTEM_ADMIN role.",
     "evidenceCount": "{{count}} evidence item(s) collected"
   },
@@ -358,7 +366,24 @@
       "queryPlaceholder": "Search query (e.g. full name)",
       "collect": "Collect evidence",
       "providerErrors": "Some providers failed: {{providers}}",
-      "empty": "No evidence collected yet."
+      "empty": "No evidence collected yet.",
+      "group": {
+        "web": "Web ({{count}})",
+        "news": "News ({{count}})",
+        "social": "Authorized social ({{count}})",
+        "reverseImage": "Reverse image ({{count}})"
+      }
+    },
+    "status": {
+      "queued": "Queued",
+      "running": "Running",
+      "completed": "Completed",
+      "partial": "Partial",
+      "failed": "Failed",
+      "rateLimited": "Rate limited",
+      "unavailable": "Unavailable",
+      "not_configured": "Not configured",
+      "mock": "Mock"
     },
     "entityGraph": {
       "valuePlaceholder": "Value",

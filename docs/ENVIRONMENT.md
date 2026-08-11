@@ -76,6 +76,11 @@ Everything else:
 
 | Variable | Description | Required |
 |---|---|---|
+| `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH` | When `true`, a completed biometric search automatically runs web/news OSINT evidence collection against its top-scoring candidates — see `search::run_queued_search`/`run_auto_osint`. Uses whichever web-search/news providers are configured above (real or mock, reported honestly either way — see `GET /api/v1/search/{id}/status`'s `externalEvidenceStatus`). Never touches the `AuthorizedSocialProvider` slot or any reverse-image capability, even when `true` — those stay manual-only (`POST /candidates/{id}/evidence/collect`) or `NOT_CONFIGURED`. Defaults to `false` in every environment, including production — this is an explicit opt-in, not a default behavior change. | No |
+| `OSINT_AUTO_MAX_CANDIDATES` | Upper bound on how many of a search's top-scoring candidates `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH` runs evidence collection against, regardless of the search's own `topK` — prevents a `topK=50` search from firing 50 external provider calls. A non-positive value is ignored (falls back to the default). Defaults to `5`. | No |
+
+| Variable | Description | Required |
+|---|---|---|
 | `PORT` | Port the server listens on. Defaults to `8080` if unset. | No |
 | `ALLOWED_ORIGINS` | Comma-separated list of origins allowed by CORS. The deployed app is single-origin (the backend serves the built frontend itself — see `STATIC_DIR`), so this is normally unset in production; it only matters for local dev when running the frontend's own dev server on a different origin, or for a future cross-origin client (mobile/desktop). If unset, all cross-origin requests are rejected — a deliberate fail-closed default. | No |
 | `STATIC_DIR` | Directory the built frontend (`client/dist`) is served from. Defaults to `../client/dist`, which is where a local `cd server && cargo run` finds it relative to `server/`. Render's single-service deploy (`render.yaml`) sets this to `client/dist` instead, since it builds and runs from the repository root. Any request that doesn't match an API route or an existing static file falls back to `index.html` (SPA routing). | No |

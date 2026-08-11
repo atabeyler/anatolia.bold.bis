@@ -82,6 +82,20 @@ pub mod action {
     pub const CANDIDATE_TEMPLATE_REVOKED: &str = "CANDIDATE_TEMPLATE_REVOKED";
     pub const CANDIDATE_EVIDENCE_COLLECTED: &str = "CANDIDATE_EVIDENCE_COLLECTED";
     pub const CANDIDATE_ENTITY_RELATION_ADDED: &str = "CANDIDATE_ENTITY_RELATION_ADDED";
+
+    // Automatic biometric search -> OSINT trigger
+    // (AUTO_OSINT_AFTER_BIOMETRIC_SEARCH — see search::run_queued_search).
+    pub const OSINT_AUTO_STARTED: &str = "OSINT_AUTO_STARTED";
+    pub const OSINT_AUTO_COMPLETED: &str = "OSINT_AUTO_COMPLETED";
+    pub const OSINT_AUTO_PARTIAL: &str = "OSINT_AUTO_PARTIAL";
+    pub const OSINT_AUTO_FAILED: &str = "OSINT_AUTO_FAILED";
+
+    // Reverse-image search — not emitted by any code path today (no
+    // ReverseImageSearchProvider implementation exists), defined ahead of
+    // time so a future real provider has a stable action name to use.
+    pub const REVERSE_IMAGE_SEARCH_STARTED: &str = "REVERSE_IMAGE_SEARCH_STARTED";
+    pub const REVERSE_IMAGE_SEARCH_COMPLETED: &str = "REVERSE_IMAGE_SEARCH_COMPLETED";
+    pub const REVERSE_IMAGE_SEARCH_FAILED: &str = "REVERSE_IMAGE_SEARCH_FAILED";
 }
 
 pub mod result {

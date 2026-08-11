@@ -455,13 +455,24 @@ never lock itself out of its own administration.
 
 - `GET /api/v1/admin/connectors` —
   read-only status of each OSINT connector slot (`web_search`, `news`,
-  `social`). Response:
+  `social`, `reverse_image`). Response:
   `{ "items": [ { "slot": "web_search", "providerName": "brave-web-search", "isMock": false } ] }`.
   Configuration itself stays environment-variable-based
   (`BRAVE_SEARCH_API_KEY`/`NEWS_API_KEY`, see `docs/ENVIRONMENT.md`), the
   same pattern every other provider toggle in this codebase already uses
   — this endpoint reports which provider ended up active in each slot,
-  it does not accept writes.
+  it does not accept writes. `reverse_image` always reports
+  `{ "providerName": "not-configured", "isMock": false }`: no
+  `ReverseImageSearchProvider` implementation exists in this codebase, so
+  this slot is never real and never mock — see
+  `osint::ReverseImageSearchProvider`'s doc comment. `social` similarly
+  always resolves to `MockSocialProvider` (`isMock: true`) today — there
+  is no real `AuthorizedSocialProvider` implementation either — but stays
+  structurally "mock" rather than "not-configured" since a mock
+  implementation genuinely runs there when asked (manual "Collect
+  Evidence" only); the admin UI displays it as NOT CONFIGURED regardless,
+  since a mock social result must never be presented as if it came from a
+  real platform.
 
 - `GET /api/v1/admin/review/{token}` — HTML approve/reject page linked from
   the admin's registration-notification email (valid 3 days, single-use;
@@ -569,7 +580,7 @@ longer `queued`/`processing`:
     "id": "...", "caseReference": "...", "purpose": "...", "requestedByName": "...",
     "status": "completed", "latitude": 41.0082, "longitude": 28.9784, "topK": 10,
     "startedAt": "...", "completedAt": "...", "failureCode": null, "failureMessageKey": null,
-    "createdAt": "..."
+    "createdAt": "...", "externalEvidenceStatus": null
   },
   "candidates": [
     { "id": "...", "candidateId": "...", "referenceCode": "CAND-0001", "fullName": "...", "score": 0.87, "status": "pending", "reviewedByName": null, "reviewedAt": null }
@@ -580,6 +591,30 @@ longer `queued`/`processing`:
 similarity value in `[0, 1]` — never a match/no-match verdict; see
 "Candidates, not verdicts" in CLAUDE.md. Same view-role and object-level
 authorization as the rest of the search workflow.
+
+**`externalEvidenceStatus`** (`search::run_auto_osint`): `null` unless
+`AUTO_OSINT_AFTER_BIOMETRIC_SEARCH=true` (see `docs/ENVIRONMENT.md`), in
+which case a completed search automatically runs web/news OSINT evidence
+collection against its top `OSINT_AUTO_MAX_CANDIDATES` candidates — using
+the same web-search/news providers as manual evidence collection (real or
+mock, reported honestly) — and stores whatever comes back the same way
+`POST /candidates/{id}/evidence/collect` does. This runs *after* the
+search itself is already `completed`, so a poller can briefly observe
+`completed` with `externalEvidenceStatus: null` before it lands; poll
+again a moment later. Shape once populated:
+
+```json
+{ "web": "completed", "news": "mock", "social": "not_configured", "reverseImage": "not_configured" }
+```
+
+Each value is one of `completed`, `partial`, `failed`, `mock`,
+`unavailable`, `not_configured`. `social` and `reverseImage` are always
+`not_configured`: the automatic trigger never runs the
+`AuthorizedSocialProvider` slot (see the Evidence section below) or any
+reverse-image capability (no implementation of either exists in this
+codebase), regardless of configuration — only a human explicitly clicking
+"Collect Evidence" ever includes the social slot. A provider failure here
+never fails the search itself or changes `search.status`.
 
 A search that fails ends up `status: "failed"` with `failureCode`/
 `failureMessageKey` set, rather than an HTTP error — there's no HTTP
@@ -803,6 +838,20 @@ relation (see "Entity graph" below).
 match/no-match verdict; a human reviewer decides what evidence means, same
 "candidates, not verdicts" principle as biometric scores.
 
+Persisting is deduplicated per candidate — by `(providerName,
+normalizedUrl)` when an item has a URL, or `(providerName, title)`
+otherwise — against every evidence item already stored for that
+candidate, not just ones from the same request. Re-submitting the same
+query (or the automatic trigger below re-collecting against a candidate
+it already has evidence for) does not insert duplicate rows;
+`items`/`providerErrors` still reflect what this call actually did, but a
+duplicate simply isn't added a second time. This route and the automatic
+`AUTO_OSINT_AFTER_BIOMETRIC_SEARCH` trigger described under
+`GET /api/v1/search/{search_id}/status` both go through the same
+`evidence::collect_and_store_candidate_evidence` service — there is only
+one place evidence collection is turned into stored rows, whichever
+triggered it.
+
 #### `GET /api/v1/candidates/{candidate_id}/evidence`
 
 Every evidence item ever collected for this candidate, newest first.
@@ -810,6 +859,9 @@ Available to anyone who can view search results
 (`permission::can_view_search`), not just `can_manage_candidates`.
 
 **`200 OK`**: `{ "items": [ <evidence item, same shape as above> ] }`.
+`sourceType` is one of `web_search`, `news`, `social` — the real values
+this codebase's providers actually produce (`reverse_image` does not
+appear on any stored item, since no provider produces it).
 
 ### Entity resolution
 

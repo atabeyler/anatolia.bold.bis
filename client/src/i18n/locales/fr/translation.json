@@ -258,10 +258,12 @@
       "connectorSlot": {
         "web_search": "Recherche web",
         "news": "Actualités",
-        "social": "Réseaux sociaux"
+        "social": "Réseaux sociaux",
+        "reverse_image": "Recherche d'image inversée"
       },
       "connectorMock": "simulé",
       "connectorReal": "en direct",
+      "connectorNotConfigured": "non configuré",
       "uptime": "Disponibilité",
       "uptimeSeconds": "{{count}} secondes",
       "dbPool": "Pool de base de données",
@@ -306,6 +308,12 @@
     "createError": "Échec du démarrage de la recherche.",
     "location": "Position de l'opérateur au moment de la recherche : {{lat}} · {{lon}}",
     "mockNotice": "Mode démo : ce déploiement utilise un moteur de correspondance simulé — les scores sont simulés, pas issus d'une correspondance biométrique réelle.",
+    "externalEvidence": {
+      "web": "Web",
+      "news": "Actualités",
+      "social": "Réseaux sociaux",
+      "reverseImage": "Image inversée"
+    },
     "viewOnlyNotice": "Votre rôle permet uniquement de consulter les recherches et les candidats. Démarrer une nouvelle recherche requiert le rôle OPERATOR, REVIEWER, SECURITY_ADMIN ou SYSTEM_ADMIN.",
     "evidenceCount": "{{count}} élément(s) de preuve collecté(s)"
   },
@@ -358,7 +366,24 @@
       "queryPlaceholder": "Requête de recherche (ex. nom complet)",
       "collect": "Collecter des preuves",
       "providerErrors": "Certains fournisseurs ont échoué : {{providers}}",
-      "empty": "Aucune preuve collectée pour le moment."
+      "empty": "Aucune preuve collectée pour le moment.",
+      "group": {
+        "web": "Web ({{count}})",
+        "news": "Actualités ({{count}})",
+        "social": "Réseaux sociaux autorisés ({{count}})",
+        "reverseImage": "Image inversée ({{count}})"
+      }
+    },
+    "status": {
+      "queued": "En file d'attente",
+      "running": "En cours",
+      "completed": "Terminé",
+      "partial": "Partiel",
+      "failed": "Échoué",
+      "rateLimited": "Limite de débit atteinte",
+      "unavailable": "Indisponible",
+      "not_configured": "Non configuré",
+      "mock": "Simulé"
     },
     "entityGraph": {
       "valuePlaceholder": "Valeur",

@@ -20,6 +20,7 @@
 pub mod currents;
 pub mod mock;
 pub mod news;
+pub mod query_builder;
 pub mod resilience;
 pub mod tavily;
 pub mod websearch;
@@ -94,6 +95,27 @@ pub trait NewsProvider: Send + Sync {
 pub trait AuthorizedSocialProvider: Send + Sync {
     fn name(&self) -> &'static str;
     async fn search(&self, query: &str) -> Result<Vec<EvidenceItem>, OsintError>;
+}
+
+/// A genuine photo-to-internet-image match — distinct from
+/// `WebSearchProvider`/`NewsProvider`, which query a *text* string, never
+/// the probe image itself. No implementation of this trait exists in this
+/// codebase today (no authorized reverse-image API is configured in this
+/// environment); `EvidenceOrchestrator` never registers one, and never
+/// fabricates a result under this capability's name — see
+/// `EvidenceOrchestrator::provider_status`, which always reports the
+/// `reverse_image` slot as `"not-configured"`. Kept as an interface so a
+/// real implementation (e.g. an authorized reverse-image search API) can
+/// be added behind it later without changing any caller.
+#[async_trait]
+pub trait ReverseImageSearchProvider: Send + Sync {
+    fn name(&self) -> &'static str;
+    async fn search_by_image(&self, image_bytes: &[u8]) -> Result<Vec<EvidenceItem>, OsintError>;
+    /// Optional alternative entry point for a provider whose API takes an
+    /// already-hosted image URL rather than raw bytes. Providers that only
+    /// support one form return `OsintError::ProviderUnavailable` from
+    /// whichever method they don't implement.
+    async fn search_by_image_url(&self, image_url: &str) -> Result<Vec<EvidenceItem>, OsintError>;
 }
 
 /// Which named sources are currently enabled for evidence collection.
@@ -249,6 +271,15 @@ impl EvidenceOrchestrator {
         for provider in &self.social {
             statuses.push(ConnectorStatus::new("social", provider.name()));
         }
+        // No `ReverseImageSearchProvider` is ever registered (see its doc
+        // comment) — this slot always reports the same fixed,
+        // never-mock, never-real placeholder rather than being silently
+        // absent from the list.
+        statuses.push(ConnectorStatus {
+            slot: "reverse_image",
+            provider_name: "not-configured",
+            is_mock: false,
+        });
         statuses
     }
 
@@ -267,6 +298,33 @@ impl EvidenceOrchestrator {
             outcomes.push(run_provider(provider.name(), provider.search(query).await));
         }
         outcomes
+    }
+
+    /// Like `collect`, but deliberately narrower: web search and news
+    /// only, never the `AuthorizedSocialProvider` slot. This is what
+    /// `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH` runs — an automatic,
+    /// unattended trigger inserting mock "social media" evidence with no
+    /// human ever choosing to collect it is exactly the deceptive result
+    /// this codebase's OSINT design otherwise goes out of its way to
+    /// avoid (see `AuthorizedSocialProvider`'s doc comment). The manual
+    /// `POST /candidates/{id}/evidence/collect` endpoint still uses
+    /// `collect` and so still includes the social slot, unchanged.
+    /// Returns `(web_outcomes, news_outcomes)` rather than one flat `Vec`
+    /// so a caller can attribute each outcome to its category without
+    /// relying on list-position assumptions.
+    pub async fn collect_web_and_news(
+        &self,
+        query: &str,
+    ) -> (Vec<ProviderOutcome>, Vec<ProviderOutcome>) {
+        let mut web = Vec::new();
+        for provider in &self.web_search {
+            web.push(run_provider(provider.name(), provider.search(query).await));
+        }
+        let mut news = Vec::new();
+        for provider in &self.news {
+            news.push(run_provider(provider.name(), provider.search(query).await));
+        }
+        (web, news)
     }
 }
 

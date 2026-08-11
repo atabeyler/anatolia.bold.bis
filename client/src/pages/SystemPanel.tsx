@@ -134,16 +134,28 @@ export function SystemPanel() {
         )}
         {connectors && connectors.length > 0 && (
           <ul className="admin-key-value-list">
-            {connectors.map((connector) => (
-              <li key={connector.slot}>
-                <span>{t(`admin.system.connectorSlot.${connector.slot}`)}</span>
-                <span>
-                  {connector.providerName}
-                  {' · '}
-                  {connector.isMock ? t('admin.system.connectorMock') : t('admin.system.connectorReal')}
-                </span>
-              </li>
-            ))}
+            {connectors.map((connector) => {
+              // `social`/`reverse_image` never have a real implementation
+              // in this codebase (see `osint::AuthorizedSocialProvider`/
+              // `ReverseImageSearchProvider`'s doc comments) — reported
+              // as NOT CONFIGURED regardless of `isMock`, rather than as
+              // MOCK (which would visually read as "a fake but working
+              // feature") or, worse, REAL.
+              const isUnimplementedSlot = connector.slot === 'social' || connector.slot === 'reverse_image';
+              const statusLabel = isUnimplementedSlot
+                ? t('admin.system.connectorNotConfigured')
+                : connector.isMock
+                  ? t('admin.system.connectorMock')
+                  : t('admin.system.connectorReal');
+              return (
+                <li key={connector.slot}>
+                  <span>{t(`admin.system.connectorSlot.${connector.slot}`)}</span>
+                  <span>
+                    {isUnimplementedSlot ? statusLabel : `${connector.providerName} · ${statusLabel}`}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

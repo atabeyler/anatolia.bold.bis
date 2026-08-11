@@ -258,10 +258,12 @@
       "connectorSlot": {
         "web_search": "Веб-поиск",
         "news": "Новости",
-        "social": "Соцсети"
+        "social": "Соцсети",
+        "reverse_image": "Поиск по изображению"
       },
       "connectorMock": "заглушка",
       "connectorReal": "реальный",
+      "connectorNotConfigured": "не настроено",
       "uptime": "Время работы",
       "uptimeSeconds": "{{count}} сек.",
       "dbPool": "Пул базы данных",
@@ -306,6 +308,12 @@
     "createError": "Не удалось запустить поиск.",
     "location": "Местоположение оператора во время поиска: {{lat}} · {{lon}}",
     "mockNotice": "Демо-режим: в этом развёртывании используется имитационный движок сопоставления — оценки смоделированы, а не получены из реального биометрического сравнения.",
+    "externalEvidence": {
+      "web": "Веб",
+      "news": "Новости",
+      "social": "Соцсети",
+      "reverseImage": "Поиск по изображению"
+    },
     "viewOnlyNotice": "Ваша роль позволяет только просматривать поиски и кандидатов. Для запуска нового поиска требуется роль OPERATOR, REVIEWER, SECURITY_ADMIN или SYSTEM_ADMIN.",
     "evidenceCount": "Собрано доказательств: {{count}}"
   },
@@ -358,7 +366,24 @@
       "queryPlaceholder": "Поисковый запрос (напр. полное имя)",
       "collect": "Собрать доказательства",
       "providerErrors": "Некоторые провайдеры не сработали: {{providers}}",
-      "empty": "Доказательства пока не собраны."
+      "empty": "Доказательства пока не собраны.",
+      "group": {
+        "web": "Веб ({{count}})",
+        "news": "Новости ({{count}})",
+        "social": "Авторизованные соцсети ({{count}})",
+        "reverseImage": "Поиск по изображению ({{count}})"
+      }
+    },
+    "status": {
+      "queued": "В очереди",
+      "running": "Выполняется",
+      "completed": "Завершено",
+      "partial": "Частично",
+      "failed": "Ошибка",
+      "rateLimited": "Превышен лимит запросов",
+      "unavailable": "Недоступно",
+      "not_configured": "Не настроено",
+      "mock": "Заглушка"
     },
     "entityGraph": {
       "valuePlaceholder": "Значение",

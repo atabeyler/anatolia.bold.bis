@@ -258,10 +258,12 @@
       "connectorSlot": {
         "web_search": "Websuche",
         "news": "Nachrichten",
-        "social": "Soziale Medien"
+        "social": "Soziale Medien",
+        "reverse_image": "Rückwärtsbildsuche"
       },
       "connectorMock": "simuliert",
       "connectorReal": "live",
+      "connectorNotConfigured": "nicht konfiguriert",
       "uptime": "Betriebszeit",
       "uptimeSeconds": "{{count}} Sekunden",
       "dbPool": "Datenbank-Pool",
@@ -306,6 +308,12 @@
     "createError": "Suche konnte nicht gestartet werden.",
     "location": "Standort des Operators bei der Suche: {{lat}} · {{lon}}",
     "mockNotice": "Demo-Modus: Diese Instanz verwendet eine simulierte Abgleich-Engine — die Werte sind simuliert, nicht aus echtem biometrischem Abgleich abgeleitet.",
+    "externalEvidence": {
+      "web": "Web",
+      "news": "Nachrichten",
+      "social": "Soziale Medien",
+      "reverseImage": "Rückwärtsbildsuche"
+    },
     "viewOnlyNotice": "Ihre Rolle erlaubt nur das Ansehen von Suchen und Kandidaten. Für eine neue Suche ist die Rolle OPERATOR, REVIEWER, SECURITY_ADMIN oder SYSTEM_ADMIN erforderlich.",
     "evidenceCount": "{{count}} Beweismittel gesammelt"
   },
@@ -358,7 +366,24 @@
       "queryPlaceholder": "Suchanfrage (z. B. vollständiger Name)",
       "collect": "Beweise sammeln",
       "providerErrors": "Einige Anbieter sind fehlgeschlagen: {{providers}}",
-      "empty": "Noch keine Beweise gesammelt."
+      "empty": "Noch keine Beweise gesammelt.",
+      "group": {
+        "web": "Web ({{count}})",
+        "news": "Nachrichten ({{count}})",
+        "social": "Autorisierte soziale Medien ({{count}})",
+        "reverseImage": "Rückwärtsbildsuche ({{count}})"
+      }
+    },
+    "status": {
+      "queued": "In Warteschlange",
+      "running": "Läuft",
+      "completed": "Abgeschlossen",
+      "partial": "Teilweise",
+      "failed": "Fehlgeschlagen",
+      "rateLimited": "Rate-Limit erreicht",
+      "unavailable": "Nicht verfügbar",
+      "not_configured": "Nicht konfiguriert",
+      "mock": "Simuliert"
     },
     "entityGraph": {
       "valuePlaceholder": "Wert",

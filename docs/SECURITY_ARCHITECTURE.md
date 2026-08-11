@@ -384,7 +384,48 @@ what these controls defend against.
     faked stand-in): reverse image search, a real
     `AuthorizedSocialProvider`, and per-connector rate-limit
     *configuration* (status is read-only; there is no runtime-tunable
-    rate limit to change today).
+    rate limit to change today). `osint::ReverseImageSearchProvider` (a
+    `search_by_image`/`search_by_image_url` trait) exists as an interface
+    for the former, so a real implementation can slot in later without
+    changing any caller — but nothing implements it, and
+    `EvidenceOrchestrator` never fabricates a result under its name;
+    `GET /api/v1/admin/connectors`'s `reverse_image` slot always reports
+    `not-configured`.
+- **Automatic biometric search → OSINT trigger**
+  (`AUTO_OSINT_AFTER_BIOMETRIC_SEARCH`, `search::run_auto_osint`): when
+  enabled (off by default, including in production — an explicit opt-in),
+  a completed biometric search automatically runs web/news evidence
+  collection against its top `OSINT_AUTO_MAX_CANDIDATES` candidates (a
+  hard cap independent of the search's own `topK`, so a `topK=50` search
+  cannot fire 50 external provider calls). Three deliberate constraints
+  keep this from becoming the kind of overclaiming/deceptive automation
+  CLAUDE.md's "candidates, not verdicts" principle exists to prevent:
+  - **Never the social or reverse-image slots.** Only
+    `EvidenceOrchestrator::collect_web_and_news` runs automatically —
+    never `AuthorizedSocialProvider` (mock-only today) or any
+    reverse-image capability (nonexistent). An unattended process
+    inserting mock "social media" evidence with no human ever choosing to
+    collect it is exactly the misleading result this design otherwise
+    goes out of its way to avoid; those two slots stay behind the
+    existing manual `POST /candidates/{id}/evidence/collect` button,
+    where a human operator sees and chooses the query and, in the
+    frontend, sees the provider honestly labeled MOCK/NOT CONFIGURED.
+  - **Minimal query, not the whole candidate record.**
+    `osint::query_builder::build_query` sends only the candidate's
+    (trimmed, non-empty) full name to external providers — never the
+    internal candidate id, reference code, notes, national ID, a
+    biometric embedding, or any other internal/sensitive field, matching
+    the same least-privilege posture CLAUDE.md applies to inbound access
+    control, applied here to outbound queries instead.
+  - **Biometric and OSINT results never merge into one score.** The
+    search response carries `externalEvidenceStatus` as a sibling of the
+    biometric `candidates` array, not a modifier of `score` — a search
+    with `web: "failed"` still shows its biometric similarity scores
+    exactly as if OSINT had never run, and nothing in this codebase
+    computes a combined "identity confidence" from the two. Every outcome
+    (`OSINT_AUTO_STARTED`/`_COMPLETED`/`_PARTIAL`/`_FAILED`) is recorded
+    to the audit trail with `searchId`/`candidateCount`, never the raw
+    query text or a biometric embedding.
 - **Entity graph** (`server/src/db/entity_graph.rs`,
   `server/src/entity_graph.rs`):
   candidate-centric relations to aliases, usernames, organizations, and

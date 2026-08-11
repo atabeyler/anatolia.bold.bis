@@ -10,15 +10,30 @@ use crate::auth::{auth_user_from_headers, require_role, Claims};
 use crate::db::{
     create_queued_search, finalize_queued_search, list_search_candidates, list_searches_page,
     list_verification_events, load_candidate_by_id, load_search_by_id, load_user_by_id,
-    mark_queued_search_failed, record_review_decision, AppState, CandidateRow,
-    ReviewDecisionOutcome, SearchCandidateRow, SearchRow, VerificationEventRow,
+    mark_queued_search_failed, record_review_decision, set_search_external_evidence_status,
+    AppState, CandidateRow, ReviewDecisionOutcome, SearchCandidateRow, SearchRow,
+    VerificationEventRow,
 };
 use crate::error::{request_id, ApiError};
+use crate::evidence::collect_and_store_candidate_evidence;
+use crate::osint::query_builder;
 use crate::permission;
 
 const DEFAULT_PAGE_SIZE: i64 = 50;
 
 fn search_json(search: &SearchRow) -> serde_json::Value {
+    // `external_evidence_status` is stored as an opaque, already-shaped
+    // JSON string (see `search::run_auto_osint`) — parsed back into a
+    // value here rather than re-serialized field by field. `null` (not
+    // an object with all-"not_configured" slots) is the honest
+    // representation of "automatic OSINT hasn't reported an outcome for
+    // this search yet" — either the feature is off, or its background
+    // work (which runs after the search itself is marked `completed`)
+    // just hasn't finished.
+    let external_evidence_status = search
+        .external_evidence_status
+        .as_deref()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok());
     json!({
         "id": search.id,
         "caseReference": search.case_reference,
@@ -34,6 +49,7 @@ fn search_json(search: &SearchRow) -> serde_json::Value {
         "failureMessageKey": search.failure_message_key,
         "createdAt": search.created_at,
         "organizationId": search.organization_id,
+        "externalEvidenceStatus": external_evidence_status,
     })
 }
 
@@ -321,6 +337,14 @@ async fn run_queued_search(
                     "errors.auditWriteFailed",
                 )
                 .await;
+            } else {
+                // Runs after the search itself is already `completed` —
+                // see this function's doc comment and `run_auto_osint`'s.
+                // A failure anywhere in here must never change the
+                // search's own status; it only ever writes the separate
+                // `external_evidence_status` field and its own audit
+                // trail.
+                run_auto_osint(&state, &search, &claims, &headers).await;
             }
         }
         Ok(None) => {
@@ -343,6 +367,184 @@ async fn run_queued_search(
                 .save(&state)
                 .await;
         }
+    }
+}
+
+/// `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH`'s entry point — runs once a search
+/// has finished its biometric phase and is already `completed`. Takes the
+/// search's top-scoring candidates (capped at `osint_auto_max_candidates`),
+/// builds a query from each candidate's full name
+/// (`osint::query_builder::build_query`), and runs `collect_web_and_news`
+/// against it — deliberately never the `AuthorizedSocialProvider` or any
+/// reverse-image capability (see `EvidenceOrchestrator::collect_web_and_news`'s
+/// doc comment). Every candidate's collection runs concurrently so total
+/// wall-clock time stays close to one candidate's worth of provider
+/// round-trips rather than the sum across all of them. A provider error
+/// never touches `search.status` — only the separate
+/// `external_evidence_status` column and the `OSINT_AUTO_*` audit trail.
+async fn run_auto_osint(
+    state: &AppState,
+    search: &SearchRow,
+    claims: &Claims,
+    headers: &HeaderMap,
+) {
+    if !state.auto_osint_after_biometric_search {
+        return;
+    }
+    let candidates = match list_search_candidates(&state.backend, &search.id).await {
+        Ok(rows) => rows,
+        Err(err) => {
+            tracing::warn!(error = %err, search_id = %search.id, "auto-OSINT: failed to load search candidates");
+            return;
+        }
+    };
+    let cap = state.osint_auto_max_candidates.max(0) as usize;
+    let eligible: Vec<SearchCandidateRow> = candidates.into_iter().take(cap).collect();
+
+    let auto_rid = uuid::Uuid::new_v4().to_string();
+    AuditRecorder::new(
+        action::OSINT_AUTO_STARTED,
+        audit_result::SUCCESS,
+        auto_rid.clone(),
+    )
+    .actor(claims)
+    .headers(headers)
+    .resource("search", &search.id)
+    .metadata(json!({ "candidateCount": eligible.len() }))
+    .save(state)
+    .await;
+
+    if eligible.is_empty() {
+        let status = json!({
+            "web": "unavailable",
+            "news": "unavailable",
+            "social": "not_configured",
+            "reverseImage": "not_configured",
+        });
+        let _ =
+            set_search_external_evidence_status(&state.backend, &search.id, &status.to_string())
+                .await;
+        AuditRecorder::new(action::OSINT_AUTO_FAILED, audit_result::FAILURE, auto_rid)
+            .actor(claims)
+            .headers(headers)
+            .resource("search", &search.id)
+            .metadata(json!({ "reason": "no_eligible_candidates" }))
+            .save(state)
+            .await;
+        return;
+    }
+
+    let mut handles = Vec::with_capacity(eligible.len());
+    for candidate in eligible {
+        let Some(query) = query_builder::build_query(&candidate.candidate_full_name) else {
+            continue;
+        };
+        let task_state = state.clone();
+        let candidate_id = candidate.candidate_id;
+        let collected_by = claims.id.clone();
+        handles.push(tokio::spawn(async move {
+            let (web, news) = task_state
+                .osint_orchestrator
+                .collect_web_and_news(&query)
+                .await;
+            let web_success = web.iter().filter(|o| o.error.is_none()).count();
+            let web_fail = web.len() - web_success;
+            let news_success = news.iter().filter(|o| o.error.is_none()).count();
+            let news_fail = news.len() - news_success;
+            let mut outcomes = web;
+            outcomes.extend(news);
+            let result = collect_and_store_candidate_evidence(
+                &task_state,
+                &candidate_id,
+                Some(&collected_by),
+                &outcomes,
+            )
+            .await;
+            (web_success, web_fail, news_success, news_fail, result)
+        }));
+    }
+
+    let (mut web_success, mut web_fail, mut news_success, mut news_fail) = (0, 0, 0, 0);
+    let mut any_stored = false;
+    let mut any_provider_error = false;
+    for handle in handles {
+        let Ok((ws, wf, ns, nf, result)) = handle.await else {
+            continue;
+        };
+        web_success += ws;
+        web_fail += wf;
+        news_success += ns;
+        news_fail += nf;
+        any_stored = any_stored || !result.stored.is_empty();
+        any_provider_error = any_provider_error || !result.provider_errors.is_empty();
+    }
+
+    let (web_is_mock, news_is_mock) = provider_mock_flags(state);
+    let status = json!({
+        "web": slot_status(web_is_mock, web_success, web_fail),
+        "news": slot_status(news_is_mock, news_success, news_fail),
+        // Never attempted by the automatic trigger — see this function's
+        // doc comment.
+        "social": "not_configured",
+        "reverseImage": "not_configured",
+    });
+    let _ =
+        set_search_external_evidence_status(&state.backend, &search.id, &status.to_string()).await;
+
+    let outcome_action = if any_provider_error {
+        action::OSINT_AUTO_PARTIAL
+    } else {
+        action::OSINT_AUTO_COMPLETED
+    };
+    let outcome_result = if any_provider_error {
+        audit_result::FAILURE
+    } else {
+        audit_result::SUCCESS
+    };
+    AuditRecorder::new(
+        outcome_action,
+        outcome_result,
+        uuid::Uuid::new_v4().to_string(),
+    )
+    .actor(claims)
+    .headers(headers)
+    .resource("search", &search.id)
+    .metadata(json!({ "webStored": any_stored, "status": status }))
+    .save(state)
+    .await;
+}
+
+/// Real (non-mock) or mock, for the web-search and news provider slots
+/// respectively — read once from the orchestrator's own status reporting
+/// rather than re-deriving it from a provider name string.
+fn provider_mock_flags(state: &AppState) -> (bool, bool) {
+    let mut web_is_mock = false;
+    let mut news_is_mock = false;
+    for status in state.osint_orchestrator.provider_status() {
+        match status.slot {
+            "web_search" => web_is_mock = status.is_mock,
+            "news" => news_is_mock = status.is_mock,
+            _ => {}
+        }
+    }
+    (web_is_mock, news_is_mock)
+}
+
+/// A provider slot's status for one automatic-OSINT run: `"mock"` if the
+/// slot is running its mock fallback (regardless of outcome — a mock
+/// result is never "completed" real evidence); otherwise `"completed"`,
+/// `"partial"`, or `"failed"` depending on how many of the (possibly
+/// several, one per attempted candidate) calls to it errored.
+fn slot_status(is_mock: bool, success: usize, fail: usize) -> &'static str {
+    if is_mock {
+        return "mock";
+    }
+    if fail == 0 {
+        "completed"
+    } else if success == 0 {
+        "failed"
+    } else {
+        "partial"
     }
 }
 
