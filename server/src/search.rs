@@ -469,6 +469,57 @@ async fn run_auto_osint(
         any_provider_error = any_provider_error || !result.provider_errors.is_empty();
     }
 
+    // If the internal repository produced no candidate, use only public
+    // page context returned by reverse-image discovery to expand the search.
+    // Internal case fields and operator metadata are never sent to these
+    // providers.
+    if eligible_count == 0 && !external_items.is_empty() {
+        let mut seen_queries = std::collections::HashSet::new();
+        let mut context_queries = Vec::new();
+        for outcome in &reverse_outcomes {
+            for item in &outcome.items {
+                if let Some(query) =
+                    query_builder::build_reverse_context_query(&item.title, item.snippet.as_deref())
+                {
+                    if seen_queries.insert(query.clone()) {
+                        context_queries.push(query);
+                    }
+                }
+            }
+        }
+
+        for query in context_queries.into_iter().take(3) {
+            let (web, news) = state.osint_orchestrator.collect_web_and_news(&query).await;
+            let ws = web.iter().filter(|outcome| outcome.error.is_none()).count();
+            let wf = web.len().saturating_sub(ws);
+            let ns = news
+                .iter()
+                .filter(|outcome| outcome.error.is_none())
+                .count();
+            let nf = news.len().saturating_sub(ns);
+            web_success += ws;
+            web_fail += wf;
+            news_success += ns;
+            news_fail += nf;
+            any_provider_error = any_provider_error
+                || web.iter().any(|outcome| outcome.error.is_some())
+                || news.iter().any(|outcome| outcome.error.is_some());
+
+            for outcome in web.iter().chain(news.iter()) {
+                for item in &outcome.items {
+                    external_items.push(json!({
+                        "sourceType": item.source_type,
+                        "providerName": item.provider_name,
+                        "title": item.title,
+                        "url": item.url,
+                        "snippet": item.snippet,
+                        "confidenceScore": item.confidence,
+                    }));
+                }
+            }
+        }
+    }
+
     let statuses = state.osint_orchestrator.provider_status();
     let web_is_mock = statuses
         .iter()
@@ -480,7 +531,7 @@ async fn run_auto_osint(
         .iter()
         .any(|status| status.slot == "reverse_image" && status.provider_name != "not-configured");
 
-    let web_status = if eligible_count == 0 {
+    let web_status = if eligible_count == 0 && web_success + web_fail == 0 {
         if web_is_mock {
             "mock"
         } else {
@@ -489,7 +540,7 @@ async fn run_auto_osint(
     } else {
         slot_status(web_is_mock, web_success, web_fail)
     };
-    let news_status = if eligible_count == 0 {
+    let news_status = if eligible_count == 0 && news_success + news_fail == 0 {
         if news_is_mock {
             "mock"
         } else {

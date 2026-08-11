@@ -77,6 +77,8 @@ Everything else:
 | Variable | Description | Required |
 |---|---|---|
 | `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH` | When `true`, a completed biometric search automatically runs web/news OSINT evidence collection against its top-scoring candidates — see `search::run_queued_search`/`run_auto_osint`. Uses whichever web-search/news providers are configured above (real or mock, reported honestly either way — see `GET /api/v1/search/{id}/status`'s `externalEvidenceStatus`). Never touches the `AuthorizedSocialProvider` slot or any reverse-image capability, even when `true` — those stay manual-only (`POST /candidates/{id}/evidence/collect`) or `NOT_CONFIGURED`. Defaults to `false` in every environment, including production — this is an explicit opt-in, not a default behavior change. | No |
+
+Reverse-image matches can also seed Tavily/Currents with public page context when the internal biometric repository returns no candidate; case metadata is never used as an external query.
 | `OSINT_AUTO_MAX_CANDIDATES` | Upper bound on how many of a search's top-scoring candidates `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH` runs evidence collection against, regardless of the search's own `topK` — prevents a `topK=50` search from firing 50 external provider calls. A non-positive value is ignored (falls back to the default). Defaults to `5`. | No |
 
 | Variable | Description | Required |
