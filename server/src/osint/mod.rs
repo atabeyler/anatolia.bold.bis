@@ -154,11 +154,15 @@ impl EvidenceOrchestrator {
         let mut web_search: Vec<std::sync::Arc<dyn WebSearchProvider>> = Vec::new();
         if let Some(key) = env_key("TAVILY_API_KEY") {
             tracing::info!("OSINT: Tavily web-search provider enabled");
-            web_search.push(std::sync::Arc::new(tavily::TavilyWebSearchProvider::new(key)));
+            web_search.push(std::sync::Arc::new(tavily::TavilyWebSearchProvider::new(
+                key,
+            )));
         }
         if let Some(key) = env_key("BRAVE_SEARCH_API_KEY") {
             tracing::info!("OSINT: Brave Search web-search provider enabled");
-            web_search.push(std::sync::Arc::new(websearch::RealWebSearchProvider::new(key)));
+            web_search.push(std::sync::Arc::new(websearch::RealWebSearchProvider::new(
+                key,
+            )));
         }
         if web_search.is_empty() {
             web_search.push(std::sync::Arc::new(mock::MockWebSearchProvider));
@@ -167,7 +171,9 @@ impl EvidenceOrchestrator {
         let mut news: Vec<std::sync::Arc<dyn NewsProvider>> = Vec::new();
         if let Some(key) = env_key("CURRENTS_API_KEY") {
             tracing::info!("OSINT: Currents news provider enabled");
-            news.push(std::sync::Arc::new(currents::CurrentsNewsProvider::new(key)));
+            news.push(std::sync::Arc::new(currents::CurrentsNewsProvider::new(
+                key,
+            )));
         }
         if let Some(key) = env_key("NEWS_API_KEY") {
             tracing::info!("OSINT: NewsAPI news provider enabled");
