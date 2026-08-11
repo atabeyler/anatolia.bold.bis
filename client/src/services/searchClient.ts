@@ -77,28 +77,44 @@ export interface CreateSearchResult {
   autoOsintEnabled?: boolean;
 }
 
+interface CreateSearchApiResponse {
+  search: SearchSummary;
+  candidates?: SearchCandidate[];
+  autoOsintEnabled?: boolean;
+}
+
 const SEARCH_STATUS_POLL_INTERVAL_MS = 500;
-const SEARCH_STATUS_POLL_TIMEOUT_MS = 60_000;
+const SEARCH_STATUS_POLL_TIMEOUT_MS = 300_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function normalizeSearchResult(result: CreateSearchApiResponse): CreateSearchResult {
+  return {
+    ...result,
+    candidates: result.candidates ?? [],
+  };
+}
+
 export async function getSearchStatus(searchId: string): Promise<CreateSearchResult> {
-  const { data } = await apiClient.get<CreateSearchResult>(`/v1/search/${searchId}/status`);
-  return data;
+  const { data } = await apiClient.get<CreateSearchApiResponse>(`/v1/search/${searchId}/status`);
+  return normalizeSearchResult(data);
 }
 
 /**
  * Async search flow: `POST /v1/search/face` returns a queued search row and
  * this helper polls until both biometric processing and, when enabled,
  * automatic external evidence collection have reported their result.
+ * `onProgress` receives every server state transition so the UI can expose
+ * queued/processing progress instead of appearing frozen during inference.
  */
 export async function createSearch(
   caseReference: string,
   purpose: string,
   image: File,
   coords: { latitude: number; longitude: number } | null,
+  onProgress?: (result: CreateSearchResult) => void,
 ): Promise<CreateSearchResult> {
   const form = new FormData();
   form.append('caseReference', caseReference);
@@ -108,12 +124,14 @@ export async function createSearch(
     form.append('latitude', String(coords.latitude));
     form.append('longitude', String(coords.longitude));
   }
-  const { data } = await apiClient.post<CreateSearchResult>('/v1/search/face', form, {
+  const { data } = await apiClient.post<CreateSearchApiResponse>('/v1/search/face', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 
   const deadline = Date.now() + SEARCH_STATUS_POLL_TIMEOUT_MS;
-  let latest = data;
+  let latest = normalizeSearchResult(data);
+  onProgress?.(latest);
+
   while (
     latest.search.status === 'queued' ||
     latest.search.status === 'processing' ||
@@ -126,6 +144,7 @@ export async function createSearch(
     }
     await sleep(SEARCH_STATUS_POLL_INTERVAL_MS);
     latest = await getSearchStatus(latest.search.id);
+    onProgress?.(latest);
   }
   return latest;
 }
