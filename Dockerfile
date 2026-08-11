@@ -25,12 +25,7 @@ RUN npm run build
 # `server/src/biometric/models.rs`).
 FROM rust:1-slim-trixie AS server-builder
 WORKDIR /app
-# `git` is here so `build.rs`'s own commit-SHA fallback (`git rev-parse
-# HEAD`) works inside this build stage — see the `COPY .git` below and
-# `server/build.rs`'s doc comment. Without either, GET /api/health
-# reports "unknown" instead of the actual commit, defeating its purpose
-# of confirming a deployment picked up a given push.
-RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev g++ git \
+RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev g++ \
     && rm -rf /var/lib/apt/lists/*
 COPY server/Cargo.toml server/Cargo.lock* ./
 COPY server/build.rs ./build.rs
@@ -40,9 +35,17 @@ COPY server/src ./src
 # this, the build fails at the manifest-parsing stage looking for
 # benches/biometric_pipeline.rs.
 COPY server/benches ./benches
-# `build.rs` runs `git rev-parse HEAD` with this stage's working
-# directory as the repo root it expects to find `.git` in — see above.
-COPY .git ./.git
+# Render's Docker build context does not include `.git` (confirmed
+# empirically: a `COPY .git` here fails with "not found", unlike a local
+# `docker build` from a real checkout), so `build.rs`'s own git fallback
+# can never run here — an explicit build arg is the only way to get the
+# real commit into this build. Render does not appear to set this
+# automatically either, so it stays "unknown" on Render specifically
+# until that's confirmed/wired up; a real value can still be supplied
+# with `--build-arg GIT_COMMIT_SHA=$(git rev-parse HEAD)` when building
+# elsewhere. See `server/build.rs` and `docs/ENVIRONMENT.md`.
+ARG GIT_COMMIT_SHA=unknown
+ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
 # Off by default, matching server/Cargo.toml's default-off `onnx-provider`
 # feature — building this image with no extra build args reproduces
 # today's known-good mock-only artifact. Pass
