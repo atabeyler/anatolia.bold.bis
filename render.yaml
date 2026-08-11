@@ -106,6 +106,17 @@ services:
       # Optional: registration/approval emails are silently skipped if unset.
       - key: RESEND_API_KEY
         sync: false
+      # Automatically collect configured web/news evidence after the
+      # biometric search returns ranked candidates. This intentionally
+      # does not enable social or reverse-image search; those remain
+      # unavailable until an authorized real connector is configured.
+      - key: AUTO_OSINT_AFTER_BIOMETRIC_SEARCH
+        value: "true"
+      # Bound automatic OSINT fan-out even when a search requests a large
+      # topK. Only the highest-ranked candidates up to this limit trigger
+      # external web/news evidence collection.
+      - key: OSINT_AUTO_MAX_CANDIDATES
+        value: "5"
       # Optional real OSINT providers — see server/src/osint/mod.rs's
       # from_env for the exact precedence. Each slot falls back to its
       # mock implementation when no key for it is set; leaving all four
