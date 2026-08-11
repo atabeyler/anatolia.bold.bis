@@ -387,24 +387,28 @@ async fn run_auto_osint(
     let eligible_count = eligible.len();
 
     let auto_rid = uuid::Uuid::new_v4().to_string();
-    AuditRecorder::new(
-        action::OSINT_AUTO_STARTED,
-        audit_result::SUCCESS,
-        auto_rid,
-    )
-    .actor(claims)
-    .headers(headers)
-    .resource("search", &search.id)
-    .metadata(json!({ "candidateCount": eligible_count }))
-    .save(state)
-    .await;
+    AuditRecorder::new(action::OSINT_AUTO_STARTED, audit_result::SUCCESS, auto_rid)
+        .actor(claims)
+        .headers(headers)
+        .resource("search", &search.id)
+        .metadata(json!({ "candidateCount": eligible_count }))
+        .save(state)
+        .await;
 
     // This runs even when `eligible_count == 0`, fixing the old behavior
     // where a probe with no internal candidate could never reach the web.
-    let reverse_outcomes = state.osint_orchestrator.collect_reverse_image(image_bytes).await;
-    let reverse_success = reverse_outcomes.iter().filter(|outcome| outcome.error.is_none()).count();
+    let reverse_outcomes = state
+        .osint_orchestrator
+        .collect_reverse_image(image_bytes)
+        .await;
+    let reverse_success = reverse_outcomes
+        .iter()
+        .filter(|outcome| outcome.error.is_none())
+        .count();
     let reverse_fail = reverse_outcomes.len().saturating_sub(reverse_success);
-    let mut any_provider_error = reverse_outcomes.iter().any(|outcome| outcome.error.is_some());
+    let mut any_provider_error = reverse_outcomes
+        .iter()
+        .any(|outcome| outcome.error.is_some());
     let mut external_items = Vec::new();
     for outcome in &reverse_outcomes {
         for item in &outcome.items {
@@ -472,9 +476,9 @@ async fn run_auto_osint(
     let news_is_mock = statuses
         .iter()
         .any(|status| status.slot == "news" && status.is_mock);
-    let reverse_configured = statuses.iter().any(|status| {
-        status.slot == "reverse_image" && status.provider_name != "not-configured"
-    });
+    let reverse_configured = statuses
+        .iter()
+        .any(|status| status.slot == "reverse_image" && status.provider_name != "not-configured");
 
     let web_status = if eligible_count == 0 {
         if web_is_mock {
@@ -535,20 +539,6 @@ async fn run_auto_osint(
     }))
     .save(state)
     .await;
-}
-
-/// Real (non-mock) or mock, for the web-search and news provider slots.
-fn provider_mock_flags(state: &AppState) -> (bool, bool) {
-    let mut web_is_mock = false;
-    let mut news_is_mock = false;
-    for status in state.osint_orchestrator.provider_status() {
-        match status.slot {
-            "web_search" => web_is_mock = status.is_mock,
-            "news" => news_is_mock = status.is_mock,
-            _ => {}
-        }
-    }
-    (web_is_mock, news_is_mock)
 }
 
 fn slot_status(is_mock: bool, success: usize, fail: usize) -> &'static str {
