@@ -26,6 +26,7 @@ export function DashboardPage() {
   const [caseReference, setCaseReference] = useState('');
   const [purpose, setPurpose] = useState('');
   const [image, setImage] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formErrorKey, setFormErrorKey] = useState<string | null>(null);
@@ -40,13 +41,23 @@ export function DashboardPage() {
 
   const [pastSearches, setPastSearches] = useState<SearchSummary[] | null>(null);
   const [pastSearchesError, setPastSearchesError] = useState(false);
-  const [isMockProvider, setIsMockProvider] = useState<boolean | null>(null);
+  const [biometricProvider, setBiometricProvider] = useState<string | null>(null);
 
   useEffect(() => {
     getHealthReady()
-      .then((health) => setIsMockProvider(health.biometricProvider === 'mock'))
-      .catch(() => setIsMockProvider(null));
+      .then((health) => setBiometricProvider(health.biometricProvider))
+      .catch(() => setBiometricProvider(null));
   }, []);
+
+  useEffect(() => {
+    if (!image) {
+      setImagePreviewUrl(null);
+      return;
+    }
+    const previewUrl = URL.createObjectURL(image);
+    setImagePreviewUrl(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [image]);
 
   const loadPastSearches = () => {
     setPastSearchesError(false);
@@ -99,12 +110,18 @@ export function DashboardPage() {
     }
     setFormErrorKey(null);
     setSubmitting(true);
+    setActiveCandidates([]);
+    setEvidenceCounts({});
     try {
       const result = await searchClient.createSearch(
         caseReference.trim(),
         purpose.trim(),
         image,
         getLastKnownLocation(),
+        (progress) => {
+          setActiveSearch(progress.search);
+          setActiveCandidates(progress.candidates);
+        },
       );
       if (result.search.status === 'failed') {
         setFormErrorKey(result.search.failureMessageKey ?? 'search.createError');
@@ -112,10 +129,12 @@ export function DashboardPage() {
         setActiveSearch(result.search);
         setActiveCandidates(result.candidates);
         loadEvidenceCounts(result.candidates);
-        setCaseReference('');
-        setPurpose('');
-        setImage(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        if (result.search.status === 'completed') {
+          setCaseReference('');
+          setPurpose('');
+          setImage(null);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }
       }
       loadPastSearches();
     } catch (error) {
@@ -145,6 +164,9 @@ export function DashboardPage() {
       setReviewBusyId(null);
     }
   };
+
+  const biometricSearchRunning =
+    activeSearch?.status === 'queued' || activeSearch?.status === 'processing';
 
   return (
     <main className="admin-page">
@@ -184,7 +206,19 @@ export function DashboardPage() {
                 required
               />
             </label>
-            {isMockProvider && <p className="admin-hint">{t('search.mockNotice')}</p>}
+            {imagePreviewUrl && (
+              <img
+                src={imagePreviewUrl}
+                alt={t('search.image') ?? ''}
+                style={{ maxWidth: '240px', maxHeight: '240px', objectFit: 'contain' }}
+              />
+            )}
+            {biometricProvider && (
+              <p className="admin-hint">
+                <code>{biometricProvider.toUpperCase()}</code>
+              </p>
+            )}
+            {biometricProvider === 'mock' && <p className="admin-hint">{t('search.mockNotice')}</p>}
             {formErrorKey && <p className="auth-message auth-message--error">{t(formErrorKey)}</p>}
             <button type="submit" className="admin-submit" disabled={submitting}>
               {submitting ? t('search.searching') : t('search.submit')}
@@ -202,7 +236,11 @@ export function DashboardPage() {
           <h2 className="admin-panel__heading">
             {activeSearch.caseReference} · {activeSearch.purpose}
           </h2>
-          <p className="admin-hint">{t('search.resultsHint')}</p>
+          {biometricSearchRunning ? (
+            <p className="status-card__line">{t('search.searching')}</p>
+          ) : (
+            <p className="admin-hint">{t('search.resultsHint')}</p>
+          )}
           {activeSearch.latitude !== null && activeSearch.longitude !== null && (
             <p className="admin-hint">
               {t('search.location', {
@@ -247,7 +285,8 @@ export function DashboardPage() {
             {reviewErrorKey && (
               <p className="status-card__line status-card__line--offline">{t(reviewErrorKey)}</p>
             )}
-            {!activeCandidatesLoading &&
+            {!biometricSearchRunning &&
+              !activeCandidatesLoading &&
               !activeCandidatesError &&
               activeCandidates.length === 0 &&
               activeSearch.externalEvidence.length === 0 && (
@@ -263,7 +302,7 @@ export function DashboardPage() {
                         <span>{candidate.referenceCode}</span>
                         <span className="admin-user-card__separator">·</span>
                         <span>{candidate.fullName}</span>
-                        <span className="search-score">{(candidate.score * 100).toFixed(1)}%</span>
+                        <span className="search-score">{candidate.score.toFixed(4)}</span>
                         {candidate.status === 'confirmed' && (
                           <span className="admin-badge admin-badge--admin">
                             {t('search.status.confirmed')}
