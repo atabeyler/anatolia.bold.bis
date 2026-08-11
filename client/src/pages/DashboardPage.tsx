@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { OsintWorkspace } from '../components/OsintWorkspace';
+import { SearchExternalEvidence } from '../components/SearchExternalEvidence';
 import { useAuth } from '../features/auth/AuthContext';
 import { formatLatitude, formatLongitude, getLastKnownLocation } from '../hooks/useGeolocation';
 import * as searchClient from '../services/searchClient';
@@ -39,12 +40,6 @@ export function DashboardPage() {
 
   const [pastSearches, setPastSearches] = useState<SearchSummary[] | null>(null);
   const [pastSearchesError, setPastSearchesError] = useState(false);
-
-  // Whether this deployment's biometric_provider is actually "mock" —
-  // read from the live backend rather than assumed, so the notice below
-  // reflects reality instead of unconditionally claiming demo mode. Only
-  // a confirmed "mock" response renders the notice; `null` (not yet
-  // loaded, or the request failed) renders nothing.
   const [isMockProvider, setIsMockProvider] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -65,9 +60,6 @@ export function DashboardPage() {
     loadPastSearches();
   }, []);
 
-  // Evidence counts are fetched per candidate, best-effort: a provider
-  // outage or a candidate with no evidence yet must never block or break
-  // rendering the (already-successful) search results themselves.
   const loadEvidenceCounts = (candidates: SearchCandidate[]) => {
     setEvidenceCounts({});
     candidates.forEach((candidate) => {
@@ -79,10 +71,7 @@ export function DashboardPage() {
             [candidate.candidateId]: items.length,
           }));
         })
-        .catch(() => {
-          // Leave the count absent for this candidate; the badge simply
-          // doesn't render rather than showing a wrong number.
-        });
+        .catch(() => undefined);
     });
   };
 
@@ -117,10 +106,6 @@ export function DashboardPage() {
         image,
         getLastKnownLocation(),
       );
-      // The async pipeline can fail after acceptance (202),
-      // not just at request time — surface it the same way a request-level
-      // error would be, since the client only ever sees a single
-      // "did this search work" outcome regardless of which stage failed.
       if (result.search.status === 'failed') {
         setFormErrorKey(result.search.failureMessageKey ?? 'search.createError');
       } else {
@@ -151,11 +136,10 @@ export function DashboardPage() {
           : action === 'reject'
             ? await searchClient.rejectCandidate(candidateId, activeSearch.id)
             : await searchClient.markCandidateInconclusive(candidateId, activeSearch.id);
-      setActiveCandidates((rows) => rows.map((row) => (row.candidateId === candidateId ? updated : row)));
+      setActiveCandidates((rows) =>
+        rows.map((row) => (row.candidateId === candidateId ? updated : row)),
+      );
     } catch (error) {
-      // Most notably surfaces the four-eyes "same reviewer" refusal (see
-      // server/src/db/mod.rs::record_review_decision) — otherwise this
-      // click would silently do nothing.
       setReviewErrorKey(apiErrorMessageKey(error));
     } finally {
       setReviewBusyId(null);
@@ -247,8 +231,13 @@ export function DashboardPage() {
               </li>
             </ul>
           )}
+
+          <SearchExternalEvidence items={activeSearch.externalEvidence} />
+
           <div className="admin-user-list">
-            {activeCandidatesLoading && <p className="status-card__line">{t('search.candidatesLoading')}</p>}
+            {activeCandidatesLoading && (
+              <p className="status-card__line">{t('search.candidatesLoading')}</p>
+            )}
             {activeCandidatesError && (
               <p className="status-card__line status-card__line--offline">
                 {t('search.candidatesLoadError')}
@@ -299,9 +288,7 @@ export function DashboardPage() {
                       </div>
                       {candidate.reviewedByName && (
                         <p className="admin-user-card__note">
-                          {t('search.reviewedBy', {
-                            name: candidate.reviewedByName,
-                          })}
+                          {t('search.reviewedBy', { name: candidate.reviewedByName })}
                         </p>
                       )}
                       {evidenceCounts[candidate.candidateId] !== undefined && (
