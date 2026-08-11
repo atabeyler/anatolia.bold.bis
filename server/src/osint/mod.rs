@@ -1,23 +1,16 @@
-//! OSINT/evidence provider abstraction: provider traits
-//! (`WebSearchProvider`/`NewsProvider`/`AuthorizedSocialProvider`), a
-//! `SourceRegistry` of which named sources are actually enabled, a mock
-//! implementation of each, real implementations for web search (Brave
-//! Search API) and news (NewsAPI.org), and an orchestrator that isolates
-//! one provider's failure from the others. `AuthorizedSocialProvider`
-//! remains mock-only — every real candidate social-platform API requires
-//! its own developer agreement, not available in this environment. Entity
-//! resolution over the collected evidence, an entity graph, and a
-//! per-candidate frontend workspace exist elsewhere in the codebase (see
-//! `entity_resolution.rs`, `db/entity_graph.rs`,
-//! `client/src/components/OsintWorkspace.tsx`); reverse image search does
-//! not.
+//! OSINT/evidence provider abstraction: provider traits for textual web/news,
+//! authorized social sources, and public-web image discovery. Real providers
+//! are selected from environment configuration and each provider failure is
+//! isolated from the rest of the collection pipeline.
 //!
-//! Mirrors the `biometric` module's shape: a trait per capability, a
-//! `Mock*` implementation for every trait, and a real implementation
-//! (when one exists) behind the same interface so callers never branch on
-//! which is active.
+//! Text providers (Tavily/Brave and Currents/NewsAPI) never receive the probe
+//! image. Public-web image discovery is a separate capability implemented by
+//! Google Cloud Vision WEB_DETECTION when `GOOGLE_CLOUD_VISION_API_KEY` is
+//! configured. The authorized-social slot remains mock-only until a real
+//! platform connector is explicitly deployed.
 
 pub mod currents;
+pub mod google_vision;
 pub mod mock;
 pub mod news;
 pub mod query_builder;
@@ -30,8 +23,8 @@ use async_trait::async_trait;
 /// Shorthand used throughout the real-provider implementations.
 pub type EvidenceItems = Vec<EvidenceItem>;
 
-/// One piece of evidence returned by a provider, before it's persisted as
-/// a `candidate_evidence` row (see `db::evidence`).
+/// One piece of evidence returned by a provider, before it is persisted as
+/// candidate evidence or surfaced as search-level external image evidence.
 #[derive(Debug, Clone)]
 pub struct EvidenceItem {
     pub source_type: String,
@@ -39,10 +32,8 @@ pub struct EvidenceItem {
     pub title: String,
     pub url: Option<String>,
     pub snippet: Option<String>,
-    /// The provider's own confidence in this item's relevance, `[0, 1]`.
-    /// Never a match/no-match verdict — same "candidates, not verdicts"
-    /// principle CLAUDE.md applies to biometric scores applies here: a
-    /// human reviewer decides what evidence means.
+    /// Provider relevance/quality signal in `[0, 1]`; never an identity
+    /// verdict or probability.
     pub confidence: f64,
 }
 
@@ -84,51 +75,32 @@ pub trait NewsProvider: Send + Sync {
     async fn search(&self, query: &str) -> Result<Vec<EvidenceItem>, OsintError>;
 }
 
-/// Deliberately named `Authorized*`: unlike `WebSearchProvider`/
-/// `NewsProvider`, a real implementation of this trait must only ever
-/// query a source the deployment has an explicit, declared authorization
-/// to query (e.g. a platform API with a signed agreement) — never scrape
-/// a social platform without one. `docs/SECURITY_ARCHITECTURE.md`
-/// documents this constraint; enforcing it is a real-provider concern,
-/// since the mock implementation makes no real request at all.
+/// Real implementations of this trait must only query sources for which the
+/// deployment has explicit authorization. No access-control bypass or private
+/// profile scraping belongs behind this interface.
 #[async_trait]
 pub trait AuthorizedSocialProvider: Send + Sync {
     fn name(&self) -> &'static str;
     async fn search(&self, query: &str) -> Result<Vec<EvidenceItem>, OsintError>;
 }
 
-/// A genuine photo-to-internet-image match — distinct from
-/// `WebSearchProvider`/`NewsProvider`, which query a *text* string, never
-/// the probe image itself. No implementation of this trait exists in this
-/// codebase today (no authorized reverse-image API is configured in this
-/// environment); `EvidenceOrchestrator` never registers one, and never
-/// fabricates a result under this capability's name — see
-/// `EvidenceOrchestrator::provider_status`, which always reports the
-/// `reverse_image` slot as `"not-configured"`. Kept as an interface so a
-/// real implementation (e.g. an authorized reverse-image search API) can
-/// be added behind it later without changing any caller.
+/// A genuine image-to-public-web lookup. This is intentionally distinct from
+/// `WebSearchProvider` and `NewsProvider`, which only accept text queries.
 #[async_trait]
 pub trait ReverseImageSearchProvider: Send + Sync {
     fn name(&self) -> &'static str;
     async fn search_by_image(&self, image_bytes: &[u8]) -> Result<Vec<EvidenceItem>, OsintError>;
-    /// Optional alternative entry point for a provider whose API takes an
-    /// already-hosted image URL rather than raw bytes. Providers that only
-    /// support one form return `OsintError::ProviderUnavailable` from
-    /// whichever method they don't implement.
     async fn search_by_image_url(&self, image_url: &str) -> Result<Vec<EvidenceItem>, OsintError>;
 }
 
-/// Which named sources are currently enabled for evidence collection.
-/// Exists as its own trait (rather than just checking `is_empty()` on the
-/// orchestrator's provider lists) so a future real implementation can
-/// report richer per-source metadata (rate limits, authorization type —
-/// see the OSINT appendix) without changing the orchestrator's shape.
+/// Which textual/social sources are currently enabled. Reverse-image status is
+/// exposed separately through `provider_status()` because it is not a text
+/// source and needs image bytes rather than a query string.
 pub trait SourceRegistry: Send + Sync {
     fn enabled_sources(&self) -> Vec<&'static str>;
 }
 
-/// One connector slot's current status — which named provider is active
-/// there and whether it's a real implementation or the mock fallback.
+/// One connector slot's current status.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectorStatus {
@@ -147,28 +119,21 @@ impl ConnectorStatus {
     }
 }
 
-/// One provider's outcome from a single `collect` run — success with its
-/// items, or a failure that must not prevent the other providers' results
-/// from being returned (provider failure isolation).
+/// One provider's outcome from a single collection run.
 pub struct ProviderOutcome {
     pub provider_name: String,
     pub items: Vec<EvidenceItem>,
     pub error: Option<String>,
 }
 
-/// Runs every configured provider and collects each one's outcome
-/// independently — one provider failing (timeout, misconfiguration,
-/// upstream error) never prevents the others from contributing evidence,
-/// and never fails the whole collection request.
+/// Runs configured providers while isolating failures between provider slots.
 pub struct EvidenceOrchestrator {
     web_search: Vec<std::sync::Arc<dyn WebSearchProvider>>,
     news: Vec<std::sync::Arc<dyn NewsProvider>>,
     social: Vec<std::sync::Arc<dyn AuthorizedSocialProvider>>,
+    reverse_image: Vec<std::sync::Arc<dyn ReverseImageSearchProvider>>,
 }
 
-/// Reads an environment variable, treating unset or blank-after-trim the
-/// same way (`None`) — a key set to an empty string must not be mistaken
-/// for "configured".
 fn env_key(name: &str) -> Option<String> {
     std::env::var(name)
         .ok()
@@ -180,11 +145,13 @@ impl EvidenceOrchestrator {
         web_search: Vec<std::sync::Arc<dyn WebSearchProvider>>,
         news: Vec<std::sync::Arc<dyn NewsProvider>>,
         social: Vec<std::sync::Arc<dyn AuthorizedSocialProvider>>,
+        reverse_image: Vec<std::sync::Arc<dyn ReverseImageSearchProvider>>,
     ) -> Self {
         Self {
             web_search,
             news,
             social,
+            reverse_image,
         }
     }
 
@@ -193,27 +160,16 @@ impl EvidenceOrchestrator {
             vec![std::sync::Arc::new(mock::MockWebSearchProvider)],
             vec![std::sync::Arc::new(mock::MockNewsProvider)],
             vec![std::sync::Arc::new(mock::MockSocialProvider)],
+            Vec::new(),
         )
     }
 
-    /// Builds the real orchestrator this deployment should actually run:
-    /// each provider slot uses its real implementation when a matching API
-    /// key is configured, and falls back to that slot's mock
-    /// implementation otherwise — so an operator can enable providers
-    /// incrementally, and a deployment with no keys configured at all
-    /// behaves exactly like `mock()`.
+    /// Build the provider set from deployment environment variables.
     ///
-    /// Web search checks `TAVILY_API_KEY` first, then
-    /// `BRAVE_SEARCH_API_KEY` — Tavily first because its free tier needs
-    /// no payment method at signup, unlike Brave's (see `tavily.rs`).
-    /// News checks `CURRENTS_API_KEY` first, then `NEWS_API_KEY` —
-    /// Currents first because NewsAPI's free tier explicitly forbids
-    /// production/commercial use (see `currents.rs`). Both keys in a slot
-    /// may be set at once (e.g. while migrating from one to the other);
-    /// only the higher-priority one is used. There is no real
-    /// `AuthorizedSocialProvider` implementation yet (see the trait's doc
-    /// comment on why a real one is more than an API-key away); that slot
-    /// is always the mock today.
+    /// Web: `TAVILY_API_KEY`, then `BRAVE_SEARCH_API_KEY`.
+    /// News: `CURRENTS_API_KEY`, then `NEWS_API_KEY`.
+    /// Public-web image discovery: `GOOGLE_CLOUD_VISION_API_KEY`.
+    /// Authorized social: no real connector is bundled today.
     pub fn from_env() -> Self {
         let web_search: Vec<std::sync::Arc<dyn WebSearchProvider>> =
             match (env_key("TAVILY_API_KEY"), env_key("BRAVE_SEARCH_API_KEY")) {
@@ -231,6 +187,7 @@ impl EvidenceOrchestrator {
                 }
                 (None, None) => vec![std::sync::Arc::new(mock::MockWebSearchProvider)],
             };
+
         let news: Vec<std::sync::Arc<dyn NewsProvider>> =
             match (env_key("CURRENTS_API_KEY"), env_key("NEWS_API_KEY")) {
                 (Some(key), _) => {
@@ -245,21 +202,27 @@ impl EvidenceOrchestrator {
                 }
                 (None, None) => vec![std::sync::Arc::new(mock::MockNewsProvider)],
             };
+
+        let reverse_image: Vec<std::sync::Arc<dyn ReverseImageSearchProvider>> =
+            match env_key("GOOGLE_CLOUD_VISION_API_KEY") {
+                Some(key) => {
+                    tracing::info!("OSINT: Google Vision web-detection provider enabled");
+                    vec![std::sync::Arc::new(
+                        google_vision::GoogleVisionWebDetectionProvider::new(key),
+                    )]
+                }
+                None => Vec::new(),
+            };
+
         Self::new(
             web_search,
             news,
             vec![std::sync::Arc::new(mock::MockSocialProvider)],
+            reverse_image,
         )
     }
 
-    /// Read-only visibility into which provider is actually active in
-    /// each slot — scoped to status reporting since configuration
-    /// itself stays environment-variable-based, the same pattern every
-    /// other provider toggle in this codebase already uses; see
-    /// `from_env`'s doc comment. A provider counts as mock when its own
-    /// `name()` carries the `mock-` prefix every `Mock*` implementation in
-    /// `osint::mock` uses — there is no separate "is this real" flag to
-    /// drift out of sync with that naming.
+    /// Read-only visibility into the active provider in each capability slot.
     pub fn provider_status(&self) -> Vec<ConnectorStatus> {
         let mut statuses = Vec::new();
         for provider in &self.web_search {
@@ -271,21 +234,21 @@ impl EvidenceOrchestrator {
         for provider in &self.social {
             statuses.push(ConnectorStatus::new("social", provider.name()));
         }
-        // No `ReverseImageSearchProvider` is ever registered (see its doc
-        // comment) — this slot always reports the same fixed,
-        // never-mock, never-real placeholder rather than being silently
-        // absent from the list.
-        statuses.push(ConnectorStatus {
-            slot: "reverse_image",
-            provider_name: "not-configured",
-            is_mock: false,
-        });
+        if self.reverse_image.is_empty() {
+            statuses.push(ConnectorStatus {
+                slot: "reverse_image",
+                provider_name: "not-configured",
+                is_mock: false,
+            });
+        } else {
+            for provider in &self.reverse_image {
+                statuses.push(ConnectorStatus::new("reverse_image", provider.name()));
+            }
+        }
         statuses
     }
 
-    /// Runs every provider for `query`, isolating failures per provider.
-    /// The returned `Vec` always has one entry per configured provider,
-    /// in a stable order (web search, then news, then social).
+    /// Run every textual/social provider for a manually supplied query.
     pub async fn collect(&self, query: &str) -> Vec<ProviderOutcome> {
         let mut outcomes = Vec::new();
         for provider in &self.web_search {
@@ -300,18 +263,8 @@ impl EvidenceOrchestrator {
         outcomes
     }
 
-    /// Like `collect`, but deliberately narrower: web search and news
-    /// only, never the `AuthorizedSocialProvider` slot. This is what
-    /// `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH` runs — an automatic,
-    /// unattended trigger inserting mock "social media" evidence with no
-    /// human ever choosing to collect it is exactly the deceptive result
-    /// this codebase's OSINT design otherwise goes out of its way to
-    /// avoid (see `AuthorizedSocialProvider`'s doc comment). The manual
-    /// `POST /candidates/{id}/evidence/collect` endpoint still uses
-    /// `collect` and so still includes the social slot, unchanged.
-    /// Returns `(web_outcomes, news_outcomes)` rather than one flat `Vec`
-    /// so a caller can attribute each outcome to its category without
-    /// relying on list-position assumptions.
+    /// Automatic candidate enrichment uses web search and news only. Social
+    /// remains opt-in/manual until an authorized real implementation exists.
     pub async fn collect_web_and_news(
         &self,
         query: &str,
@@ -325,6 +278,20 @@ impl EvidenceOrchestrator {
             news.push(run_provider(provider.name(), provider.search(query).await));
         }
         (web, news)
+    }
+
+    /// Run public-web image discovery directly from the sanitized probe. If no
+    /// provider is configured this returns an empty vector and no image leaves
+    /// the application through this capability.
+    pub async fn collect_reverse_image(&self, image_bytes: &[u8]) -> Vec<ProviderOutcome> {
+        let mut outcomes = Vec::new();
+        for provider in &self.reverse_image {
+            outcomes.push(run_provider(
+                provider.name(),
+                provider.search_by_image(image_bytes).await,
+            ));
+        }
+        outcomes
     }
 }
 
@@ -390,6 +357,7 @@ mod tests {
         fn name(&self) -> &'static str {
             "failing-web-search"
         }
+
         async fn search(&self, _query: &str) -> Result<Vec<EvidenceItem>, OsintError> {
             Err(OsintError::ProviderUnavailable(
                 "simulated failure".to_string(),
@@ -406,13 +374,13 @@ mod tests {
             ],
             vec![std::sync::Arc::new(mock::MockNewsProvider)],
             vec![std::sync::Arc::new(mock::MockSocialProvider)],
+            Vec::new(),
         );
         let outcomes = orchestrator.collect("test query").await;
         assert_eq!(outcomes.len(), 4);
         assert_eq!(outcomes[0].provider_name, "failing-web-search");
         assert!(outcomes[0].error.is_some());
         assert!(outcomes[0].items.is_empty());
-        // The other providers still ran and produced items.
         assert!(outcomes[1].error.is_none());
         assert!(!outcomes[1].items.is_empty());
         assert!(outcomes[2].error.is_none());
@@ -420,10 +388,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn mock_orchestrator_reports_every_configured_source() {
+    async fn mock_orchestrator_reports_every_configured_textual_source() {
         let orchestrator = EvidenceOrchestrator::mock();
         let sources = orchestrator.enabled_sources();
         assert_eq!(sources.len(), 3);
+        assert_eq!(
+            orchestrator
+                .provider_status()
+                .iter()
+                .find(|status| status.slot == "reverse_image")
+                .unwrap()
+                .provider_name,
+            "not-configured"
+        );
     }
 
     #[tokio::test]
@@ -435,7 +412,6 @@ mod tests {
         assert_eq!(first[0].items[0].title, second[0].items[0].title);
     }
 
-    // Serialized: both mutate the same process-wide env vars.
     static ENV_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn clear_osint_env_keys() {
@@ -444,22 +420,24 @@ mod tests {
             "BRAVE_SEARCH_API_KEY",
             "CURRENTS_API_KEY",
             "NEWS_API_KEY",
+            "GOOGLE_CLOUD_VISION_API_KEY",
         ] {
             std::env::remove_var(key);
         }
     }
 
     #[tokio::test]
-    async fn from_env_falls_back_to_every_mock_provider_when_no_keys_are_set() {
+    async fn from_env_falls_back_to_mock_text_providers_when_no_keys_are_set() {
         let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
         clear_osint_env_keys();
         let orchestrator = EvidenceOrchestrator::from_env();
         let sources = orchestrator.enabled_sources();
         assert_eq!(sources, vec!["mock-web-search", "mock-news", "mock-social"]);
+        clear_osint_env_keys();
     }
 
     #[tokio::test]
-    async fn from_env_uses_the_fallback_provider_when_only_its_key_is_set() {
+    async fn from_env_uses_fallback_text_providers_when_only_their_keys_are_set() {
         let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
         clear_osint_env_keys();
         std::env::set_var("BRAVE_SEARCH_API_KEY", "test-key");
@@ -471,7 +449,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn from_env_prefers_tavily_and_currents_over_the_fallback_keys() {
+    async fn from_env_prefers_tavily_and_currents_over_fallback_keys() {
         let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
         clear_osint_env_keys();
         std::env::set_var("TAVILY_API_KEY", "test-key");
@@ -484,6 +462,22 @@ mod tests {
             sources,
             vec!["tavily-web-search", "currents-news", "mock-social"]
         );
+        clear_osint_env_keys();
+    }
+
+    #[tokio::test]
+    async fn from_env_enables_google_vision_reverse_image_provider() {
+        let _guard = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        clear_osint_env_keys();
+        std::env::set_var("GOOGLE_CLOUD_VISION_API_KEY", "test-key");
+        let orchestrator = EvidenceOrchestrator::from_env();
+        let status = orchestrator.provider_status();
+        let reverse = status
+            .iter()
+            .find(|status| status.slot == "reverse_image")
+            .unwrap();
+        assert_eq!(reverse.provider_name, "google-vision-web-detection");
+        assert!(!reverse.is_mock);
         clear_osint_env_keys();
     }
 }
