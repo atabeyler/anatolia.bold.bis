@@ -158,11 +158,15 @@ impl EvidenceOrchestrator {
             match (env_key("TAVILY_API_KEY"), env_key("BRAVE_SEARCH_API_KEY")) {
                 (Some(key), _) => {
                     tracing::info!("OSINT: Tavily web-search provider enabled");
-                    vec![std::sync::Arc::new(tavily::TavilyWebSearchProvider::new(key))]
+                    vec![std::sync::Arc::new(tavily::TavilyWebSearchProvider::new(
+                        key,
+                    ))]
                 }
                 (None, Some(key)) => {
                     tracing::info!("OSINT: Brave Search web-search provider enabled");
-                    vec![std::sync::Arc::new(websearch::RealWebSearchProvider::new(key))]
+                    vec![std::sync::Arc::new(websearch::RealWebSearchProvider::new(
+                        key,
+                    ))]
                 }
                 (None, None) => vec![std::sync::Arc::new(mock::MockWebSearchProvider)],
             };
@@ -171,7 +175,9 @@ impl EvidenceOrchestrator {
             match (env_key("CURRENTS_API_KEY"), env_key("NEWS_API_KEY")) {
                 (Some(key), _) => {
                     tracing::info!("OSINT: Currents news provider enabled");
-                    vec![std::sync::Arc::new(currents::CurrentsNewsProvider::new(key))]
+                    vec![std::sync::Arc::new(currents::CurrentsNewsProvider::new(
+                        key,
+                    ))]
                 }
                 (None, Some(key)) => {
                     tracing::info!("OSINT: NewsAPI news provider enabled");
@@ -334,7 +340,9 @@ mod tests {
         }
 
         async fn search(&self, _query: &str) -> Result<Vec<EvidenceItem>, OsintError> {
-            Err(OsintError::ProviderUnavailable("simulated failure".to_string()))
+            Err(OsintError::ProviderUnavailable(
+                "simulated failure".to_string(),
+            ))
         }
     }
 
