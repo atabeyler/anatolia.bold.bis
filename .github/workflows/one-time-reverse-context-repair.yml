@@ -1,0 +1,76 @@
+name: Reverse image context repair
+
+on:
+  push:
+    paths:
+      - '.github/workflows/one-time-reverse-context-repair.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Apply search flow repair
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('server/src/search.rs')
+          text = path.read_text()
+
+          marker = '    let statuses = state.osint_orchestrator.provider_status();\n'
+          if marker not in text:
+              raise SystemExit('search status marker not found')
+
+          insert = '''    // If the internal repository produced no candidate, use only public\n    // page context returned by reverse-image discovery to expand the search.\n    // Internal case fields and operator metadata are never sent to these\n    // providers.\n    if eligible_count == 0 && !external_items.is_empty() {\n        let mut seen_queries = std::collections::HashSet::new();\n        let mut context_queries = Vec::new();\n        for outcome in &reverse_outcomes {\n            for item in &outcome.items {\n                if let Some(query) = query_builder::build_reverse_context_query(\n                    &item.title,\n                    item.snippet.as_deref(),\n                ) {\n                    if seen_queries.insert(query.clone()) {\n                        context_queries.push(query);\n                    }\n                }\n            }\n        }\n\n        for query in context_queries.into_iter().take(3) {\n            let (web, news) = state.osint_orchestrator.collect_web_and_news(&query).await;\n            let ws = web.iter().filter(|outcome| outcome.error.is_none()).count();\n            let wf = web.len().saturating_sub(ws);\n            let ns = news.iter().filter(|outcome| outcome.error.is_none()).count();\n            let nf = news.len().saturating_sub(ns);\n            web_success += ws;\n            web_fail += wf;\n            news_success += ns;\n            news_fail += nf;\n            any_provider_error = any_provider_error\n                || web.iter().any(|outcome| outcome.error.is_some())\n                || news.iter().any(|outcome| outcome.error.is_some());\n\n            for outcome in web.iter().chain(news.iter()) {\n                for item in &outcome.items {\n                    external_items.push(json!({\n                        "sourceType": item.source_type,\n                        "providerName": item.provider_name,\n                        "title": item.title,\n                        "url": item.url,\n                        "snippet": item.snippet,\n                        "confidenceScore": item.confidence,\n                    }));\n                }\n            }\n        }\n    }\n\n'''
+          text = text.replace(marker, insert + marker, 1)
+
+          old_web = '''    let web_status = if eligible_count == 0 {\n        if web_is_mock {\n            "mock"\n        } else {\n            "not_run"\n        }\n    } else {\n        slot_status(web_is_mock, web_success, web_fail)\n    };\n'''
+          new_web = '''    let web_status = if eligible_count == 0 && web_success + web_fail == 0 {\n        if web_is_mock {\n            "mock"\n        } else {\n            "not_run"\n        }\n    } else {\n        slot_status(web_is_mock, web_success, web_fail)\n    };\n'''
+          if old_web not in text:
+              raise SystemExit('web status block not found')
+          text = text.replace(old_web, new_web, 1)
+
+          old_news = '''    let news_status = if eligible_count == 0 {\n        if news_is_mock {\n            "mock"\n        } else {\n            "not_run"\n        }\n    } else {\n        slot_status(news_is_mock, news_success, news_fail)\n    };\n'''
+          new_news = '''    let news_status = if eligible_count == 0 && news_success + news_fail == 0 {\n        if news_is_mock {\n            "mock"\n        } else {\n            "not_run"\n        }\n    } else {\n        slot_status(news_is_mock, news_success, news_fail)\n    };\n'''
+          if old_news not in text:
+              raise SystemExit('news status block not found')
+          text = text.replace(old_news, new_news, 1)
+          path.write_text(text)
+
+          env = Path('docs/ENVIRONMENT.md')
+          env_text = env.read_text()
+          needle = '`AUTO_OSINT_AFTER_BIOMETRIC_SEARCH`'
+          pos = env_text.find(needle)
+          if pos >= 0:
+              para_end = env_text.find('\n', pos)
+              note = '\nReverse-image matches can also seed Tavily/Currents with public page context when the internal biometric repository returns no candidate; case metadata is never used as an external query.\n'
+              if note.strip() not in env_text:
+                  env_text = env_text[:para_end + 1] + note + env_text[para_end + 1:]
+                  env.write_text(env_text)
+
+          workflow = Path('.github/workflows/one-time-reverse-context-repair.yml')
+          workflow.unlink()
+
+      - name: Format Rust
+        working-directory: server
+        run: cargo fmt
+
+      - name: Commit repair
+        run: |
+          git config --local user.name "atabeyler"
+          git config --local user.email "info@boldkimya.com.tr"
+          git add server/src/search.rs docs/ENVIRONMENT.md .github/workflows/one-time-reverse-context-repair.yml
+          git commit -m "Expand reverse image results through web and news"
+          git push origin main
