@@ -20,13 +20,12 @@ interface OsintWorkspaceProps {
 
 type Section = 'evidence' | 'entityGraph' | 'duplicates';
 
-/** Groups evidence by the source types emitted by the backend. `web_image`
- * is Tavily's text-query public image discovery and is deliberately kept
- * separate from `reverse_image`, which means an actual image-to-web lookup.
+/** Groups evidence by the source types emitted by the backend. Tavily's
+ * query-related `web_image` results live under the existing Web group;
+ * `reverse_image` remains reserved for an actual image-to-web provider.
  */
 const EVIDENCE_SOURCE_GROUPS: Array<{ key: string; sourceTypes: string[] }> = [
-  { key: 'web', sourceTypes: ['web_search'] },
-  { key: 'webImages', sourceTypes: ['web_image'] },
+  { key: 'web', sourceTypes: ['web_search', 'web_image'] },
   { key: 'news', sourceTypes: ['news'] },
   { key: 'social', sourceTypes: ['social'] },
   { key: 'reverseImage', sourceTypes: ['reverse_image'] },
@@ -189,11 +188,6 @@ export function OsintWorkspace({ candidateId, candidateName, canManage, onClose 
                             : item.providerName}
                           {item.url ? ` · ${item.url}` : ''}
                         </div>
-                        {item.sourceType === 'web_image' && item.url && (
-                          <a href={item.url} target="_blank" rel="noreferrer" className="overlay-secondary-button">
-                            {t('osint.evidence.openImage')}
-                          </a>
-                        )}
                       </div>
                     </li>
                   ))}
