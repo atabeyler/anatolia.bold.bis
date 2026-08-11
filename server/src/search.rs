@@ -22,18 +22,34 @@ use crate::permission;
 const DEFAULT_PAGE_SIZE: i64 = 50;
 
 fn search_json(search: &SearchRow) -> serde_json::Value {
-    // `external_evidence_status` is stored as an opaque, already-shaped
-    // JSON string (see `search::run_auto_osint`) — parsed back into a
-    // value here rather than re-serialized field by field. `null` (not
-    // an object with all-"not_configured" slots) is the honest
-    // representation of "automatic OSINT hasn't reported an outcome for
-    // this search yet" — either the feature is off, or its background
-    // work (which runs after the search itself is marked `completed`)
-    // just hasn't finished.
-    let external_evidence_status = search
+    // `external_evidence_status` stores both per-slot status and optional
+    // search-level evidence discovered directly from the probe image. Split
+    // those concerns back into two response fields so the client has a stable
+    // status object and a separate result list.
+    let external_payload = search
         .external_evidence_status
         .as_deref()
         .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok());
+    let external_evidence_status = external_payload.as_ref().map(|payload| {
+        json!({
+            "web": payload.get("web").cloned().unwrap_or_else(|| json!("not_run")),
+            "news": payload.get("news").cloned().unwrap_or_else(|| json!("not_run")),
+            "social": payload
+                .get("social")
+                .cloned()
+                .unwrap_or_else(|| json!("not_configured")),
+            "reverseImage": payload
+                .get("reverseImage")
+                .cloned()
+                .unwrap_or_else(|| json!("not_configured")),
+        })
+    });
+    let external_evidence = external_payload
+        .as_ref()
+        .and_then(|payload| payload.get("items"))
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+
     json!({
         "id": search.id,
         "caseReference": search.case_reference,
@@ -50,6 +66,7 @@ fn search_json(search: &SearchRow) -> serde_json::Value {
         "createdAt": search.created_at,
         "organizationId": search.organization_id,
         "externalEvidenceStatus": external_evidence_status,
+        "externalEvidence": external_evidence,
     })
 }
 
@@ -151,9 +168,6 @@ pub async fn create_search_route(
     if case_reference.is_empty() || purpose.is_empty() {
         return ApiError::new("VALIDATION_ERROR", "errors.validation", rid).into_response();
     }
-    // Either both coordinates are present and each within its valid
-    // range, or neither is present — one without the other is a
-    // malformed capture, not a "coordinate unavailable" case.
     match (latitude, longitude) {
         (Some(lat), Some(lon)) => {
             if !(-90.0..=90.0).contains(&lat) || !(-180.0..=180.0).contains(&lon) {
@@ -168,8 +182,6 @@ pub async fn create_search_route(
         }
     }
 
-    // A client-requested top-k above the configured ceiling is clamped
-    // down, never rejected — see docs/ENVIRONMENT.md's SEARCH_MAX_TOP_K.
     let top_k = requested_top_k
         .filter(|k| *k > 0)
         .unwrap_or(state.search_limits.default_top_k)
@@ -181,8 +193,6 @@ pub async fn create_search_route(
             .to_string(),
         _ => claims.user_code.clone(),
     };
-    // Server-derived only — never accepted from the client. See
-    // permission::can_view_scoped_resource.
     let organization_id = crate::db::primary_organization_id(&state.backend, &claims.id)
         .await
         .ok()
@@ -215,12 +225,6 @@ pub async fn create_search_route(
         }
     };
 
-    // Best-effort: this only records that a search was accepted for
-    // processing, nothing security-critical has happened yet — the
-    // MANDATORY guarantee (never report success if the audit write
-    // failed) is applied to SEARCH_COMPLETED in the background task
-    // below instead, since that's the point a client-visible "completed"
-    // status becomes trustworthy or not.
     AuditRecorder::new(action::SEARCH_CREATED, audit_result::SUCCESS, rid.clone())
         .actor(&claims)
         .headers(&headers)
@@ -230,6 +234,7 @@ pub async fn create_search_route(
         .save(&state)
         .await;
 
+    let auto_osint_enabled = state.auto_osint_after_biometric_search;
     tokio::spawn(run_queued_search(
         state,
         queued.id.clone(),
@@ -242,16 +247,15 @@ pub async fn create_search_route(
 
     (
         axum::http::StatusCode::ACCEPTED,
-        Json(json!({ "search": search_json(&queued) })),
+        Json(json!({
+            "search": search_json(&queued),
+            "autoOsintEnabled": auto_osint_enabled,
+        })),
     )
         .into_response()
 }
 
-/// The background half of the async search flow — runs after
-/// `create_search_route` has already returned `202 Accepted` to the
-/// client, so there is no HTTP response left to attach a failure to;
-/// every outcome is instead written to the search row itself (which
-/// `GET /api/v1/search/{id}/status` reports) and to the audit trail.
+/// The background half of the async search flow.
 async fn run_queued_search(
     state: AppState,
     search_id: String,
@@ -313,12 +317,6 @@ async fn run_queued_search(
                 .map(|rows| rows.len())
                 .unwrap_or(0);
 
-            // MANDATORY: never leave a search reporting `completed` via
-            // the status endpoint if its audit record failed to write —
-            // the async equivalent of `save_mandatory`'s guarantee on the
-            // old synchronous path. Here there's no HTTP response to
-            // fail instead, so a write failure downgrades the search
-            // itself to `failed` so a poller never observes a silent lie.
             if let Err(err) =
                 AuditRecorder::new(action::SEARCH_COMPLETED, audit_result::SUCCESS, rid.clone())
                     .actor(&claims)
@@ -338,13 +336,7 @@ async fn run_queued_search(
                 )
                 .await;
             } else {
-                // Runs after the search itself is already `completed` —
-                // see this function's doc comment and `run_auto_osint`'s.
-                // A failure anywhere in here must never change the
-                // search's own status; it only ever writes the separate
-                // `external_evidence_status` field and its own audit
-                // trail.
-                run_auto_osint(&state, &search, &claims, &headers).await;
+                run_auto_osint(&state, &search, &claims, &headers, &image_bytes).await;
             }
         }
         Ok(None) => {
@@ -370,23 +362,15 @@ async fn run_queued_search(
     }
 }
 
-/// `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH`'s entry point — runs once a search
-/// has finished its biometric phase and is already `completed`. Takes the
-/// search's top-scoring candidates (capped at `osint_auto_max_candidates`),
-/// builds a query from each candidate's full name
-/// (`osint::query_builder::build_query`), and runs `collect_web_and_news`
-/// against it — deliberately never the `AuthorizedSocialProvider` or any
-/// reverse-image capability (see `EvidenceOrchestrator::collect_web_and_news`'s
-/// doc comment). Every candidate's collection runs concurrently so total
-/// wall-clock time stays close to one candidate's worth of provider
-/// round-trips rather than the sum across all of them. A provider error
-/// never touches `search.status` — only the separate
-/// `external_evidence_status` column and the `OSINT_AUTO_*` audit trail.
+/// Automatic external evidence phase. Public-web image discovery is independent
+/// of the internal candidate repository, while Tavily/Brave and Currents/
+/// NewsAPI enrich known biometric candidates through permitted text queries.
 async fn run_auto_osint(
     state: &AppState,
     search: &SearchRow,
     claims: &Claims,
     headers: &HeaderMap,
+    image_bytes: &[u8],
 ) {
     if !state.auto_osint_after_biometric_search {
         return;
@@ -400,41 +384,43 @@ async fn run_auto_osint(
     };
     let cap = state.osint_auto_max_candidates.max(0) as usize;
     let eligible: Vec<SearchCandidateRow> = candidates.into_iter().take(cap).collect();
+    let eligible_count = eligible.len();
 
     let auto_rid = uuid::Uuid::new_v4().to_string();
     AuditRecorder::new(
         action::OSINT_AUTO_STARTED,
         audit_result::SUCCESS,
-        auto_rid.clone(),
+        auto_rid,
     )
     .actor(claims)
     .headers(headers)
     .resource("search", &search.id)
-    .metadata(json!({ "candidateCount": eligible.len() }))
+    .metadata(json!({ "candidateCount": eligible_count }))
     .save(state)
     .await;
 
-    if eligible.is_empty() {
-        let status = json!({
-            "web": "unavailable",
-            "news": "unavailable",
-            "social": "not_configured",
-            "reverseImage": "not_configured",
-        });
-        let _ =
-            set_search_external_evidence_status(&state.backend, &search.id, &status.to_string())
-                .await;
-        AuditRecorder::new(action::OSINT_AUTO_FAILED, audit_result::FAILURE, auto_rid)
-            .actor(claims)
-            .headers(headers)
-            .resource("search", &search.id)
-            .metadata(json!({ "reason": "no_eligible_candidates" }))
-            .save(state)
-            .await;
-        return;
+    // This runs even when `eligible_count == 0`, fixing the old behavior
+    // where a probe with no internal candidate could never reach the web.
+    let reverse_outcomes = state.osint_orchestrator.collect_reverse_image(image_bytes).await;
+    let reverse_success = reverse_outcomes.iter().filter(|outcome| outcome.error.is_none()).count();
+    let reverse_fail = reverse_outcomes.len().saturating_sub(reverse_success);
+    let mut any_provider_error = reverse_outcomes.iter().any(|outcome| outcome.error.is_some());
+    let mut external_items = Vec::new();
+    for outcome in &reverse_outcomes {
+        for item in &outcome.items {
+            external_items.push(json!({
+                "sourceType": item.source_type,
+                "providerName": item.provider_name,
+                "title": item.title,
+                "url": item.url,
+                "snippet": item.snippet,
+                "confidenceScore": item.confidence,
+            }));
+        }
     }
+    let reverse_result_count = external_items.len();
 
-    let mut handles = Vec::with_capacity(eligible.len());
+    let mut handles = Vec::with_capacity(eligible_count);
     for candidate in eligible {
         let Some(query) = query_builder::build_query(&candidate.candidate_full_name) else {
             continue;
@@ -466,9 +452,9 @@ async fn run_auto_osint(
 
     let (mut web_success, mut web_fail, mut news_success, mut news_fail) = (0, 0, 0, 0);
     let mut any_stored = false;
-    let mut any_provider_error = false;
     for handle in handles {
         let Ok((ws, wf, ns, nf, result)) = handle.await else {
+            any_provider_error = true;
             continue;
         };
         web_success += ws;
@@ -479,14 +465,47 @@ async fn run_auto_osint(
         any_provider_error = any_provider_error || !result.provider_errors.is_empty();
     }
 
-    let (web_is_mock, news_is_mock) = provider_mock_flags(state);
+    let statuses = state.osint_orchestrator.provider_status();
+    let web_is_mock = statuses
+        .iter()
+        .any(|status| status.slot == "web_search" && status.is_mock);
+    let news_is_mock = statuses
+        .iter()
+        .any(|status| status.slot == "news" && status.is_mock);
+    let reverse_configured = statuses.iter().any(|status| {
+        status.slot == "reverse_image" && status.provider_name != "not-configured"
+    });
+
+    let web_status = if eligible_count == 0 {
+        if web_is_mock {
+            "mock"
+        } else {
+            "not_run"
+        }
+    } else {
+        slot_status(web_is_mock, web_success, web_fail)
+    };
+    let news_status = if eligible_count == 0 {
+        if news_is_mock {
+            "mock"
+        } else {
+            "not_run"
+        }
+    } else {
+        slot_status(news_is_mock, news_success, news_fail)
+    };
+    let reverse_status = if !reverse_configured {
+        "not_configured"
+    } else {
+        slot_status(false, reverse_success, reverse_fail)
+    };
+
     let status = json!({
-        "web": slot_status(web_is_mock, web_success, web_fail),
-        "news": slot_status(news_is_mock, news_success, news_fail),
-        // Never attempted by the automatic trigger — see this function's
-        // doc comment.
+        "web": web_status,
+        "news": news_status,
         "social": "not_configured",
-        "reverseImage": "not_configured",
+        "reverseImage": reverse_status,
+        "items": external_items,
     });
     let _ =
         set_search_external_evidence_status(&state.backend, &search.id, &status.to_string()).await;
@@ -509,14 +528,16 @@ async fn run_auto_osint(
     .actor(claims)
     .headers(headers)
     .resource("search", &search.id)
-    .metadata(json!({ "webStored": any_stored, "status": status }))
+    .metadata(json!({
+        "candidateEvidenceStored": any_stored,
+        "reverseImageResultCount": reverse_result_count,
+        "status": status,
+    }))
     .save(state)
     .await;
 }
 
-/// Real (non-mock) or mock, for the web-search and news provider slots
-/// respectively — read once from the orchestrator's own status reporting
-/// rather than re-deriving it from a provider name string.
+/// Real (non-mock) or mock, for the web-search and news provider slots.
 fn provider_mock_flags(state: &AppState) -> (bool, bool) {
     let mut web_is_mock = false;
     let mut news_is_mock = false;
@@ -530,11 +551,6 @@ fn provider_mock_flags(state: &AppState) -> (bool, bool) {
     (web_is_mock, news_is_mock)
 }
 
-/// A provider slot's status for one automatic-OSINT run: `"mock"` if the
-/// slot is running its mock fallback (regardless of outcome — a mock
-/// result is never "completed" real evidence); otherwise `"completed"`,
-/// `"partial"`, or `"failed"` depending on how many of the (possibly
-/// several, one per attempted candidate) calls to it errored.
 fn slot_status(is_mock: bool, success: usize, fail: usize) -> &'static str {
     if is_mock {
         return "mock";
@@ -548,11 +564,8 @@ fn slot_status(is_mock: bool, success: usize, fail: usize) -> &'static str {
     }
 }
 
-/// `GET /api/v1/search/{search_id}/status` — polling endpoint for the
-/// async search flow: the current search row plus its candidates (once
-/// any exist). Poll until `search.status` is no longer `queued`/
-/// `processing`. Same view-role and object-level authorization as the
-/// rest of the search workflow.
+/// `GET /api/v1/search/{search_id}/status` — polling endpoint for the async
+/// search flow, including the separate automatic external-evidence phase.
 pub async fn get_search_status_route(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -585,6 +598,7 @@ pub async fn get_search_status_route(
     Json(json!({
         "search": search_json(&search),
         "candidates": candidate_rows.iter().map(search_candidate_json).collect::<Vec<_>>(),
+        "autoOsintEnabled": state.auto_osint_after_biometric_search,
     }))
     .into_response()
 }
@@ -618,10 +632,6 @@ pub async fn list_searches_route(
     if !permission::can_view_search(&claims.role) {
         return ApiError::new("FORBIDDEN", "errors.forbidden", rid).into_response();
     }
-    // Object-level authorization: SYSTEM_ADMIN sees every
-    // organization's searches; everyone else only sees their own
-    // organization's (plus any search with no owning organization at
-    // all — see db::push_search_org_scope_pg/_sqlite).
     let org_scope = if claims.role == crate::roles::SYSTEM_ADMIN {
         None
     } else {
@@ -643,9 +653,6 @@ pub async fn list_searches_route(
     }
 }
 
-/// Resolves the organizations `claims` belongs to (empty for
-/// `SYSTEM_ADMIN`, which never needs them — see
-/// `permission::can_view_scoped_resource`'s own bypass).
 async fn actor_org_ids(state: &AppState, claims: &crate::auth::Claims) -> Vec<String> {
     if claims.role == crate::roles::SYSTEM_ADMIN {
         return Vec::new();
@@ -719,10 +726,7 @@ pub async fn get_search_candidates_route(
 }
 
 /// `GET /api/v1/search/{search_id}/candidates/{candidate_id}/history` — the
-/// full, immutable review history for one candidate within one search
-/// (every `verification_events` row, oldest first) — not just the current
-/// status. Same view-role requirement as the rest of the search workflow,
-/// plus the same object-level organization scoping.
+/// full, immutable review history for one candidate within one search.
 pub async fn get_candidate_history_route(
     State(state): State<AppState>,
     Path((search_id, candidate_id)): Path<(String, String)>,
@@ -798,11 +802,6 @@ pub struct ReviewPayload {
     pub notes: Option<String>,
 }
 
-/// The one explicit human verification action that can set a candidate's
-/// status to "confirmed" within a search — never derived automatically
-/// from a similarity score. Restricted to `REVIEWER`/admin roles. Every
-/// call appends a new `verification_events` row rather than overwriting
-/// the previous decision — see `db::record_review_decision`.
 async fn review(
     state: AppState,
     headers: HeaderMap,
@@ -851,9 +850,6 @@ async fn review(
                 "inconclusive" => action::CANDIDATE_MARKED_INCONCLUSIVE,
                 _ => action::CANDIDATE_REJECTED,
             };
-            // MANDATORY: a verification decision must never be
-            // reported as successful if its audit trail entry failed to
-            // write — see AuditRecorder::save_mandatory.
             if let Err(mut err) =
                 AuditRecorder::new(event_action, audit_result::SUCCESS, rid.clone())
                     .actor(&claims)
@@ -911,12 +907,6 @@ pub async fn reject_candidate_route(
     review(state, headers, id, payload, "rejected").await
 }
 
-/// Neither a positive nor a negative identification — the reviewer looked
-/// at the candidate and could not reach a confident decision either way
-/// (poor image quality, ambiguous similarity, insufficient context).
-/// Distinct from simply not reviewing yet (`pending`): this is itself a
-/// recorded decision, just one that leaves the candidate open rather than
-/// closing it out as confirmed or rejected.
 pub async fn mark_candidate_inconclusive_route(
     State(state): State<AppState>,
     Path(id): Path<String>,
