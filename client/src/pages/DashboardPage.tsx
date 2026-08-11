@@ -246,9 +246,12 @@ export function DashboardPage() {
             {reviewErrorKey && (
               <p className="status-card__line status-card__line--offline">{t(reviewErrorKey)}</p>
             )}
-            {!activeCandidatesLoading && !activeCandidatesError && activeCandidates.length === 0 && (
-              <p className="status-card__line">{t('search.noCandidates')}</p>
-            )}
+            {!activeCandidatesLoading &&
+              !activeCandidatesError &&
+              activeCandidates.length === 0 &&
+              activeSearch.externalEvidence.length === 0 && (
+                <p className="status-card__line">{t('search.noCandidates')}</p>
+              )}
             {activeCandidates.map((candidate) => {
               const isBusy = reviewBusyId === candidate.candidateId;
               return (
