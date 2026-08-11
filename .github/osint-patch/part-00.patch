@@ -1,0 +1,230 @@
+diff --git a/client/src/i18n/locales/ar/translation.json b/client/src/i18n/locales/ar/translation.json
+index 5c0aea7..1f500df 100644
+--- a/client/src/i18n/locales/ar/translation.json
++++ b/client/src/i18n/locales/ar/translation.json
+@@ -312,7 +312,9 @@
+       "web": "الويب",
+       "news": "الأخبار",
+       "social": "وسائل التواصل الاجتماعي",
+-      "reverseImage": "البحث العكسي بالصورة"
++      "reverseImage": "البحث العكسي بالصورة",
++      "results": "أدلة الصور/الويب الخارجية",
++      "openSource": "فتح المصدر"
+     },
+     "viewOnlyNotice": "يسمح دورك بعرض عمليات البحث والمرشحين فقط. يتطلب بدء بحث جديد دور OPERATOR أو REVIEWER أو SECURITY_ADMIN أو SYSTEM_ADMIN.",
+     "evidenceCount": "تم جمع {{count}} من عناصر الأدلة"
+@@ -383,7 +385,8 @@
+       "rateLimited": "تم تجاوز حد المعدل",
+       "unavailable": "غير متاح",
+       "not_configured": "غير مُهيَّأ",
+-      "mock": "تجريبي"
++      "mock": "تجريبي",
++      "not_run": "لم يتم التشغيل"
+     },
+     "entityGraph": {
+       "valuePlaceholder": "القيمة",
+diff --git a/client/src/i18n/locales/de/translation.json b/client/src/i18n/locales/de/translation.json
+index c744c4f..1d25507 100644
+--- a/client/src/i18n/locales/de/translation.json
++++ b/client/src/i18n/locales/de/translation.json
+@@ -312,7 +312,9 @@
+       "web": "Web",
+       "news": "Nachrichten",
+       "social": "Soziale Medien",
+-      "reverseImage": "Rückwärtsbildsuche"
++      "reverseImage": "Rückwärtsbildsuche",
++      "results": "Externe Bild-/Web-Nachweise",
++      "openSource": "Quelle öffnen"
+     },
+     "viewOnlyNotice": "Ihre Rolle erlaubt nur das Ansehen von Suchen und Kandidaten. Für eine neue Suche ist die Rolle OPERATOR, REVIEWER, SECURITY_ADMIN oder SYSTEM_ADMIN erforderlich.",
+     "evidenceCount": "{{count}} Beweismittel gesammelt"
+@@ -383,7 +385,8 @@
+       "rateLimited": "Rate-Limit erreicht",
+       "unavailable": "Nicht verfügbar",
+       "not_configured": "Nicht konfiguriert",
+-      "mock": "Simuliert"
++      "mock": "Simuliert",
++      "not_run": "Nicht ausgeführt"
+     },
+     "entityGraph": {
+       "valuePlaceholder": "Wert",
+diff --git a/client/src/i18n/locales/en/translation.json b/client/src/i18n/locales/en/translation.json
+index b13293c..76cc342 100644
+--- a/client/src/i18n/locales/en/translation.json
++++ b/client/src/i18n/locales/en/translation.json
+@@ -312,7 +312,9 @@
+       "web": "Web",
+       "news": "News",
+       "social": "Social",
+-      "reverseImage": "Reverse image"
++      "reverseImage": "Reverse image",
++      "results": "External image/web evidence",
++      "openSource": "Open source"
+     },
+     "viewOnlyNotice": "Your role allows viewing searches and candidates only. Starting a new search requires the OPERATOR, REVIEWER, SECURITY_ADMIN, or SYSTEM_ADMIN role.",
+     "evidenceCount": "{{count}} evidence item(s) collected"
+@@ -383,7 +385,8 @@
+       "rateLimited": "Rate limited",
+       "unavailable": "Unavailable",
+       "not_configured": "Not configured",
+-      "mock": "Mock"
++      "mock": "Mock",
++      "not_run": "Not run"
+     },
+     "entityGraph": {
+       "valuePlaceholder": "Value",
+diff --git a/client/src/i18n/locales/fr/translation.json b/client/src/i18n/locales/fr/translation.json
+index 496b4c6..c122c81 100644
+--- a/client/src/i18n/locales/fr/translation.json
++++ b/client/src/i18n/locales/fr/translation.json
+@@ -312,7 +312,9 @@
+       "web": "Web",
+       "news": "Actualités",
+       "social": "Réseaux sociaux",
+-      "reverseImage": "Image inversée"
++      "reverseImage": "Image inversée",
++      "results": "Éléments externes image/web",
++      "openSource": "Ouvrir la source"
+     },
+     "viewOnlyNotice": "Votre rôle permet uniquement de consulter les recherches et les candidats. Démarrer une nouvelle recherche requiert le rôle OPERATOR, REVIEWER, SECURITY_ADMIN ou SYSTEM_ADMIN.",
+     "evidenceCount": "{{count}} élément(s) de preuve collecté(s)"
+@@ -383,7 +385,8 @@
+       "rateLimited": "Limite de débit atteinte",
+       "unavailable": "Indisponible",
+       "not_configured": "Non configuré",
+-      "mock": "Simulé"
++      "mock": "Simulé",
++      "not_run": "Non exécuté"
+     },
+     "entityGraph": {
+       "valuePlaceholder": "Valeur",
+diff --git a/client/src/i18n/locales/ru/translation.json b/client/src/i18n/locales/ru/translation.json
+index 8a19061..f046e6b 100644
+--- a/client/src/i18n/locales/ru/translation.json
++++ b/client/src/i18n/locales/ru/translation.json
+@@ -312,7 +312,9 @@
+       "web": "Веб",
+       "news": "Новости",
+       "social": "Соцсети",
+-      "reverseImage": "Поиск по изображению"
++      "reverseImage": "Поиск по изображению",
++      "results": "Внешние доказательства по изображению/вебу",
++      "openSource": "Открыть источник"
+     },
+     "viewOnlyNotice": "Ваша роль позволяет только просматривать поиски и кандидатов. Для запуска нового поиска требуется роль OPERATOR, REVIEWER, SECURITY_ADMIN или SYSTEM_ADMIN.",
+     "evidenceCount": "Собрано доказательств: {{count}}"
+@@ -383,7 +385,8 @@
+       "rateLimited": "Превышен лимит запросов",
+       "unavailable": "Недоступно",
+       "not_configured": "Не настроено",
+-      "mock": "Заглушка"
++      "mock": "Заглушка",
++      "not_run": "Не запускалось"
+     },
+     "entityGraph": {
+       "valuePlaceholder": "Значение",
+diff --git a/client/src/i18n/locales/tr/translation.json b/client/src/i18n/locales/tr/translation.json
+index 50591ba..07df4c1 100644
+--- a/client/src/i18n/locales/tr/translation.json
++++ b/client/src/i18n/locales/tr/translation.json
+@@ -312,7 +312,9 @@
+       "web": "Web",
+       "news": "Haberler",
+       "social": "Sosyal medya",
+-      "reverseImage": "Ters görsel arama"
++      "reverseImage": "Ters görsel arama",
++      "results": "Harici görsel/web kanıtları",
++      "openSource": "Kaynağı aç"
+     },
+     "viewOnlyNotice": "Rolünüz yalnızca aramaları ve adayları görüntülemenize izin veriyor. Yeni arama başlatmak için OPERATOR, REVIEWER, SECURITY_ADMIN veya SYSTEM_ADMIN rolü gerekir.",
+     "evidenceCount": "{{count}} kanıt öğesi toplandı"
+@@ -383,7 +385,8 @@
+       "rateLimited": "Hız sınırına takıldı",
+       "unavailable": "Kullanılamıyor",
+       "not_configured": "Yapılandırılmadı",
+-      "mock": "Sahte"
++      "mock": "Sahte",
++      "not_run": "Çalıştırılmadı"
+     },
+     "entityGraph": {
+       "valuePlaceholder": "Değer",
+diff --git a/client/src/pages/DashboardPage.test.tsx b/client/src/pages/DashboardPage.test.tsx
+index 030e9ce..a39981a 100644
+--- a/client/src/pages/DashboardPage.test.tsx
++++ b/client/src/pages/DashboardPage.test.tsx
+@@ -52,7 +52,7 @@ describe('DashboardPage', () => {
+       pageSize: 50,
+       total: 1,
+     });
+-    vi.spyOn(searchClient, 'getSearchCandidates').mockRejectedValue(new Error('network error'));
++    vi.spyOn(searchClient, 'getSearchStatus').mockRejectedValue(new Error('network error'));
+     await i18n.changeLanguage('en');
+ 
+     renderDashboard();
+diff --git a/client/src/pages/DashboardPage.tsx b/client/src/pages/DashboardPage.tsx
+index 4181dfe..57d9fe7 100644
+--- a/client/src/pages/DashboardPage.tsx
++++ b/client/src/pages/DashboardPage.tsx
+@@ -5,7 +5,7 @@ import { OsintWorkspace } from '../components/OsintWorkspace';
+ import { useAuth } from '../features/auth/AuthContext';
+ import { formatLatitude, formatLongitude, getLastKnownLocation } from '../hooks/useGeolocation';
+ import * as searchClient from '../services/searchClient';
+-import type { SearchCandidate, SearchSummary } from '../services/searchClient';
++import type { SearchCandidate, SearchExternalEvidenceItem, SearchSummary } from '../services/searchClient';
+ import * as evidenceClient from '../services/evidenceClient';
+ import { apiErrorMessageKey } from '../services/apiClient';
+ import { getHealthReady } from '../services/systemClient';
+@@ -31,6 +31,7 @@ export function DashboardPage() {
+ 
+   const [activeSearch, setActiveSearch] = useState<SearchSummary | null>(null);
+   const [activeCandidates, setActiveCandidates] = useState<SearchCandidate[]>([]);
++  const [activeExternalEvidence, setActiveExternalEvidence] = useState<SearchExternalEvidenceItem[]>([]);
+   const [activeCandidatesLoading, setActiveCandidatesLoading] = useState(false);
+   const [activeCandidatesError, setActiveCandidatesError] = useState(false);
+   const [reviewBusyId, setReviewBusyId] = useState<string | null>(null);
+@@ -89,12 +90,15 @@ export function DashboardPage() {
+   const openSearch = async (search: SearchSummary) => {
+     setActiveSearch(search);
+     setActiveCandidates([]);
++    setActiveExternalEvidence([]);
+     setActiveCandidatesError(false);
+     setActiveCandidatesLoading(true);
+     try {
+-      const candidates = await searchClient.getSearchCandidates(search.id);
+-      setActiveCandidates(candidates);
+-      loadEvidenceCounts(candidates);
++      const result = await searchClient.getSearchStatus(search.id);
++      setActiveSearch(result.search);
++      setActiveCandidates(result.candidates);
++      setActiveExternalEvidence(result.externalEvidence ?? []);
++      loadEvidenceCounts(result.candidates);
+     } catch {
+       setActiveCandidatesError(true);
+     } finally {
+@@ -126,6 +130,7 @@ export function DashboardPage() {
+       } else {
+         setActiveSearch(result.search);
+         setActiveCandidates(result.candidates);
++        setActiveExternalEvidence(result.externalEvidence ?? []);
+         loadEvidenceCounts(result.candidates);
+         setCaseReference('');
+         setPurpose('');
+@@ -247,6 +252,29 @@ export function DashboardPage() {
+               </li>
+             </ul>
+           )}
++          {activeExternalEvidence.length > 0 && (
++            <div className="search-external-evidence">
++              <h3 className="overlay-content__heading">{t('search.externalEvidence.results')}</h3>
++              <ul className="overlay-list">
++                {activeExternalEvidence.map((item) => (
++                  <li key={item.id} className="overlay-list__item overlay-list__item--session">
++                    <div>
++                      <div>{item.title}</div>
++                      <div className="admin-user-card__note">
++                        {item.providerName}
++                        {item.snippet ? ` · ${item.snippet}` : ''}
++                      </div>
++                      {item.url && (
++                        <a href={item.url} target="_blank" rel="noopener noreferrer">
++                          {t('search.ext
