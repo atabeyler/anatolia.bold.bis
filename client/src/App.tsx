@@ -8,7 +8,7 @@ import { useAuth } from './features/auth/AuthContext';
 import { brandMark } from './lib/brand';
 import { AdminPage } from './pages/AdminPage';
 import { AuditPage } from './pages/AuditPage';
-import { DashboardPage } from './pages/DashboardPage';
+import { DashboardWorkspacePage } from './pages/DashboardWorkspacePage';
 import { LoginPage } from './pages/LoginPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 
@@ -34,9 +34,6 @@ function App() {
 
   useEffect(() => {
     if (status === 'signed-in' && view === null) {
-      // Admins land straight on the management panel — no intermediate
-      // dashboard click required — while everyone else lands on the
-      // dashboard as before.
       setView(isAdmin ? 'admin' : 'dashboard');
     }
     if (status !== 'signed-in' && view !== null) {
@@ -44,19 +41,6 @@ function App() {
     }
   }, [status, isAdmin, view]);
 
-  // .app-main's clearance for the fixed top bar and footer is measured
-  // live, not assumed from a fixed rem value: on narrow screens, or in
-  // languages whose strings are longer than English, the bar wraps onto
-  // extra lines and grows taller. A static padding guess would then let
-  // content hide underneath it.
-  //
-  // ResizeObserver drives most updates, but it can miss the one resize
-  // that matters most here: the brand/mono webfonts load asynchronously
-  // (see index.html's Google Fonts link) and swap in after first paint,
-  // which reflows both bars' text wrapping without reliably re-firing the
-  // observer in every engine. `document.fonts.ready` plus a plain
-  // `resize` listener are cheap, redundant correction passes that catch
-  // exactly that case, so the reserved space never goes stale.
   useEffect(() => {
     const root = document.documentElement;
     const footerEl = footerRef.current;
@@ -124,9 +108,6 @@ function App() {
         {t('a11y.skipToContent')}
       </a>
       {signedIn ? (
-        // Logo, brand, contextual subtitle, and session actions stay
-        // pinned in one bar across every signed-in screen, rather than
-        // scrolling away with page content (see .app-topbar).
         <header className="app-topbar" ref={topbarRef}>
           <div className="app-topbar__brand">
             <Logo compact />
@@ -191,7 +172,7 @@ function App() {
 
       <div id="main-content" className={signedIn ? 'app-main app-main--with-topbar' : 'app-main'}>
         {status === 'loading' ? null : signedIn ? (
-          view === 'admin' ? <AdminPage /> : view === 'audit' ? <AuditPage /> : <DashboardPage />
+          view === 'admin' ? <AdminPage /> : view === 'audit' ? <AuditPage /> : <DashboardWorkspacePage />
         ) : (
           <LoginPage />
         )}
