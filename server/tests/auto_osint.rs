@@ -356,6 +356,7 @@ async fn one_failing_provider_reports_partial_without_failing_the_search() {
         vec![Arc::new(FailingWebSearchProvider)],
         vec![Arc::new(MockNewsProvider)],
         vec![Arc::new(MockSocialProvider)],
+        Vec::new(),
     );
     let state = AppState {
         auto_osint_after_biometric_search: true,
