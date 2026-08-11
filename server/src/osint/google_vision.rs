@@ -62,10 +62,9 @@ impl GoogleVisionWebDetectionProvider {
             )));
         }
 
-        let body: VisionResponse = response
-            .json()
-            .await
-            .map_err(|e| OsintError::Internal(format!("failed to parse Google Vision response: {e}")))?;
+        let body: VisionResponse = response.json().await.map_err(|e| {
+            OsintError::Internal(format!("failed to parse Google Vision response: {e}"))
+        })?;
 
         let Some(first) = body.responses.into_iter().next() else {
             return Ok(Vec::new());
