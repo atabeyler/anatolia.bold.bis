@@ -162,6 +162,9 @@ mod tests {
         }"#;
         let parsed: SearchByImageResponse = serde_json::from_str(json).unwrap();
         assert_eq!(parsed.images.len(), 1);
-        assert_eq!(parsed.images[0].page_url.as_deref(), Some("https://example.test/profile"));
+        assert_eq!(
+            parsed.images[0].page_url.as_deref(),
+            Some("https://example.test/profile")
+        );
     }
 }
