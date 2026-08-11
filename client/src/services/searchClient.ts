@@ -1,11 +1,9 @@
 import { apiClient } from './apiClient';
 
 /**
- * Per-slot outcome of `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH`'s automatic
- * web/news evidence collection for one search — see
- * `search::run_auto_osint` (server). `social` and `reverseImage` are
- * always `'not_configured'`: the automatic trigger never runs either
- * (no real implementation of either exists in this deployment).
+ * Per-slot outcome of automatic external evidence collection for one search.
+ * Web/news enrich known local candidates. Reverse-image discovery can run
+ * directly against the sanitized probe when a real provider is configured.
  */
 export type ExternalEvidenceSlotStatus =
   | 'completed'
@@ -13,13 +11,23 @@ export type ExternalEvidenceSlotStatus =
   | 'failed'
   | 'mock'
   | 'unavailable'
-  | 'not_configured';
+  | 'not_configured'
+  | 'not_run';
 
 export interface ExternalEvidenceStatus {
   web: ExternalEvidenceSlotStatus;
   news: ExternalEvidenceSlotStatus;
   social: ExternalEvidenceSlotStatus;
   reverseImage: ExternalEvidenceSlotStatus;
+}
+
+export interface SearchExternalEvidenceItem {
+  sourceType: string;
+  providerName: string;
+  title: string;
+  url: string | null;
+  snippet: string | null;
+  confidenceScore: number;
 }
 
 export interface SearchSummary {
@@ -37,13 +45,12 @@ export interface SearchSummary {
   failureMessageKey: string | null;
   createdAt: string;
   /**
-   * `null` until automatic OSINT has actually reported an outcome for
-   * this search — either `AUTO_OSINT_AFTER_BIOMETRIC_SEARCH` is off, or
-   * its background work (which runs after the search itself is already
-   * `completed`) hasn't finished yet. Re-fetch the search status a
-   * moment later to pick it up once it lands.
+   * `null` until automatic external evidence collection has reported an
+   * outcome for this search, or forever when automatic collection is off.
    */
   externalEvidenceStatus: ExternalEvidenceStatus | null;
+  /** Search-level evidence discovered directly from the uploaded image. */
+  externalEvidence: SearchExternalEvidenceItem[];
 }
 
 export interface SearchSummaryPage {
@@ -67,6 +74,7 @@ export interface SearchCandidate {
 export interface CreateSearchResult {
   search: SearchSummary;
   candidates: SearchCandidate[];
+  autoOsintEnabled?: boolean;
 }
 
 const SEARCH_STATUS_POLL_INTERVAL_MS = 500;
@@ -82,12 +90,9 @@ export async function getSearchStatus(searchId: string): Promise<CreateSearchRes
 }
 
 /**
- * Async search flow: `POST /v1/search/face` is accepted
- * (`202`) immediately with a `queued` search row — the biometric pipeline
- * runs server-side in a background task. This polls
- * `GET /v1/search/{id}/status` until it leaves `queued`/`processing`, so
- * callers keep the same "await a finished result" shape they had before
- * the response contract changed, without needing their own polling loop.
+ * Async search flow: `POST /v1/search/face` returns a queued search row and
+ * this helper polls until both biometric processing and, when enabled,
+ * automatic external evidence collection have reported their result.
  */
 export async function createSearch(
   caseReference: string,
@@ -109,7 +114,13 @@ export async function createSearch(
 
   const deadline = Date.now() + SEARCH_STATUS_POLL_TIMEOUT_MS;
   let latest = data;
-  while (latest.search.status === 'queued' || latest.search.status === 'processing') {
+  while (
+    latest.search.status === 'queued' ||
+    latest.search.status === 'processing' ||
+    (latest.autoOsintEnabled === true &&
+      latest.search.status === 'completed' &&
+      latest.search.externalEvidenceStatus === null)
+  ) {
     if (Date.now() >= deadline) {
       return latest;
     }
