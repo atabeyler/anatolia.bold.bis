@@ -20,22 +20,77 @@ pub fn build_query(full_name: &str) -> Option<String> {
 /// context; a provider-returned page title is preferred, with a short snippet
 /// as fallback.
 pub fn build_reverse_context_query(title: &str, snippet: Option<&str>) -> Option<String> {
-    fn usable(value: &str) -> Option<String> {
-        let value = value.trim();
-        if value.len() < 3 {
-            return None;
+    fn normalized(value: &str) -> String {
+        value
+            .trim()
+            .to_ascii_lowercase()
+            .replace(['\n', '\r', '\t'], " ")
+    }
+
+    fn is_generic_visual_context(value: &str) -> bool {
+        let lower = normalized(value);
+        if lower.is_empty() {
+            return true;
         }
-        let lower = value.to_ascii_lowercase();
-        if matches!(
+
+        // Google Vision can fall back to generic best-guess labels such as
+        // "screenshot" when it has no meaningful matching-page context. Never
+        // fan those labels out into Tavily/Currents: doing so creates a large
+        // amount of unrelated screenshot/tutorial noise.
+        if lower.starts_with("best guess:") {
+            let guess = lower.trim_start_matches("best guess:").trim();
+            return matches!(
+                guess,
+                "screenshot"
+                    | "screen shot"
+                    | "screen capture"
+                    | "photo"
+                    | "image"
+                    | "picture"
+                    | "person"
+                    | "people"
+                    | "man"
+                    | "woman"
+                    | "face"
+                    | "selfie"
+            );
+        }
+
+        matches!(
             lower.as_str(),
             "full matching image"
                 | "partial matching image"
                 | "visually similar image"
                 | "web page containing a matching image"
-        ) {
+                | "screenshot"
+                | "screen shot"
+                | "screen capture"
+                | "photo"
+                | "image"
+                | "picture"
+                | "person"
+                | "people"
+                | "man"
+                | "woman"
+                | "face"
+                | "selfie"
+        )
+    }
+
+    fn usable(value: &str) -> Option<String> {
+        let value = value.trim();
+        if value.len() < 3 || is_generic_visual_context(value) {
             return None;
         }
         Some(value.chars().take(180).collect())
+    }
+
+    // If Vision explicitly says its best guess is only a generic visual label,
+    // do not use the accompanying generic tutorial/page title either. This
+    // prevents a "best guess: screenshot" response from turning into searches
+    // for screenshot tutorials.
+    if snippet.is_some_and(is_generic_visual_context) {
+        return None;
     }
 
     usable(title).or_else(|| snippet.and_then(usable))
@@ -71,6 +126,25 @@ mod tests {
         assert_eq!(
             build_reverse_context_query("Full matching image", Some("Public page context")),
             Some("Public page context".to_string())
+        );
+    }
+
+    #[test]
+    fn reverse_context_rejects_generic_screenshot_best_guess() {
+        assert_eq!(
+            build_reverse_context_query(
+                "How to Take a Screenshot on Windows",
+                Some("best guess: screenshot")
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn reverse_context_rejects_generic_face_best_guess() {
+        assert_eq!(
+            build_reverse_context_query("Generic portrait page", Some("best guess: face")),
+            None
         );
     }
 }
