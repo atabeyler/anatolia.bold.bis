@@ -16,9 +16,11 @@ pub fn build_query(full_name: &str) -> Option<String> {
 /// Builds a text-search seed from public reverse-image evidence. This is used
 /// only when the internal biometric repository produced no candidate. It never
 /// uses case reference, purpose, operator location, internal ids, or notes.
-/// Generic image-only labels are skipped because they carry no searchable web
-/// context; a provider-returned page title is preferred, with a short snippet
-/// as fallback.
+///
+/// A page title is allowed to fan out into Tavily/Currents only when the
+/// reverse-image provider explicitly reported a full or partial image match.
+/// Generic best-guess labels and visually-similar-only results are deliberately
+/// rejected because they create unrelated topic searches.
 pub fn build_reverse_context_query(title: &str, snippet: Option<&str>) -> Option<String> {
     fn normalized(value: &str) -> String {
         value
@@ -33,13 +35,8 @@ pub fn build_reverse_context_query(title: &str, snippet: Option<&str>) -> Option
             return true;
         }
 
-        // Google Vision can fall back to generic best-guess labels such as
-        // "screenshot" when it has no meaningful matching-page context. Never
-        // fan those labels out into Tavily/Currents: doing so creates a large
-        // amount of unrelated screenshot/tutorial noise.
-        if lower.starts_with("best guess:") {
-            let guess = lower.trim_start_matches("best guess:").trim();
-            return matches!(
+        let generic = |guess: &str| {
+            matches!(
                 guess,
                 "screenshot"
                     | "screen shot"
@@ -53,7 +50,14 @@ pub fn build_reverse_context_query(title: &str, snippet: Option<&str>) -> Option
                     | "woman"
                     | "face"
                     | "selfie"
-            );
+                    | "gentleman"
+                    | "lady"
+                    | "portrait"
+            )
+        };
+
+        if lower.starts_with("best guess:") {
+            return generic(lower.trim_start_matches("best guess:").trim());
         }
 
         matches!(
@@ -74,7 +78,15 @@ pub fn build_reverse_context_query(title: &str, snippet: Option<&str>) -> Option
                 | "woman"
                 | "face"
                 | "selfie"
+                | "gentleman"
+                | "lady"
+                | "portrait"
         )
+    }
+
+    fn has_explicit_image_match(value: &str) -> bool {
+        let lower = normalized(value);
+        lower.contains("full image match") || lower.contains("partial image match")
     }
 
     fn usable(value: &str) -> Option<String> {
@@ -85,15 +97,17 @@ pub fn build_reverse_context_query(title: &str, snippet: Option<&str>) -> Option
         Some(value.chars().take(180).collect())
     }
 
-    // If Vision explicitly says its best guess is only a generic visual label,
-    // do not use the accompanying generic tutorial/page title either. This
-    // prevents a "best guess: screenshot" response from turning into searches
-    // for screenshot tutorials.
-    if snippet.is_some_and(is_generic_visual_context) {
+    let snippet = snippet?;
+
+    // Do not turn a generic Vision label (for example "best guess:
+    // gentleman") or a visually-similar-only result into a text search.
+    // Only explicit full/partial image matches provide enough evidence to use
+    // the public page title as an enrichment seed.
+    if !has_explicit_image_match(snippet) {
         return None;
     }
 
-    usable(title).or_else(|| snippet.and_then(usable))
+    usable(title)
 }
 
 #[cfg(test)]
@@ -114,18 +128,21 @@ mod tests {
     }
 
     #[test]
-    fn reverse_context_prefers_public_page_title() {
+    fn reverse_context_uses_title_for_explicit_partial_match() {
         assert_eq!(
-            build_reverse_context_query(" Example news page ", Some("fallback")),
+            build_reverse_context_query(
+                " Example news page ",
+                Some("1 partial image match(es) · best guess: gentleman")
+            ),
             Some("Example news page".to_string())
         );
     }
 
     #[test]
-    fn reverse_context_skips_generic_image_labels() {
+    fn reverse_context_rejects_visually_similar_only_result() {
         assert_eq!(
-            build_reverse_context_query("Full matching image", Some("Public page context")),
-            Some("Public page context".to_string())
+            build_reverse_context_query("Visually similar image", Some("selfie")),
+            None
         );
     }
 
@@ -141,10 +158,21 @@ mod tests {
     }
 
     #[test]
-    fn reverse_context_rejects_generic_face_best_guess() {
+    fn reverse_context_rejects_generic_gentleman_best_guess() {
         assert_eq!(
-            build_reverse_context_query("Generic portrait page", Some("best guess: face")),
+            build_reverse_context_query("WHAT IS A GENTLEMAN?", Some("best guess: gentleman")),
             None
+        );
+    }
+
+    #[test]
+    fn reverse_context_keeps_real_partial_match_despite_generic_guess() {
+        assert_eq!(
+            build_reverse_context_query(
+                "Sedat Peker'in örgütü",
+                Some("1 partial image match(es) · best guess: gentleman")
+            ),
+            Some("Sedat Peker'in örgütü".to_string())
         );
     }
 }
