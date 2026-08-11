@@ -1,0 +1,27 @@
+{
+  "candidateEnrollment": {
+    "heading": "KANDIDATENREGISTRIERUNG",
+    "hint": "Erstellen Sie einen Kandidatendatensatz und registrieren Sie anschließend ein oder mehrere Referenz-Gesichtsfotos für die biometrische Suche.",
+    "referenceCode": "Kandidaten-Referenzcode",
+    "fullName": "Vollständiger Name",
+    "notes": "Notizen (optional)",
+    "create": "KANDIDAT ERSTELLEN",
+    "creating": "Wird erstellt…",
+    "createError": "Kandidat konnte nicht erstellt werden.",
+    "referencePhoto": "Referenz-Gesichtsfoto",
+    "enroll": "FOTO REGISTRIEREN",
+    "enrolling": "Wird registriert…",
+    "enrollError": "Referenzfoto konnte nicht registriert werden.",
+    "mockBlocked": "Für eine echte biometrische Registrierung ist der ONNX-Anbieter erforderlich. Der aktive Mock-Anbieter kann keine echten Gesichtsvorlagen erstellen.",
+    "newCandidate": "Neuer Kandidat",
+    "duplicatesHeading": "Möglicher biometrischer Dublettentreffer",
+    "duplicateItem": "Kandidat {{candidateId}} · Ähnlichkeit {{score}}",
+    "duplicatesHint": "Dies ist nur ein beratender Ähnlichkeitshinweis. Keine automatische Zusammenführung oder Identitätsbestätigung durchführen.",
+    "templatesHeading": "BIOMETRISCHE VORLAGEN",
+    "noTemplates": "Noch keine biometrischen Vorlagen registriert.",
+    "templateMeta": "Dimension {{dimension}} · Qualität {{quality}} · registriert {{date}}",
+    "revoke": "Vorlage widerrufen",
+    "revoked": "WIDERRUFEN",
+    "revokeError": "Biometrische Vorlage konnte nicht widerrufen werden."
+  }
+}
