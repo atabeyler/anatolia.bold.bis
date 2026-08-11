@@ -56,10 +56,9 @@ impl TavilyWebSearchProvider {
             .map_err(|e| OsintError::ProviderUnavailable(e.to_string()))?;
 
         let status = response.status();
-        let body_text = response
-            .text()
-            .await
-            .map_err(|e| OsintError::ProviderUnavailable(format!("failed to read Tavily response: {e}")))?;
+        let body_text = response.text().await.map_err(|e| {
+            OsintError::ProviderUnavailable(format!("failed to read Tavily response: {e}"))
+        })?;
 
         if !status.is_success() {
             let detail = body_text.trim();
