@@ -20,17 +20,13 @@ interface OsintWorkspaceProps {
 
 type Section = 'evidence' | 'entityGraph' | 'duplicates';
 
-/**
- * Groups evidence for display by the real `sourceType` values the
- * backend actually produces (`server/src/osint/*.rs`) — `web_search`,
- * `news`, `social`. `reverseImage` has no matching `sourceType` in this
- * codebase (no `ReverseImageSearchProvider` implementation exists), so
- * its group is always empty and simply never renders; it's kept in the
- * list only so a future real reverse-image provider slots in without
- * this component needing to change.
+/** Groups evidence by the source types emitted by the backend. `web_image`
+ * is Tavily's text-query public image discovery and is deliberately kept
+ * separate from `reverse_image`, which means an actual image-to-web lookup.
  */
 const EVIDENCE_SOURCE_GROUPS: Array<{ key: string; sourceTypes: string[] }> = [
   { key: 'web', sourceTypes: ['web_search'] },
+  { key: 'webImages', sourceTypes: ['web_image'] },
   { key: 'news', sourceTypes: ['news'] },
   { key: 'social', sourceTypes: ['social'] },
   { key: 'reverseImage', sourceTypes: ['reverse_image'] },
@@ -193,6 +189,11 @@ export function OsintWorkspace({ candidateId, candidateName, canManage, onClose 
                             : item.providerName}
                           {item.url ? ` · ${item.url}` : ''}
                         </div>
+                        {item.sourceType === 'web_image' && item.url && (
+                          <a href={item.url} target="_blank" rel="noreferrer" className="overlay-secondary-button">
+                            {t('osint.evidence.openImage')}
+                          </a>
+                        )}
                       </div>
                     </li>
                   ))}
