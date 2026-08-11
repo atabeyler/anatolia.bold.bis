@@ -2,6 +2,12 @@ import i18n from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
 
+import arEnrollment from './enrollment/ar.json';
+import deEnrollment from './enrollment/de.json';
+import enEnrollment from './enrollment/en.json';
+import frEnrollment from './enrollment/fr.json';
+import ruEnrollment from './enrollment/ru.json';
+import trEnrollment from './enrollment/tr.json';
 import ar from './locales/ar/translation.json';
 import de from './locales/de/translation.json';
 import en from './locales/en/translation.json';
@@ -37,12 +43,12 @@ i18n
   .use(initReactI18next)
   .init({
     resources: {
-      en: { translation: en },
-      tr: { translation: tr },
-      de: { translation: de },
-      fr: { translation: fr },
-      ar: { translation: ar },
-      ru: { translation: ru },
+      en: { translation: { ...en, ...enEnrollment } },
+      tr: { translation: { ...tr, ...trEnrollment } },
+      de: { translation: { ...de, ...deEnrollment } },
+      fr: { translation: { ...fr, ...frEnrollment } },
+      ar: { translation: { ...ar, ...arEnrollment } },
+      ru: { translation: { ...ru, ...ruEnrollment } },
     },
     supportedLngs: SUPPORTED_LANGUAGES,
     fallbackLng: 'en',
