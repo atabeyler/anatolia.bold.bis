@@ -1,15 +1,13 @@
 name: Rust formatting repair
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   repair:
-    if: github.event.head_commit.message != 'Normalize Rust formatting and remove dead code'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,17 +16,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Remove obsolete helper
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('server/src/search.rs')
-          text = path.read_text()
-          block = '''/// Real (non-mock) or mock, for the web-search and news provider slots.\nfn provider_mock_flags(state: &AppState) -> (bool, bool) {\n    let mut web_is_mock = false;\n    let mut news_is_mock = false;\n    for status in state.osint_orchestrator.provider_status() {\n        match status.slot {\n            "web_search" => web_is_mock = status.is_mock,\n            "news" => news_is_mock = status.is_mock,\n            _ => {}\n        }\n    }\n    (web_is_mock, news_is_mock)\n}\n\n'''
-          if block in text:
-              text = text.replace(block, '', 1)
-              path.write_text(text)
-          PY
       - name: Format Rust sources
         working-directory: server
         run: cargo fmt
@@ -41,5 +28,5 @@ jobs:
             echo "No formatting changes needed"
             exit 0
           fi
-          git commit -m "Normalize Rust formatting and remove dead code"
+          git commit -m "Normalize Rust formatting"
           git push origin main
