@@ -22,4 +22,5 @@ pub mod permission;
 pub mod ratelimit;
 pub mod roles;
 pub mod routes;
+#[allow(dead_code)]
 pub mod search;
