@@ -14,7 +14,7 @@ use super::resilience::CircuitBreaker;
 use super::{EvidenceItem, EvidenceItems, OsintError, WebSearchProvider};
 
 const ENDPOINT: &str = "https://api.tavily.com/search";
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
 const MAX_ATTEMPTS: u32 = 2;
 const RETRY_DELAY: Duration = Duration::from_millis(300);
 const FAILURE_THRESHOLD: u32 = 3;
@@ -46,26 +46,32 @@ impl TavilyWebSearchProvider {
             .bearer_auth(&self.api_key)
             .json(&TavilyRequest {
                 query,
+                search_depth: "basic",
                 max_results: 10,
                 include_images: true,
                 include_image_descriptions: true,
-                safe_search: true,
             })
             .send()
             .await
             .map_err(|e| OsintError::ProviderUnavailable(e.to_string()))?;
 
-        if !response.status().is_success() {
-            return Err(OsintError::ProviderUnavailable(format!(
-                "Tavily Search API returned {}",
-                response.status()
-            )));
+        let status = response.status();
+        let body_text = response
+            .text()
+            .await
+            .map_err(|e| OsintError::ProviderUnavailable(format!("failed to read Tavily response: {e}")))?;
+
+        if !status.is_success() {
+            let detail = body_text.trim();
+            return Err(OsintError::ProviderUnavailable(if detail.is_empty() {
+                format!("Tavily Search API returned {status}")
+            } else {
+                format!("Tavily Search API returned {status}: {detail}")
+            }));
         }
 
-        let body: TavilyResponse = response
-            .json()
-            .await
-            .map_err(|e| OsintError::Internal(format!("failed to parse response: {e}")))?;
+        let body: TavilyResponse = serde_json::from_str(&body_text)
+            .map_err(|e| OsintError::Internal(format!("failed to parse Tavily response: {e}")))?;
 
         let mut evidence: EvidenceItems = body
             .results
@@ -80,9 +86,6 @@ impl TavilyWebSearchProvider {
             })
             .collect();
 
-        // Tavily's `include_images` output is query-related public-web image
-        // discovery. Keep it as a separate evidence type so neither the API
-        // nor the UI can mistake it for a biometric/reverse-image match.
         evidence.extend(
             body.images
                 .into_iter()
@@ -97,9 +100,6 @@ impl TavilyWebSearchProvider {
                         .unwrap_or_else(|| "Public web image".to_string()),
                     url: Some(image.url),
                     snippet: image.description,
-                    // Tavily does not expose a calibrated identity/match score
-                    // for these images. This is only a neutral display/sort
-                    // hint and must never be presented as identity confidence.
                     confidence: 0.5,
                 }),
         );
@@ -124,10 +124,10 @@ impl WebSearchProvider for TavilyWebSearchProvider {
 #[derive(Debug, Serialize)]
 struct TavilyRequest<'a> {
     query: &'a str,
+    search_depth: &'static str,
     max_results: u32,
     include_images: bool,
     include_image_descriptions: bool,
-    safe_search: bool,
 }
 
 #[derive(Debug, Deserialize)]
