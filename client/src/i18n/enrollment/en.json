@@ -1,0 +1,27 @@
+{
+  "candidateEnrollment": {
+    "heading": "CANDIDATE ENROLLMENT",
+    "hint": "Create a candidate record, then enroll one or more reference face photos for biometric search.",
+    "referenceCode": "Candidate reference code",
+    "fullName": "Full name",
+    "notes": "Notes (optional)",
+    "create": "CREATE CANDIDATE",
+    "creating": "Creating…",
+    "createError": "Failed to create candidate.",
+    "referencePhoto": "Reference face photo",
+    "enroll": "ENROLL PHOTO",
+    "enrolling": "Enrolling…",
+    "enrollError": "Failed to enroll reference photo.",
+    "mockBlocked": "Real biometric enrollment requires the ONNX provider. The active mock provider cannot create genuine face templates.",
+    "newCandidate": "New candidate",
+    "duplicatesHeading": "Possible biometric duplicate",
+    "duplicateItem": "Candidate {{candidateId}} · similarity {{score}}",
+    "duplicatesHint": "This is an advisory similarity warning only. Do not merge or confirm identity automatically.",
+    "templatesHeading": "BIOMETRIC TEMPLATES",
+    "noTemplates": "No biometric templates enrolled yet.",
+    "templateMeta": "Dimension {{dimension}} · quality {{quality}} · enrolled {{date}}",
+    "revoke": "Revoke template",
+    "revoked": "REVOKED",
+    "revokeError": "Failed to revoke biometric template."
+  }
+}
