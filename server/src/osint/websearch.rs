@@ -71,8 +71,11 @@ impl RealWebSearchProvider {
                 source_type: "web_search".to_string(),
                 provider_name: "brave-web-search".to_string(),
                 title: result.title,
+                title_key: None,
+                title_params: None,
                 url: Some(result.url),
                 snippet: result.description,
+                details: Vec::new(),
                 // Not a calibrated relevance score — Brave doesn't return
                 // one — only a rank-derived placeholder so earlier results
                 // sort first if items from several providers are merged;

@@ -23,19 +23,24 @@ function normalizeUrl(url: string | null): string | null {
 }
 
 function evidenceKey(item: SearchExternalEvidenceItem): string {
-  return [item.sourceType, normalizeUrl(item.url) ?? '', item.title].join('|');
+  return [item.sourceType, normalizeUrl(item.url) ?? '', item.titleKey ?? item.title].join('|');
 }
+
+const DIRECT_MATCH_TITLE_KEYS = new Set([
+  'osint.evidence.title.fullMatchingImage',
+  'osint.evidence.title.partialMatchingImage',
+]);
+const DIRECT_MATCH_DETAIL_KEYS = new Set([
+  'osint.evidence.detail.fullMatches',
+  'osint.evidence.detail.partialMatches',
+]);
 
 function isDirectVisualMatch(item: SearchExternalEvidenceItem): boolean {
   if (item.sourceType !== 'reverse_image') return false;
-  const text = `${item.title} ${item.snippet ?? ''}`.toLowerCase();
   return (
     item.providerName.includes('tineye') ||
-    text.includes('full image match') ||
-    text.includes('full matching image') ||
-    text.includes('partial image match') ||
-    text.includes('partial matching image') ||
-    text.includes('matched image')
+    (item.titleKey !== null && DIRECT_MATCH_TITLE_KEYS.has(item.titleKey)) ||
+    item.details.some((detail) => DIRECT_MATCH_DETAIL_KEYS.has(detail.key))
   );
 }
 
@@ -119,13 +124,17 @@ export function SearchExternalEvidence({ items }: SearchExternalEvidenceProps) {
     },
   ];
 
-  const renderItem = (item: SearchExternalEvidenceItem, sourceCount?: number) => (
+  const renderItem = (item: SearchExternalEvidenceItem, sourceCount?: number) => {
+    const title = item.titleKey ? t(item.titleKey, item.titleParams ?? undefined) : item.title;
+    const details = item.details.map((detail) => t(detail.key, detail.params)).join(' · ');
+    return (
     <article key={`${evidenceKey(item)}-${sourceCount ?? 1}`} className="admin-user-card">
       <div className="admin-user-card__row">
         <div className="admin-user-card__info">
           <div className="admin-user-card__name">
-            <span>{item.title}</span>
+            <span>{title}</span>
           </div>
+          {details && <p className="admin-user-card__note">{details}</p>}
           {item.snippet && <p className="admin-user-card__note">{item.snippet}</p>}
           {sourceCount && sourceCount > 1 && (
             <p className="admin-user-card__note">
@@ -145,7 +154,8 @@ export function SearchExternalEvidence({ items }: SearchExternalEvidenceProps) {
         </div>
       </div>
     </article>
-  );
+    );
+  };
 
   return (
     <>

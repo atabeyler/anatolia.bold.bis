@@ -31,9 +31,12 @@ impl WebSearchProvider for MockWebSearchProvider {
             provider_name: self.name().to_string(),
             title: format!("Mock web result for \"{query}\""),
             url: Some("https://example.test/mock-web-result".to_string()),
+            title_key: None,
+            title_params: None,
             snippet: Some(
                 "This is a synthetic result from MockWebSearchProvider — no real web search was performed.".to_string(),
             ),
+            details: Vec::new(),
             confidence: deterministic_confidence(&format!("web:{query}")),
         }])
     }
@@ -53,9 +56,12 @@ impl NewsProvider for MockNewsProvider {
             provider_name: self.name().to_string(),
             title: format!("Mock news article for \"{query}\""),
             url: Some("https://example.test/mock-news-result".to_string()),
+            title_key: None,
+            title_params: None,
             snippet: Some(
                 "This is a synthetic result from MockNewsProvider — no real news search was performed.".to_string(),
             ),
+            details: Vec::new(),
             confidence: deterministic_confidence(&format!("news:{query}")),
         }])
     }
@@ -75,9 +81,12 @@ impl AuthorizedSocialProvider for MockSocialProvider {
             provider_name: self.name().to_string(),
             title: format!("Mock social profile match for \"{query}\""),
             url: None,
+            title_key: None,
+            title_params: None,
             snippet: Some(
                 "This is a synthetic result from MockSocialProvider — no real, authorized social platform was queried.".to_string(),
             ),
+            details: Vec::new(),
             confidence: deterministic_confidence(&format!("social:{query}")),
         }])
     }

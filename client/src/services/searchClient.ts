@@ -21,12 +21,20 @@ export interface ExternalEvidenceStatus {
   reverseImage: ExternalEvidenceSlotStatus;
 }
 
+export interface SearchExternalEvidenceDetail {
+  key: string;
+  params?: Record<string, unknown>;
+}
+
 export interface SearchExternalEvidenceItem {
   sourceType: string;
   providerName: string;
   title: string;
+  titleKey: string | null;
+  titleParams: Record<string, unknown> | null;
   url: string | null;
   snippet: string | null;
+  details: SearchExternalEvidenceDetail[];
   confidenceScore: number;
 }
 

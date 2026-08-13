@@ -35,7 +35,7 @@ export function OsintWorkspace({ candidateId, candidateName, canManage, onClose 
   const [evidenceError, setEvidenceError] = useState(false);
   const [collectQuery, setCollectQuery] = useState(candidateName);
   const [collecting, setCollecting] = useState(false);
-  const [, setProviderErrors] = useState<Array<{ provider: string; error: string }>>([]);
+  const [providerErrors, setProviderErrors] = useState<Array<{ provider: string; error: string }>>([]);
   const [collectMessage, setCollectMessage] = useState<string | null>(null);
 
   const [relations, setRelations] = useState<EntityRelation[] | null>(null);
@@ -153,6 +153,13 @@ export function OsintWorkspace({ candidateId, candidateName, canManage, onClose 
             </form>
           )}
           {collectMessage && <p className="auth-message auth-message--error">{collectMessage}</p>}
+          {providerErrors.length > 0 && (
+            <p className="auth-message auth-message--error">
+              {t('osint.evidence.providerErrors', {
+                providers: providerErrors.map((entry) => entry.provider).join(', '),
+              })}
+            </p>
+          )}
           {evidence === null && !evidenceError && <p className="status-card__line">{t('admin.loading')}</p>}
           {evidenceError && <p className="status-card__line status-card__line--offline">{t('admin.loadError')}</p>}
           {evidence !== null && evidence.length === 0 && (
@@ -167,14 +174,21 @@ export function OsintWorkspace({ candidateId, candidateName, canManage, onClose 
                   {t(`osint.evidence.group.${key}`, { count: items.length })}
                 </h3>
                 <ul className="overlay-list">
-                  {items.map((item) => (
-                    <li key={item.id} className="overlay-list__item overlay-list__item--session">
-                      <div>
-                        <div>{item.title ?? item.snippet ?? item.url ?? ''}</div>
-                        {item.url && <div className="admin-user-card__note">{item.url}</div>}
-                      </div>
-                    </li>
-                  ))}
+                  {items.map((item) => {
+                    const title = item.titleKey
+                      ? t(item.titleKey, item.titleParams ?? undefined)
+                      : item.title || item.snippet || item.url || '';
+                    const details = item.details.map((detail) => t(detail.key, detail.params)).join(' · ');
+                    return (
+                      <li key={item.id} className="overlay-list__item overlay-list__item--session">
+                        <div>
+                          <div>{title}</div>
+                          {details && <div className="admin-user-card__note">{details}</div>}
+                          {item.url && <div className="admin-user-card__note">{item.url}</div>}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             );

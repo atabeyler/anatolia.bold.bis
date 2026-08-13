@@ -416,8 +416,11 @@ async fn run_auto_osint(
                 "sourceType": item.source_type,
                 "providerName": item.provider_name,
                 "title": item.title,
+                "titleKey": item.title_key,
+                "titleParams": item.title_params,
                 "url": item.url,
                 "snippet": item.snippet,
+                "details": item.details,
                 "confidenceScore": item.confidence,
             }));
         }
@@ -511,8 +514,11 @@ async fn run_auto_osint(
                         "sourceType": item.source_type,
                         "providerName": item.provider_name,
                         "title": item.title,
+                        "titleKey": item.title_key,
+                        "titleParams": item.title_params,
                         "url": item.url,
                         "snippet": item.snippet,
+                        "details": item.details,
                         "confidenceScore": item.confidence,
                     }));
                 }

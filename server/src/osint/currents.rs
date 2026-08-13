@@ -73,8 +73,11 @@ impl CurrentsNewsProvider {
                 source_type: "news".to_string(),
                 provider_name: "currents-news".to_string(),
                 title: article.title,
+                title_key: None,
+                title_params: None,
                 url: Some(article.url),
                 snippet: article.description,
+                details: Vec::new(),
                 // Currents doesn't return a relevance score — same
                 // rank-derived placeholder as `news.rs` (NewsAPI); never
                 // a match/no-match signal (see

@@ -22,8 +22,11 @@ pub(super) async fn migrate_pg(pool: &PgPool) -> Result<(), sqlx::Error> {
             source_type TEXT NOT NULL,
             provider_name TEXT NOT NULL,
             title TEXT NOT NULL,
+            title_key TEXT,
+            title_params TEXT,
             url TEXT,
             snippet TEXT,
+            details TEXT,
             confidence_score DOUBLE PRECISION NOT NULL,
             collected_by UUID,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -32,6 +35,15 @@ pub(super) async fn migrate_pg(pool: &PgPool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
+    sqlx::query("ALTER TABLE candidate_evidence ADD COLUMN IF NOT EXISTS title_key TEXT")
+        .execute(pool)
+        .await?;
+    sqlx::query("ALTER TABLE candidate_evidence ADD COLUMN IF NOT EXISTS title_params TEXT")
+        .execute(pool)
+        .await?;
+    sqlx::query("ALTER TABLE candidate_evidence ADD COLUMN IF NOT EXISTS details TEXT")
+        .execute(pool)
+        .await?;
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_candidate_evidence_candidate_id \
          ON candidate_evidence (candidate_id)",
@@ -50,8 +62,11 @@ pub(super) async fn migrate_sqlite(pool: &SqlitePool) -> Result<(), sqlx::Error>
             source_type TEXT NOT NULL,
             provider_name TEXT NOT NULL,
             title TEXT NOT NULL,
+            title_key TEXT,
+            title_params TEXT,
             url TEXT,
             snippet TEXT,
+            details TEXT,
             confidence_score REAL NOT NULL,
             collected_by TEXT,
             created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -60,6 +75,18 @@ pub(super) async fn migrate_sqlite(pool: &SqlitePool) -> Result<(), sqlx::Error>
     )
     .execute(pool)
     .await?;
+    // Older SQLite has no `ADD COLUMN IF NOT EXISTS`, so failures here (column
+    // already exists on a database created before these columns existed) are
+    // expected and ignored, same pattern as `mfa.rs`.
+    let _ = sqlx::query("ALTER TABLE candidate_evidence ADD COLUMN title_key TEXT")
+        .execute(pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE candidate_evidence ADD COLUMN title_params TEXT")
+        .execute(pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE candidate_evidence ADD COLUMN details TEXT")
+        .execute(pool)
+        .await;
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_candidate_evidence_candidate_id \
          ON candidate_evidence (candidate_id)",
@@ -77,8 +104,15 @@ pub struct EvidenceRow {
     pub source_type: String,
     pub provider_name: String,
     pub title: String,
+    /// i18n key for an app-generated title, serialized as raw JSON text.
+    /// `None` when `title` is the item's own source-provided title.
+    pub title_key: Option<String>,
+    /// JSON-encoded interpolation parameters for `title_key`.
+    pub title_params: Option<String>,
     pub url: Option<String>,
     pub snippet: Option<String>,
+    /// JSON-encoded array of `{ key, params }` app-generated detail facts.
+    pub details: Option<String>,
     pub confidence_score: f64,
     pub collected_by: Option<String>,
     pub created_at: String,
@@ -123,20 +157,31 @@ async fn insert_evidence_row(
                 return Ok(None);
             };
             let collected_by_uuid = collected_by.and_then(|v| Uuid::parse_str(v).ok());
+            let title_params = item
+                .title_params
+                .as_ref()
+                .map(|v| v.to_string());
+            let details = (!item.details.is_empty())
+                .then(|| serde_json::to_string(&item.details).ok())
+                .flatten();
             sqlx::query_as(
                 "INSERT INTO candidate_evidence \
-                 (candidate_id, source_type, provider_name, title, url, snippet, \
-                  confidence_score, collected_by) \
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
+                 (candidate_id, source_type, provider_name, title, title_key, title_params, \
+                  url, snippet, details, confidence_score, collected_by) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) \
                  RETURNING id::text, candidate_id::text, source_type, provider_name, title, \
-                           url, snippet, confidence_score, collected_by::text, created_at::text",
+                           title_key, title_params, url, snippet, details, confidence_score, \
+                           collected_by::text, created_at::text",
             )
             .bind(candidate_uuid)
             .bind(&item.source_type)
             .bind(&item.provider_name)
             .bind(&item.title)
+            .bind(&item.title_key)
+            .bind(title_params)
             .bind(&item.url)
             .bind(&item.snippet)
+            .bind(details)
             .bind(item.confidence)
             .bind(collected_by_uuid)
             .fetch_one(pool)
@@ -145,26 +190,37 @@ async fn insert_evidence_row(
         }
         DbBackend::Sqlite(pool) => {
             let id = Uuid::new_v4().to_string();
+            let title_params = item
+                .title_params
+                .as_ref()
+                .map(|v| v.to_string());
+            let details = (!item.details.is_empty())
+                .then(|| serde_json::to_string(&item.details).ok())
+                .flatten();
             sqlx::query(
                 "INSERT INTO candidate_evidence \
-                 (id, candidate_id, source_type, provider_name, title, url, snippet, \
-                  confidence_score, collected_by) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                 (id, candidate_id, source_type, provider_name, title, title_key, title_params, \
+                  url, snippet, details, confidence_score, collected_by) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             )
             .bind(&id)
             .bind(candidate_id)
             .bind(&item.source_type)
             .bind(&item.provider_name)
             .bind(&item.title)
+            .bind(&item.title_key)
+            .bind(title_params)
             .bind(&item.url)
             .bind(&item.snippet)
+            .bind(details)
             .bind(item.confidence)
             .bind(collected_by)
             .execute(pool)
             .await?;
             sqlx::query_as(
-                "SELECT id, candidate_id, source_type, provider_name, title, url, snippet, \
-                        confidence_score, collected_by, created_at \
+                "SELECT id, candidate_id, source_type, provider_name, title, title_key, \
+                        title_params, url, snippet, details, confidence_score, collected_by, \
+                        created_at \
                  FROM candidate_evidence WHERE id = ?1",
             )
             .bind(&id)
@@ -184,8 +240,9 @@ pub async fn list_evidence_for_candidate(
                 return Ok(Vec::new());
             };
             sqlx::query_as(
-                "SELECT id::text, candidate_id::text, source_type, provider_name, title, url, \
-                        snippet, confidence_score, collected_by::text, created_at::text \
+                "SELECT id::text, candidate_id::text, source_type, provider_name, title, \
+                        title_key, title_params, url, snippet, details, confidence_score, \
+                        collected_by::text, created_at::text \
                  FROM candidate_evidence WHERE candidate_id = $1 ORDER BY created_at DESC",
             )
             .bind(candidate_uuid)
@@ -194,8 +251,9 @@ pub async fn list_evidence_for_candidate(
         }
         DbBackend::Sqlite(pool) => {
             sqlx::query_as(
-                "SELECT id, candidate_id, source_type, provider_name, title, url, snippet, \
-                        confidence_score, collected_by, created_at \
+                "SELECT id, candidate_id, source_type, provider_name, title, title_key, \
+                        title_params, url, snippet, details, confidence_score, collected_by, \
+                        created_at \
                  FROM candidate_evidence WHERE candidate_id = ?1 ORDER BY created_at DESC",
             )
             .bind(candidate_id)

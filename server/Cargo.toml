@@ -38,6 +38,7 @@ hmac = "0.13.0"
 ort = { version = "2.0.0-rc.13", default-features = false, features = ["download-binaries", "ndarray", "std", "tls-rustls"], optional = true }
 ndarray = { version = "0.17.2", optional = true }
 async-trait = "0.1.92"
+futures = "0.3"
 strsim = "0.11.1"
 metrics = "0.24.6"
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }

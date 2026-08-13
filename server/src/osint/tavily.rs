@@ -79,8 +79,11 @@ impl TavilyWebSearchProvider {
                 source_type: "web_search".to_string(),
                 provider_name: "tavily-web-search".to_string(),
                 title: result.title,
+                title_key: None,
+                title_params: None,
                 url: Some(result.url),
                 snippet: result.content,
+                details: Vec::new(),
                 confidence: result.score.clamp(0.0, 1.0),
             })
             .collect();
@@ -97,8 +100,11 @@ impl TavilyWebSearchProvider {
                         .clone()
                         .filter(|value| !value.trim().is_empty())
                         .unwrap_or_else(|| "Public web image".to_string()),
+                    title_key: None,
+                    title_params: None,
                     url: Some(image.url),
                     snippet: image.description,
+                    details: Vec::new(),
                     confidence: 0.5,
                 }),
         );

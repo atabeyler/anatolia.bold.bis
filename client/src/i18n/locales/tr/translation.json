@@ -372,6 +372,24 @@
         "news": "Haberler ({{count}})",
         "social": "Yetkili sosyal medya ({{count}})",
         "reverseImage": "Ters görsel arama ({{count}})"
+      },
+      "title": {
+        "tineyeWithDomain": "{{domain}} adresinde görsel eşleşmesi",
+        "tineyeGeneric": "TinEye görsel eşleşmesi",
+        "webPageWithMatch": "Eşleşen görsel içeren web sayfası",
+        "fullMatchingImage": "Tam eşleşen görsel",
+        "partialMatchingImage": "Kısmi eşleşen görsel",
+        "publicPageWithImage": "İlgili görseli içeren genel erişimli sayfa"
+      },
+      "detail": {
+        "tineyeScore": "TinEye sıralama skoru: {{score}}",
+        "matchedImage": "Eşleşen görsel: {{url}}",
+        "crawled": "Tarama tarihi: {{date}}",
+        "fullMatches": "{{count}} tam görsel eşleşmesi",
+        "partialMatches": "{{count}} kısmi görsel eşleşmesi",
+        "bestGuess": "En olası tahmin: {{label}}",
+        "image": "Görsel: {{url}}",
+        "dimensions": "Boyutlar: {{width}}×{{height}}"
       }
     },
     "status": {

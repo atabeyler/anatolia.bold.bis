@@ -372,6 +372,24 @@
         "news": "Nachrichten ({{count}})",
         "social": "Autorisierte soziale Medien ({{count}})",
         "reverseImage": "Rückwärtsbildsuche ({{count}})"
+      },
+      "title": {
+        "tineyeWithDomain": "Bildtreffer auf {{domain}}",
+        "tineyeGeneric": "TinEye-Bildtreffer",
+        "webPageWithMatch": "Webseite mit einem übereinstimmenden Bild",
+        "fullMatchingImage": "Vollständig übereinstimmendes Bild",
+        "partialMatchingImage": "Teilweise übereinstimmendes Bild",
+        "publicPageWithImage": "Öffentliche Seite mit einem verwandten Bild"
+      },
+      "detail": {
+        "tineyeScore": "TinEye-Ranking-Wert: {{score}}",
+        "matchedImage": "Übereinstimmendes Bild: {{url}}",
+        "crawled": "Erfasst am: {{date}}",
+        "fullMatches": "{{count}} vollständige Bildtreffer",
+        "partialMatches": "{{count}} teilweise Bildtreffer",
+        "bestGuess": "Wahrscheinlichste Vermutung: {{label}}",
+        "image": "Bild: {{url}}",
+        "dimensions": "Abmessungen: {{width}}×{{height}}"
       }
     },
     "status": {

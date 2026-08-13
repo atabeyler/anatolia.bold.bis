@@ -372,6 +372,24 @@
         "news": "News ({{count}})",
         "social": "Authorized social ({{count}})",
         "reverseImage": "Reverse image ({{count}})"
+      },
+      "title": {
+        "tineyeWithDomain": "Image match on {{domain}}",
+        "tineyeGeneric": "TinEye image match",
+        "webPageWithMatch": "Web page containing a matching image",
+        "fullMatchingImage": "Full matching image",
+        "partialMatchingImage": "Partial matching image",
+        "publicPageWithImage": "Public page containing a related image"
+      },
+      "detail": {
+        "tineyeScore": "TinEye ranking score: {{score}}",
+        "matchedImage": "Matched image: {{url}}",
+        "crawled": "Crawled: {{date}}",
+        "fullMatches": "{{count}} full image match(es)",
+        "partialMatches": "{{count}} partial image match(es)",
+        "bestGuess": "Best guess: {{label}}",
+        "image": "Image: {{url}}",
+        "dimensions": "Dimensions: {{width}}×{{height}}"
       }
     },
     "status": {

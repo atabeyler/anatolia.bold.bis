@@ -105,14 +105,26 @@ fn dedupe_key(url: &Option<String>, title: &str) -> String {
 }
 
 fn evidence_json(row: &EvidenceRow) -> serde_json::Value {
+    let title_params: Option<serde_json::Value> = row
+        .title_params
+        .as_deref()
+        .and_then(|raw| serde_json::from_str(raw).ok());
+    let details: Vec<serde_json::Value> = row
+        .details
+        .as_deref()
+        .and_then(|raw| serde_json::from_str(raw).ok())
+        .unwrap_or_default();
     json!({
         "id": row.id,
         "candidateId": row.candidate_id,
         "sourceType": row.source_type,
         "providerName": row.provider_name,
         "title": row.title,
+        "titleKey": row.title_key,
+        "titleParams": title_params,
         "url": row.url,
         "snippet": row.snippet,
+        "details": details,
         "confidenceScore": row.confidence_score,
         "collectedBy": row.collected_by,
         "createdAt": row.created_at,

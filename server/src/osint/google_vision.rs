@@ -7,10 +7,11 @@
 use async_trait::async_trait;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashSet;
 use std::time::Duration;
 
-use super::{EvidenceItem, OsintError, ReverseImageSearchProvider};
+use super::{EvidenceDetail, EvidenceItem, OsintError, ReverseImageSearchProvider};
 
 const ENDPOINT: &str = "https://vision.googleapis.com/v1/images:annotate";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
@@ -88,26 +89,44 @@ impl GoogleVisionWebDetectionProvider {
             if !seen_urls.insert(page.url.clone()) {
                 continue;
             }
-            let title = page
+            let (title, title_key) = page
                 .page_title
                 .filter(|v| !v.trim().is_empty())
-                .unwrap_or_else(|| "Web page containing a matching image".to_string());
+                .map(|title| (title, None))
+                .unwrap_or_else(|| {
+                    (
+                        String::new(),
+                        Some("osint.evidence.title.webPageWithMatch".to_string()),
+                    )
+                });
             let mut details = Vec::new();
             if exact_matches > 0 {
-                details.push(format!("{exact_matches} full image match(es)"));
+                details.push(EvidenceDetail {
+                    key: "osint.evidence.detail.fullMatches".to_string(),
+                    params: json!({ "count": exact_matches }),
+                });
             }
             if partial_matches > 0 {
-                details.push(format!("{partial_matches} partial image match(es)"));
+                details.push(EvidenceDetail {
+                    key: "osint.evidence.detail.partialMatches".to_string(),
+                    params: json!({ "count": partial_matches }),
+                });
             }
             if let Some(label) = best_guess.as_deref() {
-                details.push(format!("best guess: {label}"));
+                details.push(EvidenceDetail {
+                    key: "osint.evidence.detail.bestGuess".to_string(),
+                    params: json!({ "label": label }),
+                });
             }
             items.push(EvidenceItem {
                 source_type: "reverse_image".to_string(),
                 provider_name: "google-vision-web-detection".to_string(),
                 title,
+                title_key,
+                title_params: None,
                 url: Some(page.url),
-                snippet: (!details.is_empty()).then(|| details.join(" · ")),
+                snippet: None,
+                details,
                 confidence: if exact_matches > 0 { 0.95 } else { 0.75 },
             });
         }
@@ -118,9 +137,20 @@ impl GoogleVisionWebDetectionProvider {
             items.push(EvidenceItem {
                 source_type: "reverse_image".to_string(),
                 provider_name: "google-vision-web-detection".to_string(),
-                title: "Full matching image".to_string(),
+                title: String::new(),
+                title_key: Some("osint.evidence.title.fullMatchingImage".to_string()),
+                title_params: None,
                 url: Some(image.url),
-                snippet: best_guess.clone(),
+                snippet: None,
+                details: best_guess
+                    .as_deref()
+                    .map(|label| {
+                        vec![EvidenceDetail {
+                            key: "osint.evidence.detail.bestGuess".to_string(),
+                            params: json!({ "label": label }),
+                        }]
+                    })
+                    .unwrap_or_default(),
                 confidence: 0.95,
             });
         }
@@ -131,9 +161,20 @@ impl GoogleVisionWebDetectionProvider {
             items.push(EvidenceItem {
                 source_type: "reverse_image".to_string(),
                 provider_name: "google-vision-web-detection".to_string(),
-                title: "Partial matching image".to_string(),
+                title: String::new(),
+                title_key: Some("osint.evidence.title.partialMatchingImage".to_string()),
+                title_params: None,
                 url: Some(image.url),
-                snippet: best_guess.clone(),
+                snippet: None,
+                details: best_guess
+                    .as_deref()
+                    .map(|label| {
+                        vec![EvidenceDetail {
+                            key: "osint.evidence.detail.bestGuess".to_string(),
+                            params: json!({ "label": label }),
+                        }]
+                    })
+                    .unwrap_or_default(),
                 confidence: 0.75,
             });
         }

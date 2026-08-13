@@ -20,13 +20,35 @@ use async_trait::async_trait;
 
 pub type EvidenceItems = Vec<EvidenceItem>;
 
+/// An app-generated (not source-provided) evidence label, expressed as an
+/// i18n key plus its interpolation parameters rather than pre-rendered
+/// English text, so the client can render it in the viewer's language.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EvidenceDetail {
+    pub key: String,
+    pub params: serde_json::Value,
+}
+
 #[derive(Debug, Clone)]
 pub struct EvidenceItem {
     pub source_type: String,
     pub provider_name: String,
+    /// The item's own natural-language title as reported by the source
+    /// (a real page title, article headline, etc.) — external content,
+    /// not translated. Empty when the source provided none; use
+    /// `title_key` in that case instead.
     pub title: String,
+    /// Set only when `title` is empty and this item's label was generated
+    /// by this application (e.g. "Full matching image") rather than
+    /// sourced from the provider, so the client can render it via i18n.
+    pub title_key: Option<String>,
+    pub title_params: Option<serde_json::Value>,
     pub url: Option<String>,
     pub snippet: Option<String>,
+    /// App-generated supplementary facts (match counts, scores, matched
+    /// image URL, crawl date, ...), each an i18n key with parameters
+    /// rather than pre-formatted English text.
+    pub details: Vec<EvidenceDetail>,
     /// Provider ranking/relevance signal in `[0, 1]`; never an identity verdict.
     pub confidence: f64,
 }
@@ -240,46 +262,47 @@ impl EvidenceOrchestrator {
     }
 
     pub async fn collect(&self, query: &str) -> Vec<ProviderOutcome> {
-        let mut outcomes = Vec::new();
-        for provider in &self.web_search {
-            outcomes.push(run_provider(provider.name(), provider.search(query).await));
-        }
-        for provider in &self.news {
-            outcomes.push(run_provider(provider.name(), provider.search(query).await));
-        }
-        for provider in &self.social {
-            outcomes.push(run_provider(provider.name(), provider.search(query).await));
-        }
-        outcomes
+        use futures::future::FutureExt;
+        let web = self
+            .web_search
+            .iter()
+            .map(|provider| async move { run_provider(provider.name(), provider.search(query).await) }.boxed());
+        let news = self
+            .news
+            .iter()
+            .map(|provider| async move { run_provider(provider.name(), provider.search(query).await) }.boxed());
+        let social = self
+            .social
+            .iter()
+            .map(|provider| async move { run_provider(provider.name(), provider.search(query).await) }.boxed());
+        futures::future::join_all(web.chain(news).chain(social)).await
     }
 
     pub async fn collect_web_and_news(
         &self,
         query: &str,
     ) -> (Vec<ProviderOutcome>, Vec<ProviderOutcome>) {
-        let mut web = Vec::new();
-        for provider in &self.web_search {
-            web.push(run_provider(provider.name(), provider.search(query).await));
-        }
-        let mut news = Vec::new();
-        for provider in &self.news {
-            news.push(run_provider(provider.name(), provider.search(query).await));
-        }
-        (web, news)
+        let web = self.web_search.iter().map(|provider| async move {
+            run_provider(provider.name(), provider.search(query).await)
+        });
+        let news = self.news.iter().map(|provider| async move {
+            run_provider(provider.name(), provider.search(query).await)
+        });
+        futures::future::join(futures::future::join_all(web), futures::future::join_all(news))
+            .await
     }
 
     /// Search the public web directly with the sanitized probe image. Every
-    /// configured reverse-image provider runs independently; one provider's
-    /// failure never suppresses another provider's result.
+    /// configured reverse-image provider runs independently and concurrently;
+    /// one provider's failure never suppresses another provider's result.
     pub async fn collect_reverse_image(&self, image_bytes: &[u8]) -> Vec<ProviderOutcome> {
-        let mut outcomes = Vec::new();
-        for provider in &self.reverse_image {
-            outcomes.push(run_provider(
+        let outcomes = self.reverse_image.iter().map(|provider| async move {
+            run_provider(
                 provider.name(),
                 provider.search_by_image(image_bytes).await,
-            ));
-        }
-        outcomes
+            )
+        });
+        futures::future::join_all(outcomes).await
     }
 }
 

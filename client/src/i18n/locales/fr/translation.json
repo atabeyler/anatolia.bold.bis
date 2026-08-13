@@ -372,6 +372,24 @@
         "news": "Actualités ({{count}})",
         "social": "Réseaux sociaux autorisés ({{count}})",
         "reverseImage": "Image inversée ({{count}})"
+      },
+      "title": {
+        "tineyeWithDomain": "Correspondance d'image sur {{domain}}",
+        "tineyeGeneric": "Correspondance d'image TinEye",
+        "webPageWithMatch": "Page web contenant une image correspondante",
+        "fullMatchingImage": "Image entièrement correspondante",
+        "partialMatchingImage": "Image partiellement correspondante",
+        "publicPageWithImage": "Page publique contenant une image associée"
+      },
+      "detail": {
+        "tineyeScore": "Score de classement TinEye : {{score}}",
+        "matchedImage": "Image correspondante : {{url}}",
+        "crawled": "Explorée le : {{date}}",
+        "fullMatches": "{{count}} correspondance(s) d'image complète(s)",
+        "partialMatches": "{{count}} correspondance(s) d'image partielle(s)",
+        "bestGuess": "Meilleure estimation : {{label}}",
+        "image": "Image : {{url}}",
+        "dimensions": "Dimensions : {{width}}×{{height}}"
       }
     },
     "status": {

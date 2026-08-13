@@ -372,6 +372,24 @@
         "news": "Новости ({{count}})",
         "social": "Авторизованные соцсети ({{count}})",
         "reverseImage": "Поиск по изображению ({{count}})"
+      },
+      "title": {
+        "tineyeWithDomain": "Совпадение изображения на {{domain}}",
+        "tineyeGeneric": "Совпадение изображения TinEye",
+        "webPageWithMatch": "Веб-страница с совпадающим изображением",
+        "fullMatchingImage": "Полностью совпадающее изображение",
+        "partialMatchingImage": "Частично совпадающее изображение",
+        "publicPageWithImage": "Публичная страница со связанным изображением"
+      },
+      "detail": {
+        "tineyeScore": "Рейтинговая оценка TinEye: {{score}}",
+        "matchedImage": "Совпадающее изображение: {{url}}",
+        "crawled": "Дата индексации: {{date}}",
+        "fullMatches": "Полных совпадений изображения: {{count}}",
+        "partialMatches": "Частичных совпадений изображения: {{count}}",
+        "bestGuess": "Наиболее вероятное предположение: {{label}}",
+        "image": "Изображение: {{url}}",
+        "dimensions": "Размеры: {{width}}×{{height}}"
       }
     },
     "status": {

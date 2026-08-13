@@ -372,6 +372,24 @@
         "news": "الأخبار ({{count}})",
         "social": "التواصل الاجتماعي المصرَّح به ({{count}})",
         "reverseImage": "البحث العكسي بالصورة ({{count}})"
+      },
+      "title": {
+        "tineyeWithDomain": "تطابق صورة على {{domain}}",
+        "tineyeGeneric": "تطابق صورة عبر TinEye",
+        "webPageWithMatch": "صفحة ويب تحتوي على صورة مطابقة",
+        "fullMatchingImage": "صورة مطابقة بالكامل",
+        "partialMatchingImage": "صورة مطابقة جزئياً",
+        "publicPageWithImage": "صفحة عامة تحتوي على صورة ذات صلة"
+      },
+      "detail": {
+        "tineyeScore": "درجة تصنيف TinEye: {{score}}",
+        "matchedImage": "الصورة المطابقة: {{url}}",
+        "crawled": "تاريخ الفهرسة: {{date}}",
+        "fullMatches": "{{count}} تطابق(ات) صورة كاملة",
+        "partialMatches": "{{count}} تطابق(ات) صورة جزئية",
+        "bestGuess": "أفضل تخمين: {{label}}",
+        "image": "الصورة: {{url}}",
+        "dimensions": "الأبعاد: {{width}}×{{height}}"
       }
     },
     "status": {

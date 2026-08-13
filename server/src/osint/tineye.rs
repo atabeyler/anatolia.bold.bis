@@ -7,9 +7,10 @@
 use async_trait::async_trait;
 use reqwest::multipart::{Form, Part};
 use serde::Deserialize;
+use serde_json::json;
 use std::time::Duration;
 
-use super::{EvidenceItem, OsintError, ReverseImageSearchProvider};
+use super::{EvidenceDetail, EvidenceItem, OsintError, ReverseImageSearchProvider};
 
 const ENDPOINT: &str = "https://api.tineye.com/rest/search/";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -66,25 +67,42 @@ impl TinEyeReverseImageProvider {
                 if items.len() >= MAX_RESULTS {
                     break;
                 }
-                let title = matched
+                let (title_key, title_params) = match matched
                     .domain
                     .as_deref()
                     .filter(|value| !value.trim().is_empty())
-                    .map(|domain| format!("Image match on {domain}"))
-                    .unwrap_or_else(|| "TinEye image match".to_string());
-                let mut details = vec![format!("TinEye ranking score: {:.1}", matched.score)];
+                {
+                    Some(domain) => (
+                        "osint.evidence.title.tineyeWithDomain",
+                        Some(json!({ "domain": domain })),
+                    ),
+                    None => ("osint.evidence.title.tineyeGeneric", None),
+                };
+                let mut details = vec![EvidenceDetail {
+                    key: "osint.evidence.detail.tineyeScore".to_string(),
+                    params: json!({ "score": format!("{:.1}", matched.score) }),
+                }];
                 if let Some(image_url) = backlink.url.as_deref() {
-                    details.push(format!("matched image: {image_url}"));
+                    details.push(EvidenceDetail {
+                        key: "osint.evidence.detail.matchedImage".to_string(),
+                        params: json!({ "url": image_url }),
+                    });
                 }
                 if let Some(crawl_date) = backlink.crawl_date.as_deref() {
-                    details.push(format!("crawled: {crawl_date}"));
+                    details.push(EvidenceDetail {
+                        key: "osint.evidence.detail.crawled".to_string(),
+                        params: json!({ "date": crawl_date }),
+                    });
                 }
                 items.push(EvidenceItem {
                     source_type: "reverse_image".to_string(),
                     provider_name: "tineye-reverse-image".to_string(),
-                    title,
+                    title: String::new(),
+                    title_key: Some(title_key.to_string()),
+                    title_params,
                     url: Some(backlink.backlink),
-                    snippet: Some(details.join(" · ")),
+                    snippet: None,
+                    details,
                     confidence: ranking,
                 });
             }

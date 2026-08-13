@@ -1,13 +1,21 @@
 import { apiClient } from './apiClient';
 
+export interface EvidenceDetail {
+  key: string;
+  params?: Record<string, unknown>;
+}
+
 export interface EvidenceItem {
   id: string;
   candidateId: string;
   sourceType: string;
   providerName: string;
   title: string | null;
+  titleKey: string | null;
+  titleParams: Record<string, unknown> | null;
   url: string | null;
   snippet: string | null;
+  details: EvidenceDetail[];
   confidenceScore: number | null;
   collectedBy: string | null;
   createdAt: string;

@@ -68,8 +68,11 @@ impl RealNewsProvider {
                 source_type: "news".to_string(),
                 provider_name: "newsapi".to_string(),
                 title: article.title,
+                title_key: None,
+                title_params: None,
                 url: Some(article.url),
                 snippet: article.description,
+                details: Vec::new(),
                 // Same rank-derived placeholder as `websearch.rs` — see
                 // that module's comment on `confidence`.
                 confidence: (0.85 - (rank as f64) * 0.05).clamp(0.1, 0.85),

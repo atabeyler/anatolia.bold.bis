@@ -6,10 +6,11 @@
 use async_trait::async_trait;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashSet;
 use std::time::Duration;
 
-use super::{EvidenceItem, OsintError, ReverseImageSearchProvider};
+use super::{EvidenceDetail, EvidenceItem, OsintError, ReverseImageSearchProvider};
 
 const ENDPOINT: &str = "https://searchapi.api.cloud.yandex.net/v2/image/search_by_image";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -68,27 +69,39 @@ impl YandexImagesReverseProvider {
             if !seen.insert(target_url.clone()) {
                 continue;
             }
-            let title = image
+            let (title, title_key) = image
                 .page_title
                 .filter(|v| !v.trim().is_empty())
                 .or_else(|| image.host.filter(|v| !v.trim().is_empty()))
-                .unwrap_or_else(|| "Public page containing a related image".to_string());
+                .map(|title| (title, None))
+                .unwrap_or_else(|| {
+                    (
+                        String::new(),
+                        Some("osint.evidence.title.publicPageWithImage".to_string()),
+                    )
+                });
             let mut details = Vec::new();
             if !image.url.trim().is_empty() {
-                details.push(format!("image: {}", image.url));
+                details.push(EvidenceDetail {
+                    key: "osint.evidence.detail.image".to_string(),
+                    params: json!({ "url": image.url }),
+                });
             }
             if let (Some(width), Some(height)) = (image.width.as_deref(), image.height.as_deref()) {
-                details.push(format!("dimensions: {width}×{height}"));
-            }
-            if let Some(passage) = image.passage.filter(|v| !v.trim().is_empty()) {
-                details.push(passage);
+                details.push(EvidenceDetail {
+                    key: "osint.evidence.detail.dimensions".to_string(),
+                    params: json!({ "width": width, "height": height }),
+                });
             }
             items.push(EvidenceItem {
                 source_type: "reverse_image".to_string(),
                 provider_name: "yandex-images-reverse-search".to_string(),
                 title,
+                title_key,
+                title_params: None,
                 url: Some(target_url),
-                snippet: (!details.is_empty()).then(|| details.join(" · ")),
+                snippet: image.passage.filter(|v| !v.trim().is_empty()),
+                details,
                 confidence: 0.7,
             });
         }
