@@ -54,7 +54,6 @@ i18n
           ...en,
           ...enEnrollment,
           ...enResultGroups,
-          search: { ...en.search, subtitle: enResultGroups.resultGroups.biometric },
         },
       },
       tr: {
@@ -62,7 +61,6 @@ i18n
           ...tr,
           ...trEnrollment,
           ...trResultGroups,
-          search: { ...tr.search, subtitle: trResultGroups.resultGroups.biometric },
         },
       },
       de: {
@@ -70,7 +68,6 @@ i18n
           ...de,
           ...deEnrollment,
           ...deResultGroups,
-          search: { ...de.search, subtitle: deResultGroups.resultGroups.biometric },
         },
       },
       fr: {
@@ -78,7 +75,6 @@ i18n
           ...fr,
           ...frEnrollment,
           ...frResultGroups,
-          search: { ...fr.search, subtitle: frResultGroups.resultGroups.biometric },
         },
       },
       ar: {
@@ -86,7 +82,6 @@ i18n
           ...ar,
           ...arEnrollment,
           ...arResultGroups,
-          search: { ...ar.search, subtitle: arResultGroups.resultGroups.biometric },
         },
       },
       ru: {
@@ -94,7 +89,6 @@ i18n
           ...ru,
           ...ruEnrollment,
           ...ruResultGroups,
-          search: { ...ru.search, subtitle: ruResultGroups.resultGroups.biometric },
         },
       },
     },

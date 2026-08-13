@@ -272,7 +272,7 @@ export function DashboardPage() {
 
           <SearchExternalEvidence items={activeSearch.externalEvidence} />
 
-          <h3 className="admin-panel__heading">{t('search.subtitle')}</h3>
+          <h3 className="admin-panel__heading">{t('resultGroups.biometric')}</h3>
           <div className="admin-user-list">
             {activeCandidatesLoading && (
               <p className="status-card__line">{t('search.candidatesLoading')}</p>
