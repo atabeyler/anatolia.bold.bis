@@ -263,18 +263,15 @@ impl EvidenceOrchestrator {
 
     pub async fn collect(&self, query: &str) -> Vec<ProviderOutcome> {
         use futures::future::FutureExt;
-        let web = self
-            .web_search
-            .iter()
-            .map(|provider| async move { run_provider(provider.name(), provider.search(query).await) }.boxed());
-        let news = self
-            .news
-            .iter()
-            .map(|provider| async move { run_provider(provider.name(), provider.search(query).await) }.boxed());
-        let social = self
-            .social
-            .iter()
-            .map(|provider| async move { run_provider(provider.name(), provider.search(query).await) }.boxed());
+        let web = self.web_search.iter().map(|provider| {
+            async move { run_provider(provider.name(), provider.search(query).await) }.boxed()
+        });
+        let news = self.news.iter().map(|provider| {
+            async move { run_provider(provider.name(), provider.search(query).await) }.boxed()
+        });
+        let social = self.social.iter().map(|provider| {
+            async move { run_provider(provider.name(), provider.search(query).await) }.boxed()
+        });
         futures::future::join_all(web.chain(news).chain(social)).await
     }
 
@@ -288,8 +285,11 @@ impl EvidenceOrchestrator {
         let news = self.news.iter().map(|provider| async move {
             run_provider(provider.name(), provider.search(query).await)
         });
-        futures::future::join(futures::future::join_all(web), futures::future::join_all(news))
-            .await
+        futures::future::join(
+            futures::future::join_all(web),
+            futures::future::join_all(news),
+        )
+        .await
     }
 
     /// Search the public web directly with the sanitized probe image. Every
@@ -297,10 +297,7 @@ impl EvidenceOrchestrator {
     /// one provider's failure never suppresses another provider's result.
     pub async fn collect_reverse_image(&self, image_bytes: &[u8]) -> Vec<ProviderOutcome> {
         let outcomes = self.reverse_image.iter().map(|provider| async move {
-            run_provider(
-                provider.name(),
-                provider.search_by_image(image_bytes).await,
-            )
+            run_provider(provider.name(), provider.search_by_image(image_bytes).await)
         });
         futures::future::join_all(outcomes).await
     }

@@ -157,10 +157,7 @@ async fn insert_evidence_row(
                 return Ok(None);
             };
             let collected_by_uuid = collected_by.and_then(|v| Uuid::parse_str(v).ok());
-            let title_params = item
-                .title_params
-                .as_ref()
-                .map(|v| v.to_string());
+            let title_params = item.title_params.as_ref().map(|v| v.to_string());
             let details = (!item.details.is_empty())
                 .then(|| serde_json::to_string(&item.details).ok())
                 .flatten();
@@ -190,10 +187,7 @@ async fn insert_evidence_row(
         }
         DbBackend::Sqlite(pool) => {
             let id = Uuid::new_v4().to_string();
-            let title_params = item
-                .title_params
-                .as_ref()
-                .map(|v| v.to_string());
+            let title_params = item.title_params.as_ref().map(|v| v.to_string());
             let details = (!item.details.is_empty())
                 .then(|| serde_json::to_string(&item.details).ok())
                 .flatten();
